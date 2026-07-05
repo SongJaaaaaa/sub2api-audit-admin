@@ -99,6 +99,21 @@ return [
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
+        'sub2api' => [
+            'driver' => 'pgsql',
+            'url' => env('SUB2API_DB_URL'),
+            'host' => env('SUB2API_DB_HOST', '127.0.0.1'),
+            'port' => env('SUB2API_DB_PORT', '5432'),
+            'database' => env('SUB2API_DB_DATABASE', 'sub2api'),
+            'username' => env('SUB2API_DB_USERNAME', 'sub2api_ro'),
+            'password' => env('SUB2API_DB_PASSWORD', ''),
+            'charset' => env('SUB2API_DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => env('SUB2API_DB_SCHEMA', 'public'),
+            'sslmode' => env('SUB2API_DB_SSLMODE', 'prefer'),
+        ],
+
         'sqlsrv' => [
             'driver' => 'sqlsrv',
             'url' => env('DB_URL'),
