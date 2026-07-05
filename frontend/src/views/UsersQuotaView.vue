@@ -133,6 +133,7 @@ onMounted(loadUsers)
       :columns="columns"
       :data-source="users"
       :loading="loading"
+      :locale="{ emptyText: '暂无可调额用户数据' }"
       :pagination="page"
       :scroll="{ x: 1080 }"
       @change="change"

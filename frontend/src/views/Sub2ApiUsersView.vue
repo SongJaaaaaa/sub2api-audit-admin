@@ -77,6 +77,7 @@ onMounted(loadUsers)
       :columns="columns"
       :data-source="users"
       :loading="loading"
+      :locale="{ emptyText: '暂无 Sub2API 用户数据' }"
       :pagination="page"
       :scroll="{ x: 1120 }"
       @change="change"

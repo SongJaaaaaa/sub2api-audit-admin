@@ -79,6 +79,7 @@ onMounted(loadItems)
       :columns="columns"
       :data-source="items"
       :loading="loading"
+      :locale="{ emptyText: '暂无已二次确认成功的调额记录，未确认或失败记录请到异常中心查看' }"
       :pagination="page"
       :scroll="{ x: 1260 }"
       @change="change"

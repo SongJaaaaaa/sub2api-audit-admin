@@ -99,6 +99,7 @@ onMounted(loadStats)
         row-key="model"
         :columns="columns"
         :data-source="stats?.models || []"
+        :locale="{ emptyText: '暂无模型消耗数据' }"
         :pagination="{ pageSize: 15 }"
         :scroll="{ x: 860 }"
       >
