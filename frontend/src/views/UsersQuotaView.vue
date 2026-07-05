@@ -19,6 +19,8 @@ const page = reactive({
 const form = reactive({
   operation: 'increment' as 'increment' | 'decrement',
   amount: '',
+  cash_amount: '',
+  gift_quota_amount: '',
   adjust_reason: '',
   admin_notes: '',
 })
@@ -67,6 +69,8 @@ function openAdjust(row: Sub2User) {
   selected.value = row
   form.operation = 'increment'
   form.amount = ''
+  form.cash_amount = ''
+  form.gift_quota_amount = ''
   form.adjust_reason = ''
   form.admin_notes = ''
   modalOpen.value = true
@@ -81,6 +85,8 @@ async function submitAdjust() {
       sub2api_user_id: selected.value.id,
       operation: form.operation,
       amount: form.amount,
+      cash_amount: form.cash_amount,
+      gift_quota_amount: form.gift_quota_amount,
       adjust_reason: form.adjust_reason,
       admin_notes: form.admin_notes,
     })
@@ -99,9 +105,11 @@ function confirmAdjust() {
   if (!selected.value) return
 
   const op = form.operation === 'increment' ? '增加' : '扣减'
+  const cash = form.cash_amount || '0.00'
+  const gift = form.gift_quota_amount || '0.00'
   Modal.confirm({
     title: '确认提交额度调整',
-    content: `将为 Sub2API 用户 #${selected.value.id} ${op}额度 ${form.amount || '0.00'}。新系统不会直接显示成功，只有 Sub2API 真实入账并二次确认成功后，才会生成成功记录。`,
+    content: `将为 Sub2API 用户 #${selected.value.id} ${op}额度 ${form.amount || '0.00'}，现金 ${cash}，赠送 ${gift}。新系统不会直接显示成功，只有 Sub2API 真实入账并二次确认成功后，才会生成成功记录和财务账本。`,
     okText: '确认提交',
     cancelText: '再检查',
     onOk: submitAdjust,
@@ -177,6 +185,12 @@ onMounted(loadUsers)
         </a-form-item>
         <a-form-item label="额度" required>
           <a-input v-model:value="form.amount" placeholder="0.00" />
+        </a-form-item>
+        <a-form-item label="现金金额">
+          <a-input v-model:value="form.cash_amount" placeholder="0.00" />
+        </a-form-item>
+        <a-form-item label="赠送额度">
+          <a-input v-model:value="form.gift_quota_amount" placeholder="0.00" />
         </a-form-item>
         <a-form-item label="原因" required>
           <a-input v-model:value="form.adjust_reason" placeholder="例如 线下充值" />

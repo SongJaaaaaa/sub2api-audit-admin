@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { theme as antdTheme } from 'ant-design-vue'
+import { NConfigProvider, darkTheme } from 'naive-ui'
 import { computed, onMounted } from 'vue'
 import { RouterView } from 'vue-router'
 import { useThemeStore } from './stores/theme'
@@ -15,11 +16,15 @@ const themeCfg = computed(() => ({
   },
 }))
 
+const naiveTheme = computed(() => (themeStore.themeName === 'dark' ? darkTheme : undefined))
+
 onMounted(themeStore.initTheme)
 </script>
 
 <template>
-  <a-config-provider :theme="themeCfg">
-    <RouterView />
-  </a-config-provider>
+  <n-config-provider :theme="naiveTheme" class="appProvider">
+    <a-config-provider :theme="themeCfg">
+      <RouterView />
+    </a-config-provider>
+  </n-config-provider>
 </template>

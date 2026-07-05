@@ -25,6 +25,8 @@ class LedgerAdjustment extends Model
         'sub2api_user_email',
         'operation',
         'amount',
+        'cash_amount',
+        'gift_quota_amount',
         'before_balance',
         'after_balance',
         'status',
@@ -44,6 +46,8 @@ class LedgerAdjustment extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'cash_amount' => 'decimal:2',
+            'gift_quota_amount' => 'decimal:2',
             'before_balance' => 'decimal:2',
             'after_balance' => 'decimal:2',
             'sub2api_request' => 'array',

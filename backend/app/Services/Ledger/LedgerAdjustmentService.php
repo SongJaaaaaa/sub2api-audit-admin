@@ -4,7 +4,9 @@ namespace App\Services\Ledger;
 
 use App\Models\Admin;
 use App\Models\LedgerAdjustment;
+use App\Services\Audit\AuditLogService;
 use App\Services\Sub2Api\Sub2ApiAdminClient;
+use App\Support\Money;
 use App\Support\Sub2ApiNoteTag;
 use RuntimeException;
 use Throwable;
@@ -15,14 +17,18 @@ class LedgerAdjustmentService
         private readonly LedgerNumberService $numbers,
         private readonly Sub2ApiAdminClient $client,
         private readonly Sub2ApiBalanceVerifier $verifier,
-    ) {
-    }
+        private readonly FinanceLedgerService $finance,
+        private readonly AuditLogService $audit,
+    ) {}
 
     public function adjust(Admin $admin, array $data): LedgerAdjustment
     {
         $ledgerNo = $this->numbers->make();
         $idempotencyKey = $this->numbers->idempotencyKey($ledgerNo);
         $amount = $this->money($data['amount']);
+        $cashAmount = $this->money($data['cash_amount'] ?? 0);
+        $giftAmount = $this->money($data['gift_quota_amount'] ?? 0);
+        $this->checkFinanceAmounts($amount, $cashAmount, $giftAmount);
         $notes = Sub2ApiNoteTag::append((string) ($data['admin_notes'] ?? ''), $ledgerNo, $idempotencyKey);
 
         $adj = LedgerAdjustment::query()->create([
@@ -31,6 +37,8 @@ class LedgerAdjustmentService
             'sub2api_user_id' => (int) $data['sub2api_user_id'],
             'operation' => $data['operation'],
             'amount' => $amount,
+            'cash_amount' => $cashAmount,
+            'gift_quota_amount' => $giftAmount,
             'status' => LedgerAdjustment::STATUS_PENDING,
             'adjust_reason' => $data['adjust_reason'],
             'admin_notes' => $data['admin_notes'] ?? null,
@@ -79,6 +87,7 @@ class LedgerAdjustmentService
                     'confirm_response' => $confirm['response'],
                     'exception_reason' => 'Sub2API 二次确认余额不一致',
                 ]);
+                $this->audit->record($admin, 'ledger_adjustment.exception', 'ledger_adjustment', $adj->id, null, $this->row($adj->refresh()));
 
                 return $adj->refresh();
             }
@@ -89,8 +98,11 @@ class LedgerAdjustmentService
                 'confirm_response' => $confirm['response'],
                 'confirmed_at' => now(),
             ]);
+            $adj = $adj->refresh();
+            $this->finance->recordAdjustment($admin, $adj);
+            $this->audit->record($admin, 'ledger_adjustment.succeeded', 'ledger_adjustment', $adj->id, null, $this->row($adj));
 
-            return $adj->refresh();
+            return $adj;
         } catch (Throwable $e) {
             $status = $adj->called_at
                 ? LedgerAdjustment::STATUS_EXCEPTION
@@ -100,6 +112,8 @@ class LedgerAdjustmentService
                 'status' => $status,
                 'exception_reason' => $e->getMessage(),
             ]);
+            $action = $status === LedgerAdjustment::STATUS_VOIDED ? 'ledger_adjustment.voided' : 'ledger_adjustment.exception';
+            $this->audit->record($admin, $action, 'ledger_adjustment', $adj->id, null, $this->row($adj->refresh()));
 
             return $adj->refresh();
         }
@@ -150,6 +164,8 @@ class LedgerAdjustmentService
             'sub2api_user_email' => $adj->sub2api_user_email,
             'operation' => $adj->operation,
             'amount' => $adj->amount,
+            'cash_amount' => $adj->cash_amount,
+            'gift_quota_amount' => $adj->gift_quota_amount,
             'before_balance' => $adj->before_balance,
             'after_balance' => $adj->after_balance,
             'status' => $adj->status,
@@ -174,6 +190,17 @@ class LedgerAdjustmentService
 
     private function money(mixed $val): string
     {
-        return number_format((float) $val, 2, '.', '');
+        return Money::fmt($val);
+    }
+
+    private function checkFinanceAmounts(string $amount, string $cashAmount, string $giftAmount): void
+    {
+        if ((float) $cashAmount <= 0 && (float) $giftAmount <= 0) {
+            return;
+        }
+
+        if (Money::add($cashAmount, $giftAmount) !== $amount) {
+            throw new RuntimeException('现金金额和赠送额度之和必须等于调额额度');
+        }
     }
 }

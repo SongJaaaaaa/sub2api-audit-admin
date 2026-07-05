@@ -19,6 +19,8 @@ const columns = [
   { title: '邮箱', dataIndex: 'sub2api_user_email' },
   { title: '方向', dataIndex: 'operation', width: 90 },
   { title: '额度', dataIndex: 'amount', align: 'right', width: 120 },
+  { title: '现金', dataIndex: 'cash_amount', align: 'right', width: 120 },
+  { title: '赠送', dataIndex: 'gift_quota_amount', align: 'right', width: 120 },
   { title: '调前', dataIndex: 'before_balance', align: 'right', width: 120 },
   { title: '调后', dataIndex: 'after_balance', align: 'right', width: 120 },
   { title: '原因', dataIndex: 'adjust_reason' },
@@ -90,7 +92,7 @@ onMounted(loadItems)
             {{ record.operation === 'increment' ? '增加' : '扣减' }}
           </a-tag>
         </template>
-        <template v-if="['amount', 'before_balance', 'after_balance'].includes(column.dataIndex as string)">
+        <template v-if="['amount', 'cash_amount', 'gift_quota_amount', 'before_balance', 'after_balance'].includes(column.dataIndex as string)">
           <span class="money">{{ record[column.dataIndex] || '-' }}</span>
         </template>
       </template>

@@ -8,6 +8,8 @@ export interface LedgerAdjustment {
   sub2api_user_email: string | null
   operation: 'increment' | 'decrement'
   amount: string
+  cash_amount: string
+  gift_quota_amount: string
   before_balance: string | null
   after_balance: string | null
   status: 'pending' | 'succeeded' | 'voided' | 'exception'
@@ -45,6 +47,8 @@ export function createLedgerAdjustment(data: {
   sub2api_user_id: number
   operation: 'increment' | 'decrement'
   amount: string
+  cash_amount?: string
+  gift_quota_amount?: string
   adjust_reason: string
   admin_notes?: string
 }) {

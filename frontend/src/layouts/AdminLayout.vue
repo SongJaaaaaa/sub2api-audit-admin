@@ -1,5 +1,22 @@
 <script setup lang="ts">
-import { DesktopOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons-vue'
+import {
+  DesktopOutlined,
+  LogoutOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+} from '@ant-design/icons-vue'
+import type { MenuOption } from 'naive-ui'
+import {
+  NButton,
+  NDrawer,
+  NDrawerContent,
+  NLayout,
+  NLayoutContent,
+  NLayoutHeader,
+  NLayoutSider,
+  NMenu,
+  NTooltip,
+} from 'naive-ui'
 import { computed, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { menuItems } from '../config/menu'
@@ -21,30 +38,25 @@ const themeOptions: { label: string; value: ThemeMode }[] = [
   { label: '深色', value: 'dark' },
 ]
 
-const selectedKeys = computed(() => {
+const selectedKey = computed(() => {
   const hit = menuItems.find((item) => item.path === route.path)
-  return [hit?.key || 'dashboard']
+  return hit?.key || 'dashboard'
 })
 
-const menuData = computed(() =>
+const menuData = computed<MenuOption[]>(() =>
   menuItems.map((item) => ({
     key: item.key,
-    icon: () => h(item.icon),
     label: item.label,
-    title: item.label,
+    icon: () => h(item.icon),
   })),
 )
 
-function goMenu({ key }: { key: string }) {
+function goMenu(key: string) {
   const hit = menuItems.find((item) => item.key === key)
   if (hit) {
     router.push(hit.path)
     drawerOpen.value = false
   }
-}
-
-function setTheme(val: ThemeMode) {
-  themeStore.setMode(val)
 }
 
 function updateMobile(event: MediaQueryListEvent) {
@@ -74,79 +86,94 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <a-layout class="admin" :class="{ mobile: isMobile }">
-    <a-layout-sider v-if="!isMobile" v-model:collapsed="collapsed" collapsible class="side" :trigger="null">
-      <div class="brand">
+  <NLayout class="soyAdmin" has-sider>
+    <NLayoutSider
+      v-if="!isMobile"
+      class="soySider"
+      bordered
+      collapse-mode="width"
+      :collapsed="collapsed"
+      :collapsed-width="64"
+      :width="224"
+      :native-scrollbar="false"
+    >
+      <div class="soyLogo">
         <span class="brandMark">S</span>
         <strong v-if="!collapsed">Sub2API 审计</strong>
       </div>
-      <a-menu
-        theme="dark"
-        mode="inline"
-        :items="menuData"
-        :selected-keys="selectedKeys"
-        @click="goMenu"
+      <NMenu
+        class="soyMenu"
+        :collapsed="collapsed"
+        :collapsed-width="64"
+        :collapsed-icon-size="20"
+        :options="menuData"
+        :value="selectedKey"
+        @update:value="goMenu"
       />
-    </a-layout-sider>
+    </NLayoutSider>
 
-    <a-layout>
-      <a-layout-header class="top">
-        <button class="iconBtn" type="button" @click="isMobile ? (drawerOpen = true) : (collapsed = !collapsed)">
-          <MenuUnfoldOutlined v-if="collapsed" />
-          <MenuFoldOutlined v-else />
-        </button>
-        <div class="adminInfo">
+    <NLayout class="soyMain">
+      <NLayoutHeader class="soyHeader" bordered>
+        <div class="soyHeaderLeft">
+          <NButton quaternary circle @click="isMobile ? (drawerOpen = true) : (collapsed = !collapsed)">
+            <template #icon>
+              <MenuUnfoldOutlined v-if="collapsed || isMobile" />
+              <MenuFoldOutlined v-else />
+            </template>
+          </NButton>
+          <span class="soyBreadcrumb">{{ menuItems.find((item) => item.key === selectedKey)?.label || '首页' }}</span>
+        </div>
+
+        <div class="soyHeaderRight">
           <div class="themeSwitch" role="group" aria-label="主题模式">
-            <a-tooltip v-for="item in themeOptions" :key="item.value" :title="item.label">
-              <button
-                class="themeBtn"
-                :class="{ active: themeStore.mode === item.value }"
-                type="button"
-                :aria-label="item.label"
-                @click="setTheme(item.value)"
-              >
-                <DesktopOutlined v-if="item.value === 'system'" />
-                <svg
-                  v-else-if="item.value === 'light'"
-                  class="themeSvg"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
+            <NTooltip v-for="item in themeOptions" :key="item.value" trigger="hover">
+              <template #trigger>
+                <button
+                  class="themeBtn"
+                  :class="{ active: themeStore.mode === item.value }"
+                  type="button"
+                  :aria-label="item.label"
+                  @click="themeStore.setMode(item.value)"
                 >
-                  <circle cx="12" cy="12" r="4.2" />
-                  <path d="M12 2.5v2.4M12 19.1v2.4M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.9 19.1l1.7-1.7M17.4 6.6l1.7-1.7" />
-                </svg>
-                <svg v-else class="themeSvg" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M20.5 14.6A8.5 8.5 0 0 1 9.4 3.5a8.7 8.7 0 1 0 11.1 11.1Z" />
-                </svg>
-              </button>
-            </a-tooltip>
+                  <DesktopOutlined v-if="item.value === 'system'" />
+                  <svg
+                    v-else-if="item.value === 'light'"
+                    class="themeSvg"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="4.2" />
+                    <path d="M12 2.5v2.4M12 19.1v2.4M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.9 19.1l1.7-1.7M17.4 6.6l1.7-1.7" />
+                  </svg>
+                  <svg v-else class="themeSvg" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M20.5 14.6A8.5 8.5 0 0 1 9.4 3.5a8.7 8.7 0 1 0 11.1 11.1Z" />
+                  </svg>
+                </button>
+              </template>
+              {{ item.label }}
+            </NTooltip>
           </div>
-          <span>{{ auth.admin?.name || '管理员' }}</span>
-          <a-button type="text" @click="logout">
+          <span class="adminName">{{ auth.admin?.name || '管理员' }}</span>
+          <NButton quaternary @click="logout">
             <template #icon><LogoutOutlined /></template>
             退出
-          </a-button>
+          </NButton>
         </div>
-      </a-layout-header>
+      </NLayoutHeader>
 
-      <a-layout-content class="content">
+      <NLayoutContent class="soyContent" :native-scrollbar="false">
         <RouterView />
-      </a-layout-content>
-    </a-layout>
+      </NLayoutContent>
+    </NLayout>
 
-    <a-drawer
-      v-model:open="drawerOpen"
-      class="mobileDrawer"
-      placement="left"
-      :width="280"
-      :body-style="{ padding: 0 }"
-      :closable="false"
-    >
-      <div class="brand drawerBrand">
-        <span class="brandMark">S</span>
-        <strong>Sub2API 审计</strong>
-      </div>
-      <a-menu mode="inline" :items="menuData" :selected-keys="selectedKeys" @click="goMenu" />
-    </a-drawer>
-  </a-layout>
+    <NDrawer v-model:show="drawerOpen" placement="left" :width="280">
+      <NDrawerContent class="mobileDrawerContent" body-content-class="mobileDrawerBody" :native-scrollbar="false">
+        <div class="soyLogo mobileLogo">
+          <span class="brandMark">S</span>
+          <strong>Sub2API 审计</strong>
+        </div>
+        <NMenu :options="menuData" :value="selectedKey" @update:value="goMenu" />
+      </NDrawerContent>
+    </NDrawer>
+  </NLayout>
 </template>
