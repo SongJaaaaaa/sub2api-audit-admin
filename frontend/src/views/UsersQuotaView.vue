@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { TablePaginationConfig } from 'ant-design-vue'
-import { message } from 'ant-design-vue'
+import { Modal, message } from 'ant-design-vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { createLedgerAdjustment, type AdjustmentRes } from '../api/ledger'
 import { getSub2Users, type Sub2User } from '../api/sub2api'
@@ -95,6 +95,19 @@ async function submitAdjust() {
   }
 }
 
+function confirmAdjust() {
+  if (!selected.value) return
+
+  const op = form.operation === 'increment' ? '增加' : '扣减'
+  Modal.confirm({
+    title: '确认提交额度调整',
+    content: `将为 Sub2API 用户 #${selected.value.id} ${op}额度 ${form.amount || '0.00'}。新系统不会直接显示成功，只有 Sub2API 真实入账并二次确认成功后，才会生成成功记录。`,
+    okText: '确认提交',
+    cancelText: '再检查',
+    onOk: submitAdjust,
+  })
+}
+
 onMounted(loadUsers)
 </script>
 
@@ -145,7 +158,7 @@ onMounted(loadUsers)
       :confirm-loading="submitting"
       ok-text="提交调额"
       cancel-text="取消"
-      @ok="submitAdjust"
+      @ok="confirmAdjust"
     >
       <div v-if="selected" class="adjustUser">
         <span>{{ selected.email }}</span>
