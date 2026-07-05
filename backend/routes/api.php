@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\LedgerAdjustmentController;
 use App\Http\Controllers\Api\V1\Sub2Api\Sub2ApiDataController;
 use Illuminate\Support\Facades\Route;
 
@@ -23,5 +24,8 @@ Route::prefix('v1')->group(function (): void {
 
         Route::get('sub2api/users', [Sub2ApiDataController::class, 'users']);
         Route::get('sub2api/model-stats', [Sub2ApiDataController::class, 'modelStats']);
+
+        Route::get('ledger-adjustments', [LedgerAdjustmentController::class, 'index']);
+        Route::post('ledger-adjustments', [LedgerAdjustmentController::class, 'store']);
     });
 });

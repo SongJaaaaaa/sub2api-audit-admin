@@ -3,8 +3,11 @@ import AdminLayout from '../layouts/AdminLayout.vue'
 import DashboardView from '../views/DashboardView.vue'
 import LoginView from '../views/LoginView.vue'
 import PlaceholderView from '../views/PlaceholderView.vue'
+import ExceptionCenterView from '../views/ExceptionCenterView.vue'
+import LedgerAdjustmentListView from '../views/LedgerAdjustmentListView.vue'
 import Sub2ApiModelStatsView from '../views/Sub2ApiModelStatsView.vue'
 import Sub2ApiUsersView from '../views/Sub2ApiUsersView.vue'
+import UsersQuotaView from '../views/UsersQuotaView.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -22,12 +25,12 @@ export const router = createRouter({
         { path: '', name: 'dashboard', component: DashboardView },
         { path: 'sub2api/users', name: 'sub2-users', component: Sub2ApiUsersView },
         { path: 'sub2api/models', name: 'sub2-models', component: Sub2ApiModelStatsView },
-        { path: 'users-quota', name: 'users-quota', component: PlaceholderView },
-        { path: 'ledger', name: 'ledger', component: PlaceholderView },
+        { path: 'users-quota', name: 'users-quota', component: UsersQuotaView },
+        { path: 'ledger', name: 'ledger', component: LedgerAdjustmentListView },
         { path: 'gift-quota', name: 'gift', component: PlaceholderView },
         { path: 'operation-expense', name: 'expense', component: PlaceholderView },
         { path: 'reconcile', name: 'reconcile', component: PlaceholderView },
-        { path: 'exceptions', name: 'exception', component: PlaceholderView },
+        { path: 'exceptions', name: 'exception', component: ExceptionCenterView },
         { path: 'audit-log', name: 'audit', component: PlaceholderView },
       ],
     },
