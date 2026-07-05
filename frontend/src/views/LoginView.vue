@@ -1,0 +1,55 @@
+<script setup lang="ts">
+import { LockOutlined, UserOutlined } from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
+import { reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
+
+const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
+const loading = ref(false)
+const form = reactive({
+  email: '',
+  password: '',
+})
+
+async function submit() {
+  loading.value = true
+  try {
+    await auth.login(form.email, form.password)
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
+    router.replace(redirect)
+  } catch {
+    message.error('账号或密码错误')
+  } finally {
+    loading.value = false
+  }
+}
+</script>
+
+<template>
+  <main class="loginPage">
+    <section class="loginPanel">
+      <div class="loginHead">
+        <h1>Sub2API 审计后台</h1>
+        <p>管理员登录</p>
+      </div>
+      <a-form layout="vertical" :model="form" @finish="submit">
+        <a-form-item name="email" label="邮箱" :rules="[{ required: true, message: '请输入邮箱' }]">
+          <a-input v-model:value="form.email" size="large" autocomplete="username">
+            <template #prefix><UserOutlined /></template>
+          </a-input>
+        </a-form-item>
+        <a-form-item name="password" label="密码" :rules="[{ required: true, message: '请输入密码' }]">
+          <a-input-password v-model:value="form.password" size="large" autocomplete="current-password">
+            <template #prefix><LockOutlined /></template>
+          </a-input-password>
+        </a-form-item>
+        <a-button block type="primary" html-type="submit" size="large" :loading="loading">
+          登录
+        </a-button>
+      </a-form>
+    </section>
+  </main>
+</template>

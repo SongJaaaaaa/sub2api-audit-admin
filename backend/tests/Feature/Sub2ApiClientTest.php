@@ -216,6 +216,41 @@ class Sub2ApiClientTest extends TestCase
             && $request['operation'] === 'increment');
     }
 
+    public function test_sub2api_routes_return_real_repository_data(): void
+    {
+        $this->withoutMiddleware();
+
+        DB::connection('sub2api')->table('users')->insert([
+            'id' => 1001,
+            'email' => 'alpha@example.com',
+            'username' => 'alpha',
+            'role' => 'user',
+            'balance' => '12.34',
+            'total_recharged' => '100.00',
+            'status' => 'active',
+            'created_at' => '2026-07-01 00:00:00',
+            'updated_at' => '2026-07-02 00:00:00',
+            'deleted_at' => null,
+        ]);
+        DB::connection('sub2api')->table('usage_logs')->insert([
+            'id' => 1,
+            'user_id' => 1001,
+            'model' => 'gpt-5.5',
+            'total_cost' => '2.50',
+            'actual_cost' => '2.00',
+            'created_at' => '2026-07-05 01:00:00',
+        ]);
+
+        $this->getJson('/api/v1/sub2api/users?keyword=alpha')
+            ->assertOk()
+            ->assertJsonPath('items.0.email', 'alpha@example.com');
+
+        $this->getJson('/api/v1/sub2api/model-stats?from=2026-07-05 00:00:00&to=2026-07-06 00:00:00')
+            ->assertOk()
+            ->assertJsonPath('summary.request_count', 1)
+            ->assertJsonPath('models.0.model', 'gpt-5.5');
+    }
+
     private function createSub2ApiTables(): void
     {
         Schema::connection('sub2api')->create('users', function ($table): void {

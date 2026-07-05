@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\Sub2Api\Sub2ApiDataController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -19,5 +20,8 @@ Route::prefix('v1')->group(function (): void {
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('auth/me', [AuthController::class, 'me']);
         Route::post('auth/logout', [AuthController::class, 'logout']);
+
+        Route::get('sub2api/users', [Sub2ApiDataController::class, 'users']);
+        Route::get('sub2api/model-stats', [Sub2ApiDataController::class, 'modelStats']);
     });
 });
