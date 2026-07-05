@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { LockOutlined, UserOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
+import { isAxiosError } from 'axios'
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
@@ -20,8 +21,12 @@ async function submit() {
     await auth.login(form.email, form.password)
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
     router.replace(redirect)
-  } catch {
-    message.error('账号或密码错误')
+  } catch (err) {
+    if (isAxiosError(err) && err.response?.status === 422) {
+      message.error('账号或密码错误')
+    } else {
+      message.error('登录请求失败，请确认后端服务已启动')
+    }
   } finally {
     loading.value = false
   }
