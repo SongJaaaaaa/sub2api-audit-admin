@@ -1,0 +1,914 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sub2API 审计管理后台开发进度</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --surface2: #f0f3f7;
+      --text: #172033;
+      --muted: #667085;
+      --border: #d8dee8;
+      --blue: #2563eb;
+      --green: #13a66b;
+      --amber: #d97706;
+      --red: #dc2626;
+      --shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+      --radius: 8px;
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --surface: #111827;
+      --surface2: #1f2937;
+      --text: #dbe4f0;
+      --muted: #9ca3af;
+      --border: #273449;
+      --blue: #60a5fa;
+      --green: #34d399;
+      --amber: #f59e0b;
+      --red: #f87171;
+      --shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    button, input, select {
+      font: inherit;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .side {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 24px 18px;
+      background: #111827;
+      color: #f9fafb;
+      overflow-y: auto;
+    }
+
+    .brand {
+      margin-bottom: 24px;
+    }
+
+    .brand h1 {
+      margin: 0 0 8px;
+      font-size: 20px;
+      line-height: 1.25;
+      font-weight: 750;
+    }
+
+    .brand p {
+      margin: 0;
+      color: #aab4c4;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .sideLink {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      margin: 0 0 8px;
+      padding: 10px 12px;
+      color: #d7deea;
+      text-decoration: none;
+      border-radius: 7px;
+      background: transparent;
+      border: 0;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .sideLink:hover,
+    .sideLink.active {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    .sideBadge {
+      min-width: 42px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 12px;
+      text-align: center;
+      color: #dbeafe;
+      background: rgba(37, 99, 235, 0.28);
+    }
+
+    .main {
+      padding: 28px;
+    }
+
+    .top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 22px;
+    }
+
+    .top h2 {
+      margin: 0 0 8px;
+      font-size: 26px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .top p {
+      margin: 0;
+      max-width: 780px;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 14px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 7px;
+      height: 36px;
+      padding: 0 12px;
+      cursor: pointer;
+    }
+
+    .btn.primary {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .btn.danger {
+      border-color: #fecaca;
+      color: var(--red);
+    }
+
+    .themeField {
+      width: 124px;
+      height: 36px;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+
+    .metric {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 26px;
+      line-height: 1;
+    }
+
+    .bar {
+      height: 10px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      margin-top: 12px;
+    }
+
+    .barFill {
+      height: 100%;
+      width: 0;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--blue), var(--green));
+      transition: width 0.2s ease;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) 180px 180px;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .field {
+      width: 100%;
+      height: 38px;
+      padding: 0 12px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+    }
+
+    .section {
+      margin-bottom: 26px;
+    }
+
+    .sectionHead {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .sectionHead h3 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .cardHead {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+
+    .card h4 {
+      margin: 0 0 6px;
+      font-size: 16px;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      height: 24px;
+      padding: 0 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      white-space: nowrap;
+      color: var(--muted);
+      background: var(--surface2);
+    }
+
+    .status.done {
+      color: #047857;
+      background: #d1fae5;
+    }
+
+    .status.doing {
+      color: #92400e;
+      background: #fef3c7;
+    }
+
+    .checks {
+      display: grid;
+      gap: 8px;
+    }
+
+    .check {
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr);
+      align-items: start;
+      gap: 8px;
+      padding: 8px;
+      border-radius: 7px;
+      background: var(--surface);
+      border: 1px solid transparent;
+    }
+
+    .check:hover {
+      border-color: var(--border);
+    }
+
+    .check input {
+      margin-top: 2px;
+      width: 16px;
+      height: 16px;
+      accent-color: var(--blue);
+    }
+
+    .check label {
+      font-size: 14px;
+      line-height: 1.5;
+      cursor: pointer;
+    }
+
+    .check.done label {
+      color: var(--muted);
+      text-decoration: line-through;
+    }
+
+    :root[data-theme="dark"] .status.done {
+      color: #bbf7d0;
+      background: rgba(19, 166, 107, 0.22);
+    }
+
+    :root[data-theme="dark"] .status.doing {
+      color: #fde68a;
+      background: rgba(217, 119, 6, 0.22);
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .empty {
+      padding: 32px;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    @media (max-width: 1040px) {
+      .shell { grid-template-columns: 1fr; }
+      .side { position: relative; height: auto; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 720px) {
+      .main { padding: 18px; }
+      .top { flex-direction: column; }
+      .actions { justify-content: flex-start; }
+      .metrics { grid-template-columns: 1fr; }
+      .toolbar { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="side">
+      <div class="brand">
+        <h1>Sub2API 审计后台</h1>
+        <p>开发进度看板。默认完成状态已内置，勾选后会保存到当前浏览器。</p>
+      </div>
+      <nav id="sideNav"></nav>
+    </aside>
+
+    <main class="main">
+      <div class="top">
+        <div>
+          <h2>开发进度</h2>
+          <p>按规划拆成阶段和模块。开发时每完成一项就在这里勾选，并同步更新对应模块进度 md 和总进度 md。</p>
+        </div>
+        <div class="actions">
+          <select class="field themeField" id="themeMode" aria-label="主题模式">
+            <option value="system">跟随系统</option>
+            <option value="light">浅色</option>
+            <option value="dark">深色</option>
+          </select>
+          <button class="btn" id="exportBtn" type="button">导出进度</button>
+          <button class="btn" id="printBtn" type="button">打印</button>
+          <button class="btn danger" id="resetBtn" type="button">重置勾选</button>
+        </div>
+      </div>
+
+      <section class="metrics">
+        <div class="metric">
+          <span>总完成度</span>
+          <strong id="totalPct">0%</strong>
+          <div class="bar"><div class="barFill" id="totalBar"></div></div>
+        </div>
+        <div class="metric">
+          <span>已完成事项</span>
+          <strong id="doneCount">0</strong>
+          <div class="small" id="totalCount">共 0 项</div>
+        </div>
+        <div class="metric">
+          <span>已完成模块</span>
+          <strong id="doneModules">0</strong>
+          <div class="small">13 个模块</div>
+        </div>
+        <div class="metric">
+          <span>最后更新</span>
+          <strong id="updatedAt">-</strong>
+          <div class="small">本机浏览器记录</div>
+        </div>
+      </section>
+
+      <div class="toolbar">
+        <input class="field" id="searchInput" placeholder="搜索模块或事项，例如 调额 / 对账 / 前端">
+        <select class="field" id="statusFilter">
+          <option value="all">全部状态</option>
+          <option value="todo">未完成</option>
+          <option value="done">已完成</option>
+        </select>
+        <select class="field" id="moduleFilter">
+          <option value="all">全部模块</option>
+        </select>
+      </div>
+
+      <section class="section" id="phaseSection">
+        <div class="sectionHead">
+          <h3>阶段总览</h3>
+          <span class="small">对应 development-progress.md</span>
+        </div>
+        <div class="grid" id="phaseGrid"></div>
+      </section>
+
+      <section class="section">
+        <div class="sectionHead">
+          <h3>模块进度</h3>
+          <span class="small">对应 modules/*.md</span>
+        </div>
+        <div class="grid" id="moduleGrid"></div>
+        <div class="empty hidden" id="emptyState">没有匹配的模块或事项</div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const storeKey = 'sub2apiAuditProgressV1'
+    const themeKey = 'sub2apiAuditThemeMode'
+
+    const defaultState = {
+      updatedAt: '2026-07-06 23:30:00',
+      'phase:s0-docs:0': true,
+      'phase:s1-init:0': true,
+      'phase:s2-backend-base:0': true,
+      'phase:s3-sub2api:0': true,
+      'phase:s4-ledger:0': true,
+      'phase:s5-stats:0': true,
+      'phase:s6-reconcile:0': true,
+      'mod:m01:0': true,
+      'mod:m01:1': true,
+      'mod:m01:2': true,
+      'mod:m01:3': true,
+      'mod:m01:4': true,
+      'mod:m02:0': true,
+      'mod:m02:1': true,
+      'mod:m02:2': true,
+      'mod:m02:3': true,
+      'mod:m03:0': true,
+      'mod:m03:1': true,
+      'mod:m03:2': true,
+      'mod:m03:3': true,
+      'mod:m03:4': true,
+      'mod:m04:0': true,
+      'mod:m04:1': true,
+      'mod:m04:2': true,
+      'mod:m04:3': true,
+      'mod:m04:4': true,
+      'mod:m04:5': true,
+      'mod:m04:6': true,
+      'mod:m04:7': true,
+      'mod:m04:8': true,
+      'mod:m05:0': true,
+      'mod:m05:1': true,
+      'mod:m05:2': true,
+      'mod:m05:3': true,
+      'mod:m05:4': true,
+      'mod:m05:5': true,
+      'mod:m05:6': true,
+      'mod:m05:7': true,
+      'mod:m05:8': true,
+      'mod:m05:9': true,
+      'mod:m05:10': true,
+      'mod:m06:0': true,
+      'mod:m06:1': true,
+      'mod:m06:2': true,
+      'mod:m06:3': true,
+      'mod:m06:4': true,
+      'mod:m06:5': true,
+      'mod:m06:6': true,
+      'mod:m06:7': true,
+      'mod:m06:8': true,
+      'mod:m06:9': true,
+      'mod:m12:0': true,
+      'mod:m11:0': true,
+      'mod:m11:1': true,
+      'mod:m11:2': true,
+      'mod:m11:3': true,
+      'mod:m11:4': true,
+      'mod:m11:5': true,
+      'mod:m11:6': true,
+      'mod:m11:7': true,
+      'mod:m11:8': true,
+      'mod:m11:9': true,
+      'mod:m11:10': true,
+      'mod:m11:11': true,
+      'mod:m07:0': true,
+      'mod:m07:1': true,
+      'mod:m07:2': true,
+      'mod:m07:3': true,
+      'mod:m07:4': true,
+      'mod:m07:5': true,
+      'mod:m07:6': true,
+      'mod:m07:7': true,
+      'mod:m07:8': true,
+      'mod:m07:9': true,
+      'mod:m07:10': true,
+      'mod:m08:0': true,
+      'mod:m08:1': true,
+      'mod:m08:2': true,
+      'mod:m08:3': true,
+      'mod:m08:4': true,
+      'mod:m08:5': true,
+      'mod:m08:6': true,
+      'mod:m08:7': true,
+      'mod:m08:8': true,
+      'mod:m08:9': true,
+      'mod:m09:0': true,
+      'mod:m09:1': true,
+      'mod:m09:2': true,
+      'mod:m09:3': true,
+      'mod:m09:4': true,
+      'mod:m09:5': true,
+      'mod:m09:6': true,
+      'mod:m09:7': true,
+      'mod:m09:8': true,
+      'mod:m10:0': true,
+      'mod:m10:1': true,
+      'mod:m10:2': true,
+      'mod:m10:3': true,
+      'mod:m10:4': true,
+      'mod:m10:5': true,
+      'mod:m10:6': true,
+      'mod:m10:7': true,
+      'mod:m12:1': true,
+      'mod:m12:2': true,
+      'mod:m12:3': true,
+      'mod:m12:4': true,
+      'mod:m12:5': true,
+      'mod:m12:6': true,
+      'mod:m12:7': true,
+      'mod:m12:8': true
+    }
+
+    const phases = [
+      ['s0-docs', 'S0 立项与资料整理', '设计、计划、架构和进度文档'],
+      ['s1-init', 'S1 新项目初始化', '创建 sub2api-audit-admin 新项目'],
+      ['s2-backend-base', 'S2 后端基础', 'Laravel API 配置、Sub2API 连接配置、健康检查'],
+      ['s3-sub2api', 'S3 Sub2API 集成', '只读库、Admin API、线上结构复核'],
+      ['s4-ledger', 'S4 账本和调额', '强一致调额、现金账、赠送账、异常作废'],
+      ['s5-stats', 'S5 统计与排行榜', '首页前端看板已回补；充值榜、额度使用榜待后端统计接口'],
+      ['s6-reconcile', 'S6 附件、富文本、对账、审计', '私有附件、富文本过滤、0 差异对账'],
+      ['s7-frontend', 'S7 前端管理后台', 'soybean-admin-antd 风格页面'],
+      ['s8-e2e', 'S8 联调和 E2E', '全链路验收'],
+      ['s9-deploy', 'S9 上线部署', '部署文档、环境变量、备份和监控']
+    ]
+
+    const modules = [
+      {
+        id: 'm01',
+        title: '01 项目基础',
+        doc: 'modules/01-project-foundation.md',
+        desc: '创建独立新项目，建立后端、前端、文档和部署目录。',
+        items: ['目录创建', 'Laravel 初始化', 'Vue 前端初始化', 'Git 初始化', '首次提交']
+      },
+      {
+        id: 'm02',
+        title: '02 后端基础',
+        doc: 'modules/02-backend-foundation.md',
+        desc: '建立 Laravel API 配置、Sub2API 连接配置和健康检查。',
+        items: ['配置文件', 'Sub2API 数据库连接', '健康检查接口', 'HealthTest 通过']
+      },
+      {
+        id: 'm03',
+        title: '03 管理员认证',
+        doc: 'modules/03-admin-auth.md',
+        desc: '实现仅管理员可登录的后台认证体系。',
+        items: ['管理员表', '登录接口', '当前管理员接口', '退出接口', 'AdminAuthTest 通过']
+      },
+      {
+        id: 'm04',
+        title: '04 Sub2API 集成',
+        doc: 'modules/04-sub2api-integration.md',
+        desc: '接入 Sub2API 只读库和 Admin API。',
+        items: ['只读库连接', 'Admin API client', '用户查询', '模型统计', 'Sub2ApiClientTest 通过', '前端 API 封装', '前端用户数据源页面', '前端模型统计页面', 'pnpm build 通过']
+      },
+      {
+        id: 'm05',
+        title: '05 强一致额度调整',
+        doc: 'modules/05-ledger-adjustment.md',
+        desc: '核心链路、真实前后端联通和 H5 调额流程已完成。',
+        items: ['表结构和模型', '业务号生成', '幂等键', 'Sub2API 调额调用', '二次确认', '作废异常流程', '基础前端页面', 'LedgerAdjustmentTest / pnpm build 通过', '提交前确认文案', '前后端真实联通验收', 'H5 调额流程验收']
+      },
+      {
+        id: 'm06',
+        title: '06 财务账本',
+        doc: 'modules/06-finance-ledger.md',
+        desc: '拆清现金账、用户额度账、赠送额度账和平台经营账。',
+        items: ['现金账', '赠送额度账', '经营账', '列表接口', '前端页面', 'FinanceLedgerTest / pnpm build 通过', '桌面端验收', 'H5 手机端验收', '前后端联通验收', '异常路径验收']
+      },
+      {
+        id: 'm07',
+        title: '07 统计排行榜',
+        doc: 'modules/07-dashboard-stats.md',
+        desc: '首页专用统计 API、充值榜、额度使用榜、模型消费榜已完成。',
+        items: ['时间筛选（前端）', '充值榜', '额度使用榜', '模型消费榜（前端）', '模型分类（前端）', '首页 ECharts 看板', 'DashboardStatsTest / pnpm build 通过', '首页桌面端验收', '首页 H5 手机端验收', '前后端联通验收', '异常路径验收']
+      },
+      {
+        id: 'm08',
+        title: '08 附件和富文本',
+        doc: 'modules/08-attachments-richtext.md',
+        desc: '私有附件上传下载和富文本安全过滤。',
+        items: ['私有存储', '上传接口', '下载鉴权', '富文本过滤', '前端组件', 'AttachmentTest / pnpm build 通过', '桌面端验收', 'H5 手机端验收', '前后端联通验收', '异常路径验收']
+      },
+      {
+        id: 'm09',
+        title: '09 对账中心',
+        doc: 'modules/09-reconciliation.md',
+        desc: '实现中国时区日报对账，并要求差异为 0。',
+        items: ['对账批次', '公式实现', '差异列表', '前端页面', 'ReconcileTest / pnpm build 通过', '桌面端验收', 'H5 手机端验收', '前后端联通验收', '异常路径验收']
+      },
+      {
+        id: 'm10',
+        title: '10 操作审计',
+        doc: 'modules/10-audit-log.md',
+        desc: '记录调额、作废、补附件、富文本修改和对账操作。',
+        items: ['审计服务', '列表接口', '前端页面', 'AuditLogTest / pnpm build 通过', '桌面端验收', 'H5 手机端验收', '前后端联通验收', '异常路径验收']
+      },
+      {
+        id: 'm11',
+        title: '11 前端基础',
+        doc: 'modules/11-frontend-foundation.md',
+        desc: '搭建 soybean-admin-antd 风格管理端基础框架。',
+        items: ['Vite/Vue 初始化', '清理默认演示页', 'AntDesignVue', '路由', '登录状态', 'API 请求封装', '管理布局', '主菜单', 'pnpm build 通过', '主题模式', 'H5 抽屉菜单', '移动端基础布局']
+      },
+      {
+        id: 'm12',
+        title: '12 前端业务页面',
+        doc: 'modules/12-frontend-business-pages.md',
+        desc: '首页、Sub2API 数据源、用户与额度、调额记录、赠送、经营账、对账和审计页面已回补。',
+        items: ['首页 ECharts 看板', 'Sub2API 用户数据源', 'Sub2API 模型消耗统计', '用户与额度', '调额表单', '记录表格', '对账页面', '审计页面', 'pnpm build 通过', '桌面端验收', 'H5 手机端验收', '前后端联通验收', '异常路径验收']
+      },
+      {
+        id: 'm13',
+        title: '13 联调验收与部署',
+        doc: 'modules/13-verification-deployment.md',
+        desc: '完成全链路验收、真实调额验证和部署准备。',
+        items: ['后端全量测试', '前端构建', 'E2E', '桌面端全链路验收', 'H5 手机端全链路验收', '异常路径验收', '真实调额验收', '部署文档']
+      }
+    ]
+
+    let state = loadState()
+
+    const qs = (sel) => document.querySelector(sel)
+    const makeId = (prefix, id, idx) => `${prefix}:${id}:${idx}`
+    const systemDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches
+
+    function themeName(mode) {
+      if (mode === 'dark' || mode === 'light') return mode
+      return systemDark() ? 'dark' : 'light'
+    }
+
+    function applyTheme(mode) {
+      document.documentElement.dataset.theme = themeName(mode)
+    }
+
+    function initTheme() {
+      const mode = localStorage.getItem(themeKey) || 'system'
+      qs('#themeMode').value = mode
+      applyTheme(mode)
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        if ((localStorage.getItem(themeKey) || 'system') === 'system') applyTheme('system')
+      })
+    }
+
+    function loadState() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(storeKey) || '{}')
+        return { ...saved, ...defaultState, updatedAt: saved.updatedAt || defaultState.updatedAt }
+      } catch {
+        return { ...defaultState }
+      }
+    }
+
+    function saveState() {
+      state.updatedAt = new Date().toLocaleString('zh-CN', { hour12: false })
+      localStorage.setItem(storeKey, JSON.stringify(state))
+    }
+
+    function isDone(id) {
+      return state[id] === true
+    }
+
+    function setDone(id, checked) {
+      state[id] = checked
+      saveState()
+      render()
+    }
+
+    function calcItems() {
+      const ids = []
+      phases.forEach((p) => ids.push(makeId('phase', p[0], 0)))
+      modules.forEach((mod) => mod.items.forEach((_, idx) => ids.push(makeId('mod', mod.id, idx))))
+      const done = ids.filter(isDone).length
+      return { ids, done, total: ids.length }
+    }
+
+    function modulePct(mod) {
+      const done = mod.items.filter((_, idx) => isDone(makeId('mod', mod.id, idx))).length
+      return Math.round((done / mod.items.length) * 100)
+    }
+
+    function statusText(pct) {
+      if (pct === 100) return ['已完成', 'done']
+      if (pct > 0) return ['进行中', 'doing']
+      return ['未开始', 'todo']
+    }
+
+    function checkbox(id, text) {
+      const done = isDone(id)
+      return `
+        <div class="check ${done ? 'done' : ''}">
+          <input id="${id}" type="checkbox" ${done ? 'checked' : ''} data-id="${id}">
+          <label for="${id}">${text}</label>
+        </div>
+      `
+    }
+
+    function renderSide() {
+      const nav = qs('#sideNav')
+      nav.innerHTML = modules.map((mod) => {
+        const pct = modulePct(mod)
+        return `<a class="sideLink" href="#${mod.id}"><span>${mod.title}</span><span class="sideBadge">${pct}%</span></a>`
+      }).join('')
+    }
+
+    function renderPhases() {
+      qs('#phaseGrid').innerHTML = phases.map((item) => {
+        const id = makeId('phase', item[0], 0)
+        const done = isDone(id)
+        return `
+          <article class="card">
+            <div class="cardHead">
+              <div>
+                <h4>${item[1]}</h4>
+                <p>${item[2]}</p>
+              </div>
+              <span class="status ${done ? 'done' : ''}">${done ? '已完成' : '未完成'}</span>
+            </div>
+            <div class="checks">${checkbox(id, '阶段完成')}</div>
+          </article>
+        `
+      }).join('')
+    }
+
+    function renderModules() {
+      const search = qs('#searchInput').value.trim().toLowerCase()
+      const status = qs('#statusFilter').value
+      const modFilter = qs('#moduleFilter').value
+      const cards = []
+
+      modules.forEach((mod) => {
+        const pct = modulePct(mod)
+        const [label, cls] = statusText(pct)
+        const text = `${mod.title} ${mod.desc} ${mod.items.join(' ')}`.toLowerCase()
+        const statusOk = status === 'all' || (status === 'done' && pct === 100) || (status === 'todo' && pct < 100)
+        const modOk = modFilter === 'all' || modFilter === mod.id
+        const searchOk = !search || text.includes(search)
+        if (!statusOk || !modOk || !searchOk) return
+
+        cards.push(`
+          <article class="card" id="${mod.id}">
+            <div class="cardHead">
+              <div>
+                <h4>${mod.title}</h4>
+                <p>${mod.desc}</p>
+                <div class="small">${mod.doc}</div>
+              </div>
+              <span class="status ${cls}">${label} ${pct}%</span>
+            </div>
+            <div class="bar"><div class="barFill" style="width:${pct}%"></div></div>
+            <div class="checks" style="margin-top:12px">
+              ${mod.items.map((item, idx) => checkbox(makeId('mod', mod.id, idx), item)).join('')}
+            </div>
+          </article>
+        `)
+      })
+
+      qs('#moduleGrid').innerHTML = cards.join('')
+      qs('#emptyState').classList.toggle('hidden', cards.length > 0)
+    }
+
+    function renderMetrics() {
+      const { done, total } = calcItems()
+      const pct = total ? Math.round((done / total) * 100) : 0
+      const doneMods = modules.filter((mod) => modulePct(mod) === 100).length
+      qs('#totalPct').textContent = `${pct}%`
+      qs('#totalBar').style.width = `${pct}%`
+      qs('#doneCount').textContent = String(done)
+      qs('#totalCount').textContent = `共 ${total} 项`
+      qs('#doneModules').textContent = String(doneMods)
+      qs('#updatedAt').textContent = state.updatedAt || '-'
+    }
+
+    function fillModuleFilter() {
+      const sel = qs('#moduleFilter')
+      if (sel.options.length > 1) return
+      modules.forEach((mod) => {
+        const opt = document.createElement('option')
+        opt.value = mod.id
+        opt.textContent = mod.title
+        sel.appendChild(opt)
+      })
+    }
+
+    function bindEvents() {
+      document.body.addEventListener('change', (event) => {
+        const el = event.target
+        if (el.matches('input[type="checkbox"][data-id]')) setDone(el.dataset.id, el.checked)
+      })
+
+      qs('#searchInput').addEventListener('input', renderModules)
+      qs('#statusFilter').addEventListener('change', renderModules)
+      qs('#moduleFilter').addEventListener('change', renderModules)
+      qs('#themeMode').addEventListener('change', (event) => {
+        const mode = event.target.value
+        localStorage.setItem(themeKey, mode)
+        applyTheme(mode)
+      })
+      qs('#printBtn').addEventListener('click', () => window.print())
+      qs('#resetBtn').addEventListener('click', () => {
+        if (!confirm('确认清空所有勾选状态？')) return
+        state = { ...defaultState }
+        localStorage.removeItem(storeKey)
+        render()
+      })
+      qs('#exportBtn').addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = 'sub2api-audit-progress.json'
+        link.click()
+        URL.revokeObjectURL(url)
+      })
+    }
+
+    function render() {
+      fillModuleFilter()
+      renderMetrics()
+      renderSide()
+      renderPhases()
+      renderModules()
+    }
+
+    bindEvents()
+    initTheme()
+    render()
+  </script>
+</body>
+</html>
