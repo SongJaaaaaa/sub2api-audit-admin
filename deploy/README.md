@@ -1,5 +1,12 @@
 # 部署配置
 
-本目录用于保存部署脚本、反向代理配置、环境变量说明和上线检查清单。
+| 文件 | 说明 |
+|---|---|
+| `Caddyfile.example` | 前端静态资源和 Laravel API 反向代理示例 |
+| `supervisor-laravel-worker.conf` | Laravel queue worker 示例 |
 
-当前模块只建立目录，不包含部署实现。
+详细部署说明见:
+
+```text
+docs/deployment.md
+```

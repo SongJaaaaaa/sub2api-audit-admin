@@ -482,7 +482,7 @@
     const themeKey = 'sub2apiAuditThemeMode'
 
     const defaultState = {
-      updatedAt: '2026-07-06 23:30:00',
+      updatedAt: '2026-07-06 22:20:00',
       'phase:s0-docs:0': true,
       'phase:s1-init:0': true,
       'phase:s2-backend-base:0': true,
@@ -490,6 +490,7 @@
       'phase:s4-ledger:0': true,
       'phase:s5-stats:0': true,
       'phase:s6-reconcile:0': true,
+      'phase:s7-frontend:0': true,
       'mod:m01:0': true,
       'mod:m01:1': true,
       'mod:m01:2': true,
@@ -592,7 +593,18 @@
       'mod:m12:5': true,
       'mod:m12:6': true,
       'mod:m12:7': true,
-      'mod:m12:8': true
+      'mod:m12:8': true,
+      'mod:m12:9': true,
+      'mod:m12:10': true,
+      'mod:m12:11': true,
+      'mod:m12:12': true,
+      'mod:m13:0': true,
+      'mod:m13:1': true,
+      'mod:m13:2': true,
+      'mod:m13:3': true,
+      'mod:m13:4': true,
+      'mod:m13:5': true,
+      'mod:m13:7': true
     }
 
     const phases = [
@@ -690,14 +702,14 @@
         id: 'm12',
         title: '12 前端业务页面',
         doc: 'modules/12-frontend-business-pages.md',
-        desc: '首页、Sub2API 数据源、用户与额度、调额记录、赠送、经营账、对账和审计页面已回补。',
+        desc: '首页、Sub2API 数据源、用户与额度、调额记录、赠送、经营账、对账、审计、列配置和调额表单组件已完成。',
         items: ['首页 ECharts 看板', 'Sub2API 用户数据源', 'Sub2API 模型消耗统计', '用户与额度', '调额表单', '记录表格', '对账页面', '审计页面', 'pnpm build 通过', '桌面端验收', 'H5 手机端验收', '前后端联通验收', '异常路径验收']
       },
       {
         id: 'm13',
         title: '13 联调验收与部署',
         doc: 'modules/13-verification-deployment.md',
-        desc: '完成全链路验收、真实调额验证和部署准备。',
+        desc: '本地联调、E2E 和部署准备已完成；真实 Sub2API 调额验收待测试用户。',
         items: ['后端全量测试', '前端构建', 'E2E', '桌面端全链路验收', 'H5 手机端全链路验收', '异常路径验收', '真实调额验收', '部署文档']
       }
     ]

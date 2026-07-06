@@ -42,12 +42,12 @@ async function submit() {
       </div>
       <a-form layout="vertical" :model="form" @finish="submit">
         <a-form-item name="email" label="邮箱" :rules="[{ required: true, message: '请输入邮箱' }]">
-          <a-input v-model:value="form.email" size="large" autocomplete="username">
+          <a-input v-model:value="form.email" size="large" autocomplete="username" placeholder="管理员邮箱">
             <template #prefix><UserOutlined /></template>
           </a-input>
         </a-form-item>
         <a-form-item name="password" label="密码" :rules="[{ required: true, message: '请输入密码' }]">
-          <a-input-password v-model:value="form.password" size="large" autocomplete="current-password">
+          <a-input-password v-model:value="form.password" size="large" autocomplete="current-password" placeholder="密码">
             <template #prefix><LockOutlined /></template>
           </a-input-password>
         </a-form-item>

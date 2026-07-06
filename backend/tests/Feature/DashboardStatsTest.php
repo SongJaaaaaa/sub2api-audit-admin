@@ -31,7 +31,7 @@ class DashboardStatsTest extends TestCase
             'password' => 'secret123',
             'status' => Admin::STATUS_ACTIVE,
         ]);
-        CashEntry::query()->create([
+        $cash = CashEntry::query()->create([
             'entry_no' => 'CASH202607060001',
             'sub2api_user_id' => 1001,
             'sub2api_user_email' => 'alpha@example.com',
@@ -39,8 +39,9 @@ class DashboardStatsTest extends TestCase
             'cash_amount' => '100.00',
             'source' => 'ledger_adjustment',
             'created_by' => $admin->id,
-            'created_at' => '2026-07-05 16:00:00',
         ]);
+        $cash->timestamps = false;
+        $cash->forceFill(['created_at' => '2026-07-06 02:00:00'])->save();
         LedgerAdjustment::query()->create([
             'ledger_no' => 'ADJ202607060003',
             'idempotency_key' => 'key-3',
@@ -51,19 +52,20 @@ class DashboardStatsTest extends TestCase
             'status' => LedgerAdjustment::STATUS_SUCCEEDED,
             'adjust_reason' => '充值',
             'created_by' => $admin->id,
-            'confirmed_at' => '2026-07-05 16:00:00',
+            'confirmed_at' => '2026-07-06 02:00:00',
         ]);
         \DB::table('usage_logs')->insert([
             'user_id' => 1001,
             'model' => 'gpt-4o',
             'total_cost' => '3.20',
             'actual_cost' => '2.00',
-            'created_at' => '2026-07-05 16:00:00',
+            'created_at' => '2026-07-06 02:00:00',
         ]);
 
-        $this->withToken($admin->createToken('admin-token')->plainTextToken)
+        $res = $this->withToken($admin->createToken('admin-token')->plainTextToken)
             ->getJson('/api/v1/dashboard?from=2026-07-06 00:00:00&to=2026-07-06 23:59:59&model_group=gpt')
-            ->assertOk()
+            ->assertOk();
+        $res
             ->assertJsonPath('recharge_rank.0.total_amount', '100.00')
             ->assertJsonPath('quota_rank.0.total_amount', '120.00')
             ->assertJsonPath('models.0.model', 'gpt-4o');

@@ -4,6 +4,7 @@ import { Modal, message } from 'ant-design-vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { createLedgerAdjustment, type AdjustmentRes } from '../api/ledger'
 import { getSub2Users, type Sub2User } from '../api/sub2api'
+import AdjustmentForm, { type AdjustmentFormState } from '../components/ledger/AdjustmentForm.vue'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -16,7 +17,7 @@ const page = reactive({
   pageSize: 20,
   total: 0,
 })
-const form = reactive({
+const form = reactive<AdjustmentFormState>({
   operation: 'increment' as 'increment' | 'decrement',
   amount: '',
   cash_amount: '',
@@ -173,32 +174,7 @@ onMounted(loadUsers)
         <span>{{ selected.email }}</span>
         <strong class="money">{{ selected.balance }}</strong>
       </div>
-      <a-form layout="vertical">
-        <a-form-item label="调整方向" required>
-          <a-segmented
-            v-model:value="form.operation"
-            :options="[
-              { label: '增加', value: 'increment' },
-              { label: '扣减', value: 'decrement' },
-            ]"
-          />
-        </a-form-item>
-        <a-form-item label="额度" required>
-          <a-input v-model:value="form.amount" placeholder="0.00" />
-        </a-form-item>
-        <a-form-item label="现金金额">
-          <a-input v-model:value="form.cash_amount" placeholder="0.00" />
-        </a-form-item>
-        <a-form-item label="赠送额度">
-          <a-input v-model:value="form.gift_quota_amount" placeholder="0.00" />
-        </a-form-item>
-        <a-form-item label="原因" required>
-          <a-input v-model:value="form.adjust_reason" placeholder="例如 线下充值" />
-        </a-form-item>
-        <a-form-item label="备注">
-          <a-textarea v-model:value="form.admin_notes" :rows="3" />
-        </a-form-item>
-      </a-form>
+      <AdjustmentForm v-model:value="form" />
     </a-modal>
   </section>
 </template>

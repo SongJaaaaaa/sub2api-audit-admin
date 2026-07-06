@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { getLedgerAdjustments, type LedgerAdjustment } from '../api/ledger'
+import ColumnSettings, { type ColumnOption } from '../components/table/ColumnSettings.vue'
 
 const loading = ref(false)
 const items = ref<LedgerAdjustment[]>([])
@@ -13,7 +14,7 @@ const page = reactive({
   total: 0,
 })
 
-const columns = [
+const allColumns = [
   { title: '业务单号', dataIndex: 'ledger_no', width: 180 },
   { title: '用户ID', dataIndex: 'sub2api_user_id', width: 100 },
   { title: '邮箱', dataIndex: 'sub2api_user_email' },
@@ -26,6 +27,17 @@ const columns = [
   { title: '原因', dataIndex: 'adjust_reason' },
   { title: '确认时间', dataIndex: 'confirmed_at', width: 180 },
 ] as const
+
+const requiredCols = ['ledger_no', 'sub2api_user_id', 'operation', 'amount', 'confirmed_at']
+const visibleCols = ref<string[]>(['ledger_no', 'sub2api_user_id', 'sub2api_user_email', 'operation', 'amount', 'cash_amount', 'gift_quota_amount', 'confirmed_at'])
+const colOptions = computed<ColumnOption[]>(() =>
+  allColumns.map((item) => ({
+    key: item.dataIndex,
+    title: item.title,
+    required: requiredCols.includes(item.dataIndex),
+  })),
+)
+const columns = computed(() => allColumns.filter((item) => visibleCols.value.includes(item.dataIndex)))
 
 async function loadItems() {
   loading.value = true
@@ -74,6 +86,7 @@ onMounted(loadItems)
         enter-button
         @search="search"
       />
+      <ColumnSettings v-model:value="visibleCols" :options="colOptions" />
     </div>
 
     <a-table
