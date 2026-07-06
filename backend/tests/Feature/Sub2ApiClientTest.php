@@ -212,8 +212,38 @@ class Sub2ApiClientTest extends TestCase
 
         Http::assertSent(fn ($request): bool => $request->url() === 'https://sub2api.test/api/v1/admin/users/1001/balance'
             && $request->hasHeader('Idempotency-Key', 'idem-1001')
-            && $request['balance'] === '10.00'
-            && $request['operation'] === 'increment');
+            && (float) $request['balance'] === 10.0
+            && $request['operation'] === 'add');
+    }
+
+    public function test_sub2api_balance_history_route_returns_admin_api_data(): void
+    {
+        $this->withoutMiddleware();
+        config()->set('sub2api.admin_api.base_url', 'https://sub2api.test');
+        config()->set('sub2api.admin_api.key', 'secret-key');
+
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/users/1001' => Http::response([
+                'data' => ['id' => 1001, 'email' => 'alpha@example.com', 'balance' => '45.00'],
+            ]),
+            'https://sub2api.test/api/v1/admin/users/1001/balance-history?page=1&page_size=8' => Http::response([
+                'data' => [
+                    'items' => [
+                        ['id' => 88, 'type' => 'admin_balance', 'value' => -5, 'status' => 'used', 'used_at' => '2026-07-07T00:00:00+08:00'],
+                    ],
+                    'total' => 1,
+                ],
+            ]),
+        ]);
+
+        $this->getJson('/api/v1/sub2api/users/1001/balance-history?page=1&page_size=8')
+            ->assertOk()
+            ->assertJsonPath('items.0.id', 88)
+            ->assertJsonPath('items.0.operation', 'decrement')
+            ->assertJsonPath('items.0.value', '-5.00')
+            ->assertJsonPath('items.0.adjusted_account', 'alpha@example.com')
+            ->assertJsonPath('items.0.before_balance', '50.00')
+            ->assertJsonPath('items.0.after_balance', '45.00');
     }
 
     public function test_sub2api_routes_return_real_repository_data(): void

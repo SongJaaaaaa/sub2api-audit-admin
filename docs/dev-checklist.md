@@ -19,6 +19,8 @@ admin@example.com / admin123
 
 ## 必跑检查
 
+前端命令需要 Node >=20.19 或 >=22.12。当前本机默认 `/usr/local/bin/node` 是 v14 时，需先切到新版本再跑 `pnpm`。
+
 ```bash
 cd backend
 php artisan test

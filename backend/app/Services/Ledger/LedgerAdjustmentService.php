@@ -7,6 +7,7 @@ use App\Models\LedgerAdjustment;
 use App\Services\Audit\AuditLogService;
 use App\Services\Sub2Api\Sub2ApiAdminClient;
 use App\Support\Money;
+use App\Support\SafeHtml;
 use App\Support\Sub2ApiNoteTag;
 use RuntimeException;
 use Throwable;
@@ -26,10 +27,10 @@ class LedgerAdjustmentService
         $ledgerNo = $this->numbers->make();
         $idempotencyKey = $this->numbers->idempotencyKey($ledgerNo);
         $amount = $this->money($data['amount']);
-        $cashAmount = $this->money($data['cash_amount'] ?? 0);
-        $giftAmount = $this->money($data['gift_quota_amount'] ?? 0);
+        [$cashAmount, $giftAmount] = $this->financeAmounts($amount, $data);
         $this->checkFinanceAmounts($amount, $cashAmount, $giftAmount);
-        $notes = Sub2ApiNoteTag::append((string) ($data['admin_notes'] ?? ''), $ledgerNo, $idempotencyKey);
+        $adminNotes = SafeHtml::clean($data['admin_notes'] ?? null);
+        $notes = Sub2ApiNoteTag::append($this->plainNotes($adminNotes), $ledgerNo, $idempotencyKey);
 
         $adj = LedgerAdjustment::query()->create([
             'ledger_no' => $ledgerNo,
@@ -41,7 +42,7 @@ class LedgerAdjustmentService
             'gift_quota_amount' => $giftAmount,
             'status' => LedgerAdjustment::STATUS_PENDING,
             'adjust_reason' => $data['adjust_reason'],
-            'admin_notes' => $data['admin_notes'] ?? null,
+            'admin_notes' => $adminNotes,
             'sub2api_notes' => $notes,
             'created_by' => $admin->id,
         ]);
@@ -195,6 +196,10 @@ class LedgerAdjustmentService
 
     private function checkFinanceAmounts(string $amount, string $cashAmount, string $giftAmount): void
     {
+        if ((float) $cashAmount < 0 || (float) $giftAmount < 0) {
+            throw new RuntimeException('入账金额不能大于 Sub2API 金额调整');
+        }
+
         if ((float) $cashAmount <= 0 && (float) $giftAmount <= 0) {
             return;
         }
@@ -202,5 +207,27 @@ class LedgerAdjustmentService
         if (Money::add($cashAmount, $giftAmount) !== $amount) {
             throw new RuntimeException('现金金额和赠送额度之和必须等于调额额度');
         }
+    }
+
+    private function financeAmounts(string $amount, array $data): array
+    {
+        if (($data['operation'] ?? '') === LedgerAdjustment::OP_DECREMENT || ($data['adjust_reason'] ?? '') === '异常修正') {
+            return ['0.00', '0.00'];
+        }
+
+        if (($data['adjust_reason'] ?? '') === '补发') {
+            return ['0.00', $amount];
+        }
+
+        $cashAmount = $this->money($data['cash_amount'] ?? 0);
+
+        return [$cashAmount, $this->money((float) $amount - (float) $cashAmount)];
+    }
+
+    private function plainNotes(?string $html): string
+    {
+        $text = trim(html_entity_decode(strip_tags((string) $html), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+
+        return preg_replace('/\s+/u', ' ', $text) ?? '';
     }
 }

@@ -11,6 +11,8 @@ export interface UserRank {
 export interface DashboardStatsRes {
   summary: UsageSummary
   models: ModelRank[]
+  recharge_total?: string
+  quota_total?: string
   recharge_rank: UserRank[]
   quota_rank: UserRank[]
   range: {

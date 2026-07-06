@@ -35,9 +35,9 @@
 
 | 项 | 状态 | 备注 |
 |---|---|---|
-| 后端测试 | 已完成 | `php artisan test` 24 passed |
-| 前端构建 | 已完成 | `pnpm typecheck`、`pnpm build` 已通过 |
-| E2E | 已完成 | `frontend/tests/e2e/admin-ledger.spec.ts`，desktop/h5 通过 |
+| 后端测试 | 已完成 | `php artisan test` 24 passed，2026-07-06 复验通过 |
+| 前端构建 | 已完成 | `pnpm typecheck`、`pnpm build` 已通过；前端命令需 Node >=20.19 或 >=22.12 |
+| E2E | 已完成 | `frontend/tests/e2e/admin-ledger.spec.ts`，desktop/h5 2 passed |
 | 桌面端全链路验收 | 已完成 | 登录并打开首页、调额记录、现金/赠送账、经营账、对账、审计 |
 | H5 手机端全链路验收 | 已完成 | Playwright iPhone 12 视口通过 |
 | 异常路径验收 | 已完成 | 后端测试覆盖未授权、调额失败、二次确认失败、非法附件、重复对账 |
@@ -77,3 +77,4 @@ npx playwright test
 
 - 2026-07-06: 完成本地联调准备、后端全量测试、前端类型检查和构建、Playwright 桌面/H5 冒烟、部署文档、Caddy 和 supervisor 示例。
 - 2026-07-06: 真实 Sub2API 调额验收未执行；当前本地 `.env` 没有 Sub2API Admin API URL/Key，也没有指定小额测试用户。根据强一致调额原则，不能把未真实入账的验收标记为完成。
+- 2026-07-06: 复跑 S8 本地验收：`php artisan test` 24 passed，`pnpm typecheck` 通过，`pnpm build` 通过，`pnpm e2e` desktop/h5 2 passed。本机默认 Node v14 不满足 pnpm/Vite，前端验收使用临时 Node 22.23.1。

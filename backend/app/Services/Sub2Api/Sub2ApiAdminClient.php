@@ -30,11 +30,17 @@ class Sub2ApiAdminClient
 
     public function updateUserBalance(int $id, string $amount, string $operation, string $notes, string $idempotencyKey): array
     {
+        $sub2Op = match ($operation) {
+            'increment', 'add' => 'add',
+            'decrement', 'subtract' => 'subtract',
+            default => $operation,
+        };
+
         $res = $this->http()
             ->withHeaders(['Idempotency-Key' => $idempotencyKey])
             ->post('/api/v1/admin/users/'.$id.'/balance', [
-                'balance' => $amount,
-                'operation' => $operation,
+                'balance' => (float) $amount,
+                'operation' => $sub2Op,
                 'notes' => $notes,
             ]);
 
@@ -83,7 +89,8 @@ class Sub2ApiAdminClient
     private function json(int $status, bool $ok, ?array $json): array
     {
         if (! $ok) {
-            throw new RuntimeException('Sub2API Admin API 调用失败：HTTP '.$status);
+            $msg = (string) data_get($json, 'message', '');
+            throw new RuntimeException(trim('Sub2API Admin API 调用失败：HTTP '.$status.' '.$msg));
         }
 
         return $json ?? [];

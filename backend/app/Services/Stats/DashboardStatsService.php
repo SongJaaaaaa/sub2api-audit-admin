@@ -23,6 +23,8 @@ class DashboardStatsService
         return [
             'summary' => $this->repo->usageSummary($from, $to, []),
             'models' => array_slice($models, 0, $limit),
+            'recharge_total' => $this->rechargeTotal($from, $to),
+            'quota_total' => $this->quotaTotal($from, $to),
             'recharge_rank' => $this->rechargeRank($from, $to, $limit),
             'quota_rank' => $this->quotaRank($from, $to, $limit),
             'range' => [
@@ -30,6 +32,23 @@ class DashboardStatsService
                 'to' => $to->toDateTimeString(),
             ],
         ];
+    }
+
+    private function rechargeTotal(CarbonImmutable $from, CarbonImmutable $to): string
+    {
+        return number_format((float) CashEntry::query()
+            ->where('created_at', '>=', $from)
+            ->where('created_at', '<=', $to)
+            ->sum('cash_amount'), 2, '.', '');
+    }
+
+    private function quotaTotal(CarbonImmutable $from, CarbonImmutable $to): string
+    {
+        return number_format((float) LedgerAdjustment::query()
+            ->where('status', LedgerAdjustment::STATUS_SUCCEEDED)
+            ->where('confirmed_at', '>=', $from)
+            ->where('confirmed_at', '<=', $to)
+            ->sum('amount'), 2, '.', '');
     }
 
     private function rechargeRank(CarbonImmutable $from, CarbonImmutable $to, int $limit): array

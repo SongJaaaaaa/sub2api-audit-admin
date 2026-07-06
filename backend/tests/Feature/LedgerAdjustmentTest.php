@@ -27,7 +27,7 @@ class LedgerAdjustmentTest extends TestCase
                 'sub2api_user_id' => 1001,
                 'operation' => LedgerAdjustment::OP_INCREMENT,
                 'amount' => '10',
-                'adjust_reason' => '人工充值',
+                'adjust_reason' => '充值',
                 'admin_notes' => '线下已收款',
             ]);
 
@@ -45,8 +45,8 @@ class LedgerAdjustmentTest extends TestCase
 
         Http::assertSent(fn ($req): bool => $req->url() === 'https://sub2api.test/api/v1/admin/users/1001/balance'
             && $req->hasHeader('Idempotency-Key')
-            && $req['balance'] === '10.00'
-            && $req['operation'] === LedgerAdjustment::OP_INCREMENT
+            && (float) $req['balance'] === 10.0
+            && $req['operation'] === 'add'
             && str_contains((string) $req['notes'], 'ledger_no=ADJ'));
     }
 
@@ -63,7 +63,7 @@ class LedgerAdjustmentTest extends TestCase
             'sub2api_user_id' => 1001,
             'operation' => LedgerAdjustment::OP_INCREMENT,
             'amount' => '10.00',
-            'adjust_reason' => '人工充值',
+            'adjust_reason' => '充值',
         ]);
 
         $res->assertStatus(409)
@@ -95,7 +95,7 @@ class LedgerAdjustmentTest extends TestCase
                 'sub2api_user_id' => 1001,
                 'operation' => LedgerAdjustment::OP_INCREMENT,
                 'amount' => '10.00',
-                'adjust_reason' => '人工充值',
+                'adjust_reason' => '充值',
             ]);
 
         $res->assertStatus(409)

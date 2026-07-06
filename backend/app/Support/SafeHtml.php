@@ -15,6 +15,6 @@ class SafeHtml
         $html = preg_replace('/\son\w+\s*=\s*(".*?"|\'.*?\'|[^\s>]+)/is', '', $html) ?? '';
         $html = preg_replace('/javascript\s*:/is', '', $html) ?? '';
 
-        return strip_tags($html, '<p><br><strong><b><em><i><u><ol><ul><li><blockquote><a>');
+        return strip_tags($html, '<p><br><strong><b><em><i><u><ol><ul><li><blockquote><a><img>');
     }
 }

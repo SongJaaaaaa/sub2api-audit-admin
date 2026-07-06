@@ -19,12 +19,42 @@ export interface UserListRes {
   page_size: number
 }
 
+export interface Sub2BalanceHistoryItem {
+  id: number
+  ledger_adjustment_id: number | null
+  ledger_no: string
+  type: string
+  value: string
+  operation: 'increment' | 'decrement'
+  operator_name: string
+  operator_email: string | null
+  adjusted_account: string
+  adjusted_user_id: number
+  before_balance: string | null
+  after_balance: string | null
+  adjust_reason: string | null
+  admin_notes: string | null
+  status: string | null
+  used_at: string | null
+  created_at: string | null
+  notes: string | null
+}
+
+export interface Sub2BalanceHistoryRes {
+  items: Sub2BalanceHistoryItem[]
+  total: number
+  page: number
+  page_size: number
+  total_recharged: string | number | null
+}
+
 export interface UsageSummary {
   request_count: number
   user_count: number
   model_count: number
   total_cost: string
   actual_cost: string
+  token_total?: string
 }
 
 export interface ModelRank {
@@ -33,6 +63,7 @@ export interface ModelRank {
   user_count: number
   total_cost: string
   actual_cost: string
+  token_total?: string
 }
 
 export interface RechargeSource {
@@ -59,6 +90,13 @@ export function getSub2Users(params: {
   keyword?: string
 }) {
   return http.get<unknown, UserListRes>('/sub2api/users', { params })
+}
+
+export function getSub2BalanceHistory(userId: number, params: {
+  page: number
+  page_size: number
+}) {
+  return http.get<unknown, Sub2BalanceHistoryRes>(`/sub2api/users/${userId}/balance-history`, { params })
 }
 
 export function getModelStats(params: {

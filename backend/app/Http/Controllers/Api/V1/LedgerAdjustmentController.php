@@ -32,15 +32,16 @@ class LedgerAdjustmentController extends Controller
             'amount' => ['required', 'numeric', 'gt:0'],
             'cash_amount' => ['nullable', 'numeric', 'min:0'],
             'gift_quota_amount' => ['nullable', 'numeric', 'min:0'],
-            'adjust_reason' => ['required', 'string', 'max:500'],
-            'admin_notes' => ['nullable', 'string', 'max:2000'],
+            'adjust_reason' => ['required', Rule::in(['充值', '补发', '人工扣减', '异常修正'])],
+            'admin_notes' => ['nullable', 'string', 'max:1000000', 'required_if:adjust_reason,异常修正'],
         ]);
         $cash = number_format((float) ($data['cash_amount'] ?? 0), 2, '.', '');
-        $gift = number_format((float) ($data['gift_quota_amount'] ?? 0), 2, '.', '');
-        if (((float) $cash > 0 || (float) $gift > 0) && number_format((float) $cash + (float) $gift, 2, '.', '') !== number_format((float) $data['amount'], 2, '.', '')) {
+        $amount = number_format((float) $data['amount'], 2, '.', '');
+        $isRecharge = $data['operation'] === LedgerAdjustment::OP_INCREMENT && $data['adjust_reason'] === '充值';
+        if ($isRecharge && (float) $cash > (float) $amount) {
             throw new ValidationException(Validator::make([], []), response()->json([
-                'message' => '现金金额和赠送额度之和必须等于调额额度',
-                'errors' => ['cash_amount' => ['现金金额和赠送额度之和必须等于调额额度']],
+                'message' => '入账金额不能大于 Sub2API 金额调整',
+                'errors' => ['cash_amount' => ['入账金额不能大于 Sub2API 金额调整']],
             ], 422));
         }
 

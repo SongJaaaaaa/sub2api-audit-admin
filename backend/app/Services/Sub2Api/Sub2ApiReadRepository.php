@@ -79,6 +79,7 @@ class Sub2ApiReadRepository
     public function usageSummary(CarbonImmutable $from, CarbonImmutable $to, array $filters): array
     {
         $query = $this->usageQuery($from, $to, $filters);
+        $tokenExpr = $this->tokenExpr();
 
         return [
             'request_count' => (int) (clone $query)->count(),
@@ -86,13 +87,16 @@ class Sub2ApiReadRepository
             'model_count' => (int) (clone $query)->distinct('model')->count('model'),
             'total_cost' => (string) ((clone $query)->sum('total_cost') ?: '0'),
             'actual_cost' => (string) ((clone $query)->sum('actual_cost') ?: '0'),
+            'token_total' => (string) ($tokenExpr === '0' ? 0 : ((clone $query)->sum(DB::raw($tokenExpr)) ?: '0')),
         ];
     }
 
     public function modelRanking(CarbonImmutable $from, CarbonImmutable $to, array $filters, int $limit): array
     {
+        $tokenExpr = $this->tokenExpr();
+
         return $this->usageQuery($from, $to, $filters)
-            ->selectRaw('model, count(*) as request_count, count(distinct user_id) as user_count, sum(total_cost) as total_cost, sum(actual_cost) as actual_cost')
+            ->selectRaw("model, count(*) as request_count, count(distinct user_id) as user_count, sum(total_cost) as total_cost, sum(actual_cost) as actual_cost, sum({$tokenExpr}) as token_total")
             ->groupBy('model')
             ->orderByDesc('total_cost')
             ->limit($limit)
@@ -103,6 +107,7 @@ class Sub2ApiReadRepository
                 'user_count' => (int) $row->user_count,
                 'total_cost' => (string) $row->total_cost,
                 'actual_cost' => (string) $row->actual_cost,
+                'token_total' => (string) ($row->token_total ?? '0'),
             ])
             ->all();
     }
@@ -153,6 +158,29 @@ class Sub2ApiReadRepository
         }
 
         return $query;
+    }
+
+    private function tokenExpr(): string
+    {
+        $cols = $this->db()->getSchemaBuilder()->getColumnListing('usage_logs');
+
+        foreach (['total_tokens', 'token_total', 'tokens'] as $col) {
+            if (in_array($col, $cols, true)) {
+                return $col;
+            }
+        }
+
+        $parts = array_values(array_filter([
+            in_array('input_tokens', $cols, true) ? 'input_tokens' : null,
+            in_array('output_tokens', $cols, true) ? 'output_tokens' : null,
+            in_array('prompt_tokens', $cols, true) ? 'prompt_tokens' : null,
+            in_array('completion_tokens', $cols, true) ? 'completion_tokens' : null,
+            in_array('cache_creation_tokens', $cols, true) ? 'cache_creation_tokens' : null,
+            in_array('cache_read_tokens', $cols, true) ? 'cache_read_tokens' : null,
+            in_array('cached_tokens', $cols, true) ? 'cached_tokens' : null,
+        ]));
+
+        return count($parts) > 0 ? implode(' + ', $parts) : '0';
     }
 
     private function userRow(object $row): array

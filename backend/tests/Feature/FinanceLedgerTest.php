@@ -27,7 +27,7 @@ class FinanceLedgerTest extends TestCase
             'amount' => '120.00',
             'cash_amount' => '100.00',
             'gift_quota_amount' => '20.00',
-            'adjust_reason' => '线下充值',
+            'adjust_reason' => '充值',
         ])->assertCreated();
 
         $this->assertDatabaseHas('cash_entries', ['sub2api_user_id' => 1001, 'cash_amount' => '100.00']);
@@ -53,6 +53,79 @@ class FinanceLedgerTest extends TestCase
 
         $this->withToken($token)->getJson('/api/v1/finance/expenses')->assertOk()
             ->assertJsonPath('items.0.content_html', '<p>账单</p>');
+    }
+
+    public function test_correction_adjustment_does_not_write_finance_ledgers(): void
+    {
+        $admin = $this->admin();
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/users/1001' => $this->sub2ApiUserSequence('50.00', '60.00'),
+            'https://sub2api.test/api/v1/admin/users/1001/balance' => Http::response(['data' => ['balance' => '60.00']]),
+        ]);
+
+        $this->withToken($admin->createToken('admin-token')->plainTextToken)
+            ->postJson('/api/v1/ledger-adjustments', [
+                'sub2api_user_id' => 1001,
+                'operation' => LedgerAdjustment::OP_INCREMENT,
+                'amount' => '10.00',
+                'cash_amount' => '10.00',
+                'adjust_reason' => '异常修正',
+                'admin_notes' => '<p>修正历史差异</p>',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('adjustment.cash_amount', '0.00')
+            ->assertJsonPath('adjustment.gift_quota_amount', '0.00');
+
+        $this->assertDatabaseCount('cash_entries', 0);
+        $this->assertDatabaseCount('gift_quota_entries', 0);
+    }
+
+    public function test_reissue_ignores_cash_split_and_writes_gift_only(): void
+    {
+        $admin = $this->admin();
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/users/1001' => $this->sub2ApiUserSequence('50.00', '60.00'),
+            'https://sub2api.test/api/v1/admin/users/1001/balance' => Http::response(['data' => ['balance' => '60.00']]),
+        ]);
+
+        $this->withToken($admin->createToken('admin-token')->plainTextToken)
+            ->postJson('/api/v1/ledger-adjustments', [
+                'sub2api_user_id' => 1001,
+                'operation' => LedgerAdjustment::OP_INCREMENT,
+                'amount' => '10.00',
+                'cash_amount' => '999.00',
+                'adjust_reason' => '补发',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('adjustment.cash_amount', '0.00')
+            ->assertJsonPath('adjustment.gift_quota_amount', '10.00');
+
+        $this->assertDatabaseCount('cash_entries', 0);
+        $this->assertDatabaseHas('gift_quota_entries', ['sub2api_user_id' => 1001, 'quota_amount' => '10.00']);
+    }
+
+    public function test_decrement_ignores_finance_split(): void
+    {
+        $admin = $this->admin();
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/users/1001' => $this->sub2ApiUserSequence('50.00', '40.00'),
+            'https://sub2api.test/api/v1/admin/users/1001/balance' => Http::response(['data' => ['balance' => '40.00']]),
+        ]);
+
+        $this->withToken($admin->createToken('admin-token')->plainTextToken)
+            ->postJson('/api/v1/ledger-adjustments', [
+                'sub2api_user_id' => 1001,
+                'operation' => LedgerAdjustment::OP_DECREMENT,
+                'amount' => '10.00',
+                'cash_amount' => '999.00',
+                'adjust_reason' => '人工扣减',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('adjustment.cash_amount', '0.00')
+            ->assertJsonPath('adjustment.gift_quota_amount', '0.00');
+
+        $this->assertDatabaseCount('cash_entries', 0);
+        $this->assertDatabaseCount('gift_quota_entries', 0);
     }
 
     private function admin(): Admin

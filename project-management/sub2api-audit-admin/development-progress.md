@@ -73,6 +73,7 @@
 
 | 日期 | 内容 |
 |---|---|
+| 2026-07-06 | 复验 S8 联调和 E2E：`php artisan test` 24 passed，`pnpm typecheck`、`pnpm build`、`pnpm e2e` 通过；真实 Sub2API 调额仍待测试用户和 Admin API 密钥 |
 | 2026-07-06 | 完成 12 前端业务页面：补列配置组件、调额表单组件，Playwright desktop/h5 冒烟通过 |
 | 2026-07-06 | 完成 13 本地联调和部署准备：`php artisan test`、`pnpm typecheck`、`pnpm build`、`pnpm e2e` 通过，新增部署文档、Caddy 和 supervisor 示例；真实 Sub2API 调额验收待测试用户和 Admin API 密钥 |
 | 2026-07-06 | 完成 06-10 模块：财务账本、统计排行榜、附件和富文本、对账中心、操作审计；新增后端表/模型/service/controller/API 测试，前端页面和组件接真实 API；`php artisan test`、`pnpm build` 已通过 |
