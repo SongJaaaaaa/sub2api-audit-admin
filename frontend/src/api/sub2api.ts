@@ -104,6 +104,7 @@ export function getModelStats(params: {
   to: string
   limit?: number
   model?: string
+  user_id?: number | string
 }) {
   return http.get<unknown, ModelStatsRes>('/sub2api/model-stats', { params })
 }

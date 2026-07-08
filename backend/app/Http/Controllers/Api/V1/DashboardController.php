@@ -21,7 +21,10 @@ class DashboardController extends Controller
             : CarbonImmutable::now($tz)->endOfDay()->utc();
         $limit = min(max((int) $req->query('limit', 10), 1), 50);
         $group = (string) $req->query('model_group', 'all');
+        $mode = (string) $req->query('mode', 'full');
 
-        return response()->json($service->data($from, $to, $group, $limit));
+        return response()->json($mode === 'overview'
+            ? $service->overview($from, $to)
+            : $service->data($from, $to, $group, $limit));
     }
 }

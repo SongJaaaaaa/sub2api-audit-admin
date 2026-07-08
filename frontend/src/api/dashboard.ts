@@ -8,13 +8,24 @@ export interface UserRank {
   entry_count: number
 }
 
+export interface UserTokenRank {
+  user_id: number
+  request_count: number
+  token_total: string
+  total_cost: string
+}
+
 export interface DashboardStatsRes {
   summary: UsageSummary
+  today_summary?: UsageSummary
   models: ModelRank[]
   recharge_total?: string
+  today_recharge_total?: string
+  sub2api_balance_total?: string
   quota_total?: string
   recharge_rank: UserRank[]
   quota_rank: UserRank[]
+  user_token_rank?: UserTokenRank[]
   range: {
     from: string
     to: string
@@ -26,6 +37,7 @@ export function getDashboardStats(params: {
   to: string
   limit?: number
   model_group?: string
+  mode?: 'full' | 'overview'
 }) {
   return http.get<unknown, DashboardStatsRes>('/dashboard', { params })
 }

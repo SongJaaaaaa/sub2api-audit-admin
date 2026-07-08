@@ -7,6 +7,7 @@ use App\Models\Admin;
 use App\Models\LedgerAdjustment;
 use App\Services\Sub2Api\Sub2ApiAdminClient;
 use App\Services\Sub2Api\Sub2ApiReadRepository;
+use App\Support\ChinaTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -34,17 +35,18 @@ class Sub2ApiDataController extends Controller
             : CarbonImmutable::now($tz)->endOfDay()->utc();
         $limit = min(max((int) $req->query('limit', 20), 1), 100);
 
+        $filters = [
+            'model' => $req->query('model', ''),
+            'user_id' => $req->query('user_id', 0),
+        ];
+
         return response()->json([
-            'summary' => $repo->usageSummary($from, $to, [
-                'model' => $req->query('model', ''),
-            ]),
-            'models' => $repo->modelRanking($from, $to, [
-                'model' => $req->query('model', ''),
-            ], $limit),
+            'summary' => $repo->usageSummary($from, $to, $filters),
+            'models' => $repo->modelRanking($from, $to, $filters, $limit),
             'sources' => $repo->rechargeSourceSummary(),
             'range' => [
-                'from' => $from->toDateTimeString(),
-                'to' => $to->toDateTimeString(),
+                'from' => ChinaTime::fmt($from),
+                'to' => ChinaTime::fmt($to),
             ],
         ]);
     }
@@ -113,8 +115,8 @@ class Sub2ApiDataController extends Controller
             'adjust_reason' => $adj?->adjust_reason,
             'admin_notes' => $adj?->admin_notes,
             'status' => $row['status'] ?? null,
-            'used_at' => $row['used_at'] ?? null,
-            'created_at' => $row['created_at'] ?? null,
+            'used_at' => ChinaTime::fmt($row['used_at'] ?? null),
+            'created_at' => ChinaTime::fmt($row['created_at'] ?? null),
             'notes' => $row['notes'] ?? null,
         ];
     }

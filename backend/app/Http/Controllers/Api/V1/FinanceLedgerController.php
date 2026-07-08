@@ -23,6 +23,8 @@ class FinanceLedgerController extends Controller
     {
         return response()->json($service->expenses([
             'category' => $req->query('category', ''),
+            'from'     => $req->query('from', ''),
+            'to'       => $req->query('to', ''),
         ], $this->page($req), $this->pageSize($req)));
     }
 

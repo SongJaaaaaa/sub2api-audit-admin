@@ -53,7 +53,7 @@ watch(
 )
 
 watch(
-  () => [form.amount, form.cash_amount, form.adjust_reason],
+  () => [form.amount, form.cash_amount, form.adjust_reason, form.operation],
   () => {
     if (isCorrection.value || form.operation === 'decrement') {
       form.cash_amount = ''
@@ -73,6 +73,7 @@ watch(
       return
     }
 
+    // 充值：赠送额度 = 调整金额 - 入账金额
     const amount = Number(form.amount || 0)
     const cash = Number(form.cash_amount || 0)
     form.gift_quota_amount = Math.max(amount - cash, 0).toFixed(2)
@@ -138,8 +139,9 @@ function setOperation(op: 'increment' | 'decrement') {
     </a-form-item>
 
     <div v-if="showFinance" class="quotaFormGrid">
-      <a-form-item v-if="isRecharge" label="入账金额">
+      <a-form-item v-if="isRecharge" label="入账金额（现金）">
         <a-input v-model:value="form.cash_amount" placeholder="0.00" />
+        <div class="quotaAfterBalance" style="font-size:12px;color:var(--text2);">实收现金金额，剩余计入赠送</div>
       </a-form-item>
       <a-form-item label="赠送额度">
         <a-input :value="form.gift_quota_amount" placeholder="0.00" readonly disabled />

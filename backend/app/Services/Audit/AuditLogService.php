@@ -2,6 +2,7 @@
 
 namespace App\Services\Audit;
 
+use App\Support\ChinaTime;
 use App\Models\Admin;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
@@ -59,7 +60,7 @@ class AuditLogService
                 'after_value' => $log->after_value,
                 'ip' => $log->ip,
                 'user_agent' => $log->user_agent,
-                'created_at' => $log->created_at?->toDateTimeString(),
+                'created_at' => ChinaTime::fmt($log->created_at),
             ])->all();
 
         return ['items' => $items, 'total' => $total, 'page' => $page, 'page_size' => $pageSize];

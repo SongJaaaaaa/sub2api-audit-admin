@@ -2,6 +2,7 @@
 
 namespace App\Services\Attachments;
 
+use App\Support\ChinaTime;
 use App\Models\Admin;
 use App\Models\Attachment;
 use App\Services\Audit\AuditLogService;
@@ -67,7 +68,7 @@ class AttachmentService
             'mime' => $att->mime,
             'size' => $att->size,
             'download_url' => "/api/v1/attachments/{$att->id}/download",
-            'created_at' => $att->created_at?->toDateTimeString(),
+            'created_at' => ChinaTime::fmt($att->created_at),
         ];
     }
 }

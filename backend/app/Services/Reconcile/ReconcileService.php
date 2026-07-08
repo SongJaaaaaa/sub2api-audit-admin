@@ -108,14 +108,14 @@ class ReconcileService
         return [
             'id' => $row->id,
             'batch_no' => $row->batch_no,
-            'biz_date' => $row->biz_date?->format('Y-m-d'),
+            'biz_date' => ChinaTime::fmt($row->biz_date),
             'cash_total' => $row->cash_total,
             'quota_total' => $row->quota_total,
             'gift_total' => $row->gift_total,
             'sub2api_delta_total' => $row->sub2api_delta_total,
             'diff_amount' => $row->diff_amount,
             'status' => $row->status,
-            'created_at' => $row->created_at?->toDateTimeString(),
+            'created_at' => ChinaTime::fmt($row->created_at),
         ];
     }
 }

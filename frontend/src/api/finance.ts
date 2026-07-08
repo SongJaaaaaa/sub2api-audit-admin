@@ -51,7 +51,7 @@ export function getGiftEntries(params: { page: number; page_size: number; sub2ap
   return http.get<unknown, PageRes<GiftQuotaEntry>>('/finance/gifts', { params })
 }
 
-export function getOperationExpenses(params: { page: number; page_size: number; category?: string }) {
+export function getOperationExpenses(params: { page: number; page_size: number; category?: string; from?: string; to?: string }) {
   return http.get<unknown, PageRes<OperationExpense>>('/finance/expenses', { params })
 }
 

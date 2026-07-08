@@ -2,6 +2,7 @@
 
 namespace App\Services\Sub2Api;
 
+use App\Support\ChinaTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
@@ -112,6 +113,77 @@ class Sub2ApiReadRepository
             ->all();
     }
 
+    public function userTokenRanking(CarbonImmutable $from, CarbonImmutable $to, int $limit): array
+    {
+        $tokenExpr = $this->tokenExpr();
+        if ($tokenExpr === '0') {
+            return [];
+        }
+
+        return $this->usageQuery($from, $to, [])
+            ->selectRaw("user_id, count(*) as request_count, sum({$tokenExpr}) as token_total, sum(total_cost) as total_cost")
+            ->groupBy('user_id')
+            ->orderByDesc('token_total')
+            ->limit($limit)
+            ->get()
+            ->map(fn ($row): array => [
+                'user_id'       => (int) $row->user_id,
+                'request_count' => (int) $row->request_count,
+                'token_total'   => (string) ($row->token_total ?? '0'),
+                'total_cost'    => (string) ($row->total_cost ?? '0'),
+            ])
+            ->all();
+    }
+
+
+    public function paymentRechargeTotal(CarbonImmutable $from, CarbonImmutable $to, array $excludeLedgerNos = []): string
+    {
+        return number_format((float) $this->incomeQuery($from, $to, $excludeLedgerNos)->sum('value'), 2, '.', '');
+    }
+
+    public function paymentRechargeRanking(CarbonImmutable $from, CarbonImmutable $to, int $limit, array $excludeLedgerNos = []): array
+    {
+        return $this->incomeQuery($from, $to, $excludeLedgerNos)
+            ->leftJoin('users', 'users.id', '=', 'redeem_codes.used_by')
+            ->selectRaw('redeem_codes.used_by as sub2api_user_id, max(users.email) as sub2api_user_email, sum(redeem_codes.value) as total_amount, count(*) as entry_count')
+            ->groupBy('redeem_codes.used_by')
+            ->orderByDesc('total_amount')
+            ->limit($limit)
+            ->get()
+            ->map(fn ($row): array => [
+                'sub2api_user_id' => (int) $row->sub2api_user_id,
+                'sub2api_user_email' => $row->sub2api_user_email,
+                'total_amount' => number_format((float) $row->total_amount, 2, '.', ''),
+                'entry_count' => (int) $row->entry_count,
+            ])
+            ->all();
+    }
+
+    private function incomeQuery(CarbonImmutable $from, CarbonImmutable $to, array $excludeLedgerNos = [])
+    {
+        $query = $this->db()
+            ->table('redeem_codes')
+            ->whereRaw('LOWER(redeem_codes.type) = ?', ['admin_balance'])
+            ->whereRaw('LOWER(redeem_codes.status) = ?', ['used'])
+            ->whereNotNull('redeem_codes.used_by')
+            ->where('redeem_codes.value', '>', 0)
+            ->where('redeem_codes.used_at', '>=', $from->toDateTimeString())
+            ->where('redeem_codes.used_at', '<=', $to->toDateTimeString());
+
+        foreach ($excludeLedgerNos as $ledgerNo) {
+            $query->where('redeem_codes.notes', 'not like', '%ledger_no='.$ledgerNo.'%');
+        }
+
+        return $query;
+    }
+    public function balanceTotal(): string
+    {
+        return number_format((float) $this->db()
+            ->table('users')
+            ->whereNull('deleted_at')
+            ->sum('balance'), 2, '.', '');
+    }
+
     public function rechargeSourceSummary(): array
     {
         $payments = $this->db()
@@ -123,8 +195,8 @@ class Sub2ApiReadRepository
         $redeems = $this->db()
             ->table('redeem_codes')
             ->selectRaw('type, count(*) as count')
-            ->whereRaw('LOWER(status) = ?', ['used'])
-            ->whereNotNull('used_by')
+            ->whereRaw('LOWER(redeem_codes.status) = ?', ['used'])
+            ->whereNotNull('redeem_codes.used_by')
             ->groupBy('type')
             ->orderBy('type')
             ->get()
@@ -188,6 +260,8 @@ class Sub2ApiReadRepository
         $item = (array) $row;
         $item['balance'] = number_format((float) $item['balance'], 2, '.', '');
         $item['total_recharged'] = number_format((float) $item['total_recharged'], 2, '.', '');
+        $item['created_at'] = ChinaTime::fmt($item['created_at'] ?? null);
+        $item['updated_at'] = ChinaTime::fmt($item['updated_at'] ?? null);
 
         return $item;
     }

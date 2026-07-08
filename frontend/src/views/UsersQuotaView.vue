@@ -7,8 +7,9 @@ import {
   UserOutlined,
   WalletOutlined,
 } from '@ant-design/icons-vue'
-import { Modal, message } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { useImagePreview } from '../composables/useImagePreview'
 import {
   createLedgerAdjustment,
   type AdjustmentRes,
@@ -25,6 +26,7 @@ const selected = ref<Sub2User | null>(null)
 const selectedHistory = ref<Sub2BalanceHistoryItem | null>(null)
 const keyword = ref('')
 const adjustPanel = ref<HTMLElement | null>(null)
+const { previewSrc, previewOpen, onSafeHtmlClick } = useImagePreview()
 const page = reactive({
   current: 1,
   pageSize: 10,
@@ -147,24 +149,6 @@ async function submitAdjust() {
   }
 }
 
-function confirmAdjust() {
-  if (!selected.value) return
-
-  const op = form.operation === 'increment' ? '增加' : '扣减'
-  const isCorrection = form.adjust_reason === '异常修正'
-  const cash = isCorrection ? '0.00' : form.cash_amount || '0.00'
-  const gift = isCorrection ? '0.00' : form.gift_quota_amount || '0.00'
-  const after = nextBalanceText()
-  Modal.confirm({
-    title: '确认提交额度调整',
-    content: isCorrection
-      ? `将为 Sub2API 用户 #${selected.value.id} ${op}额度 ${form.amount || '0.00'}，预计调整后额度 ${after}。本次仅调整 Sub2API 额度，不纳入记账。`
-      : `将为 Sub2API 用户 #${selected.value.id} ${op}额度 ${form.amount || '0.00'}，预计调整后额度 ${after}，入账 ${cash}，赠送 ${gift}。新系统不会直接显示成功，只有 Sub2API 真实入账并二次确认成功后，才会生成成功记录和财务账本。`,
-    okText: '确认提交',
-    cancelText: '再检查',
-    onOk: submitAdjust,
-  })
-}
 
 function moneyText(val: number | string) {
   return Number(val || 0).toFixed(2)
@@ -172,14 +156,6 @@ function moneyText(val: number | string) {
 
 function absMoneyText(val: number | string) {
   return Math.abs(Number(val || 0)).toFixed(2)
-}
-
-function nextBalanceText() {
-  const current = Number(selected.value?.balance || 0)
-  const amount = Number(form.amount || 0)
-  const signed = form.operation === 'decrement' ? -amount : amount
-
-  return (current + signed).toFixed(2)
 }
 
 function hasNotes(val: string) {
@@ -298,7 +274,7 @@ onMounted(loadUsers)
             <AdjustmentForm v-model:value="form" :current-balance="selected.balance" />
             <div class="quotaFormActions">
               <a-button @click="resetForm">重置</a-button>
-              <a-button type="primary" :loading="submitting" @click="confirmAdjust">确认调整</a-button>
+              <a-button type="primary" :loading="submitting" @click="submitAdjust">确认调整</a-button>
             </div>
             <p class="quotaWarn">
               * 额度调整只有在 Sub2API 真实入账并二次确认成功后，才会生成成功记录和财务账本。
@@ -335,6 +311,11 @@ onMounted(loadUsers)
       </section>
     </div>
 
+    <!-- 图片放大预览 -->
+    <a-modal v-model:open="previewOpen" :footer="null" centered :body-style="{ textAlign: 'center', padding: '8px' }">
+      <img :src="previewSrc" style="max-width:100%;max-height:80vh;border-radius:6px;" />
+    </a-modal>
+
     <a-modal
       :open="!!selectedHistory"
       title="额度变动详情"
@@ -352,7 +333,7 @@ onMounted(loadUsers)
         <p><span>原因</span><strong>{{ selectedHistory.adjust_reason || selectedHistory.type || '-' }}</strong></p>
         <div v-if="selectedHistory.admin_notes" class="historyDetailNotes">
           <span>备注</span>
-          <div class="safeHtml" v-html="selectedHistory.admin_notes"></div>
+          <div class="safeHtml" v-html="selectedHistory.admin_notes" @click="onSafeHtmlClick"></div>
         </div>
         <div v-else-if="selectedHistory.notes" class="historyDetailNotes">
           <span>Sub2API 备注</span>

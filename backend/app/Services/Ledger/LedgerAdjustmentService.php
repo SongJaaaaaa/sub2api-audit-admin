@@ -2,6 +2,7 @@
 
 namespace App\Services\Ledger;
 
+use App\Support\ChinaTime;
 use App\Models\Admin;
 use App\Models\LedgerAdjustment;
 use App\Services\Audit\AuditLogService;
@@ -174,9 +175,9 @@ class LedgerAdjustmentService
             'admin_notes' => $adj->admin_notes,
             'sub2api_notes' => $adj->sub2api_notes,
             'exception_reason' => $adj->exception_reason,
-            'called_at' => $adj->called_at?->toDateTimeString(),
-            'confirmed_at' => $adj->confirmed_at?->toDateTimeString(),
-            'created_at' => $adj->created_at?->toDateTimeString(),
+            'called_at' => ChinaTime::fmt($adj->called_at),
+            'confirmed_at' => ChinaTime::fmt($adj->confirmed_at),
+            'created_at' => ChinaTime::fmt($adj->created_at),
         ];
     }
 

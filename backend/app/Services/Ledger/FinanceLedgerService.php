@@ -2,6 +2,7 @@
 
 namespace App\Services\Ledger;
 
+use App\Support\ChinaTime;
 use App\Models\Admin;
 use App\Models\CashEntry;
 use App\Models\GiftQuotaEntry;
@@ -65,7 +66,7 @@ class FinanceLedgerService
             'cash_amount' => $row->cash_amount,
             'source' => $row->source,
             'remark' => $row->remark,
-            'created_at' => $row->created_at?->toDateTimeString(),
+            'created_at' => ChinaTime::fmt($row->created_at),
         ]);
     }
 
@@ -83,7 +84,7 @@ class FinanceLedgerService
             'quota_amount' => $row->quota_amount,
             'source' => $row->source,
             'remark' => $row->remark,
-            'created_at' => $row->created_at?->toDateTimeString(),
+            'created_at' => ChinaTime::fmt($row->created_at),
         ]);
     }
 
@@ -93,6 +94,14 @@ class FinanceLedgerService
         $category = trim((string) ($filters['category'] ?? ''));
         if ($category !== '') {
             $query->where('category', $category);
+        }
+        $from = trim((string) ($filters['from'] ?? ''));
+        if ($from !== '') {
+            $query->where('paid_at', '>=', $from);
+        }
+        $to = trim((string) ($filters['to'] ?? ''));
+        if ($to !== '') {
+            $query->where('paid_at', '<=', $to);
         }
 
         return $this->page($query, $page, $pageSize, fn (OperationExpense $row): array => $this->expenseRow($row));
@@ -122,10 +131,10 @@ class FinanceLedgerService
             'expense_no' => $row->expense_no,
             'category' => $row->category,
             'amount' => $row->amount,
-            'paid_at' => $row->paid_at,
+            'paid_at' => ChinaTime::fmt($row->paid_at),
             'remark' => $row->remark,
             'content_html' => $row->content_html,
-            'created_at' => $row->created_at?->toDateTimeString(),
+            'created_at' => ChinaTime::fmt($row->created_at),
         ];
     }
 

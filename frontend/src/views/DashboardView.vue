@@ -86,9 +86,7 @@ const requestModels = computed(() => topModels.value.filter((item) => item.reque
 const summary = computed(() => stats.value?.summary)
 const tokenTotal = computed(() => Number(summary.value?.token_total || 0))
 const rechargeTop = computed(() => rechargeRank.value.slice(0, 10))
-const tokenTopModels = computed(() =>
-  [...topModels.value].sort((a, b) => Number(b.token_total || 0) - Number(a.token_total || 0)).slice(0, 5),
-)
+const tokenTopUsers = computed(() => (stats.value?.user_token_rank || []).slice(0, 5))
 
 const topCards = computed(() => [
   {
@@ -107,8 +105,8 @@ const topCards = computed(() => [
   },
   {
     label: 'Sub2API 总额度',
-    value: moneyText(stats.value?.quota_total || 0),
-    sub: '成功调额额度汇总',
+    value: wanText(stats.value?.sub2api_balance_total || 0),
+    sub: '当前用户余额汇总',
     icon: ThunderboltOutlined,
     tone: 'quota',
   },
@@ -146,6 +144,7 @@ async function loadDashboard() {
           to: item.range[1].format(fmt),
           limit: 10,
           model_group: modelGroup.value,
+          mode: 'overview',
         }),
       ),
     ])
@@ -391,6 +390,9 @@ function moneyText(val: number | string) {
   return Number(val || 0).toFixed(2)
 }
 
+function wanText(val: number | string) {
+  return `${(Number(val || 0) / 10000).toFixed(2)}万`
+}
 function tokenText(val: number | string) {
   const num = Number(val || 0)
   if (num >= 100000000) return `${(num / 100000000).toFixed(2)}亿`
@@ -562,18 +564,18 @@ onBeforeUnmount(() => {
             <h2>Token 使用榜</h2>
             <span class="panelMeta">总计 {{ tokenText(tokenTotal) }}</span>
           </div>
-          <a-empty v-if="tokenTopModels.length === 0" description="暂无 Token 数据" />
+          <a-empty v-if="tokenTopUsers.length === 0" description="暂无 Token 数据" />
           <div v-else class="tokenUserList">
-            <div v-for="(item, index) in tokenTopModels" :key="item.model" class="tokenUserItem">
+            <div v-for="(item, index) in tokenTopUsers" :key="item.user_id" class="tokenUserItem">
               <span class="tokenIndex">{{ String(index + 1).padStart(2, '0') }}</span>
-              <div class="tokenAvatar">{{ shortModel(item.model).slice(0, 1).toUpperCase() }}</div>
+              <div class="tokenAvatar">U</div>
               <div class="tokenUserName">
-                <strong>{{ shortModel(item.model) }}</strong>
+                <strong>用户 #{{ item.user_id }}</strong>
                 <span>{{ intText(item.request_count) }} 次请求</span>
               </div>
               <div class="tokenBar">
                 <strong>{{ tokenText(item.token_total || 0) }}</strong>
-                <span :style="{ width: `${Math.max(8, Math.min(100, Number(item.token_total || 0) / Math.max(1, Number(tokenTopModels[0]?.token_total || 1)) * 100))}%` }"></span>
+                <span :style="{ width: `${Math.max(8, Math.min(100, Number(item.token_total || 0) / Math.max(1, Number(tokenTopUsers[0]?.token_total || 1)) * 100))}%` }"></span>
               </div>
             </div>
           </div>

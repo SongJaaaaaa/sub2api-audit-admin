@@ -19,12 +19,20 @@ const emit = defineEmits<{
 }>()
 
 const editor = ref<HTMLElement | null>(null)
+const previewSrc = ref('')
+const previewOpen = ref(false)
 
 watch(
   () => props.value,
   (val) => {
-    if (editor.value && editor.value.innerHTML !== val) {
-      editor.value.innerHTML = val || ''
+    if (!editor.value) return
+    // 值为空时强制清除（innerHTML 可能残留 <br>）
+    if (!val) {
+      editor.value.innerHTML = ''
+      return
+    }
+    if (editor.value.innerHTML !== val) {
+      editor.value.innerHTML = val
     }
   },
   { immediate: true },
@@ -42,6 +50,16 @@ function run(cmd: string) {
   editor.value?.focus()
   document.execCommand(cmd)
   sync()
+}
+
+// 点击编辑区内图片时预览放大，不干扰文字编辑
+function onEditorClick(e: MouseEvent) {
+  const target = e.target as HTMLElement
+  if (target.tagName === 'IMG') {
+    e.preventDefault()
+    previewSrc.value = (target as HTMLImageElement).src
+    previewOpen.value = true
+  }
 }
 
 async function beforeUpload(file: File) {
@@ -85,6 +103,12 @@ async function beforeUpload(file: File) {
       data-placeholder="可输入备注、调整字体样式，也可插入图片..."
       @input="sync"
       @blur="sync"
+      @click="onEditorClick"
     ></div>
+
+    <!-- 编辑器内图片放大预览 -->
+    <a-modal v-model:open="previewOpen" :footer="null" centered :body-style="{ textAlign: 'center', padding: '8px' }">
+      <img :src="previewSrc" style="max-width:100%;max-height:80vh;border-radius:6px;" />
+    </a-modal>
   </div>
 </template>
