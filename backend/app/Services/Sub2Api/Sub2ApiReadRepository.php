@@ -80,25 +80,25 @@ class Sub2ApiReadRepository
     public function usageSummary(CarbonImmutable $from, CarbonImmutable $to, array $filters): array
     {
         $query = $this->usageQuery($from, $to, $filters);
-        $tokenExpr = $this->tokenExpr();
+        $tokenExpr = $this->tokenExpr('ul');
 
         return [
             'request_count' => (int) (clone $query)->count(),
-            'user_count' => (int) (clone $query)->distinct('user_id')->count('user_id'),
-            'model_count' => (int) (clone $query)->distinct('model')->count('model'),
-            'total_cost' => (string) ((clone $query)->sum('total_cost') ?: '0'),
-            'actual_cost' => (string) ((clone $query)->sum('actual_cost') ?: '0'),
+            'user_count' => (int) (clone $query)->distinct('ul.user_id')->count('ul.user_id'),
+            'model_count' => (int) (clone $query)->distinct('ul.model')->count('ul.model'),
+            'total_cost' => (string) ((clone $query)->sum('ul.total_cost') ?: '0'),
+            'actual_cost' => (string) ((clone $query)->sum('ul.actual_cost') ?: '0'),
             'token_total' => (string) ($tokenExpr === '0' ? 0 : ((clone $query)->sum(DB::raw($tokenExpr)) ?: '0')),
         ];
     }
 
     public function modelRanking(CarbonImmutable $from, CarbonImmutable $to, array $filters, int $limit): array
     {
-        $tokenExpr = $this->tokenExpr();
+        $tokenExpr = $this->tokenExpr('ul');
 
         return $this->usageQuery($from, $to, $filters)
-            ->selectRaw("model, count(*) as request_count, count(distinct user_id) as user_count, sum(total_cost) as total_cost, sum(actual_cost) as actual_cost, sum({$tokenExpr}) as token_total")
-            ->groupBy('model')
+            ->selectRaw("ul.model, count(*) as request_count, count(distinct ul.user_id) as user_count, sum(ul.total_cost) as total_cost, sum(ul.actual_cost) as actual_cost, sum({$tokenExpr}) as token_total")
+            ->groupBy('ul.model')
             ->orderByDesc('total_cost')
             ->limit($limit)
             ->get()
@@ -113,24 +113,69 @@ class Sub2ApiReadRepository
             ->all();
     }
 
+    public function userCostRanking(CarbonImmutable $from, CarbonImmutable $to, int $limit): array
+    {
+        $tokenExpr = $this->tokenExpr('ul');
+
+        return $this->usageQuery($from, $to, [])
+            ->selectRaw("ul.user_id, max(u.email) as user_email, count(*) as request_count, sum({$tokenExpr}) as token_total, sum(ul.total_cost) as total_cost")
+            ->whereNotNull('ul.user_id')
+            ->groupBy('ul.user_id')
+            ->orderByDesc('total_cost')
+            ->limit($limit)
+            ->get()
+            ->map(fn ($row): array => [
+                'user_id' => (int) $row->user_id,
+                'user_email' => $row->user_email,
+                'request_count' => (int) $row->request_count,
+                'token_total' => (string) ($row->token_total ?? '0'),
+                'total_cost' => (string) ($row->total_cost ?? '0'),
+            ])
+            ->all();
+    }
+
     public function userTokenRanking(CarbonImmutable $from, CarbonImmutable $to, int $limit): array
     {
-        $tokenExpr = $this->tokenExpr();
+        $tokenExpr = $this->tokenExpr('ul');
         if ($tokenExpr === '0') {
             return [];
         }
 
         return $this->usageQuery($from, $to, [])
-            ->selectRaw("user_id, count(*) as request_count, sum({$tokenExpr}) as token_total, sum(total_cost) as total_cost")
-            ->groupBy('user_id')
+            ->selectRaw("ul.user_id, max(u.email) as user_email, count(*) as request_count, sum({$tokenExpr}) as token_total, sum(ul.total_cost) as total_cost")
+            ->groupBy('ul.user_id')
             ->orderByDesc('token_total')
             ->limit($limit)
             ->get()
             ->map(fn ($row): array => [
                 'user_id'       => (int) $row->user_id,
+                'user_email'    => $row->user_email,
                 'request_count' => (int) $row->request_count,
                 'token_total'   => (string) ($row->token_total ?? '0'),
                 'total_cost'    => (string) ($row->total_cost ?? '0'),
+            ])
+            ->all();
+    }
+
+    public function userModelRanking(CarbonImmutable $from, CarbonImmutable $to, array $filters, int $limit): array
+    {
+        $tokenExpr = $this->tokenExpr('ul');
+
+        return $this->usageQuery($from, $to, $filters)
+            ->selectRaw("ul.user_id, max(u.email) as user_email, ul.model, count(*) as request_count, sum(ul.total_cost) as total_cost, sum(ul.actual_cost) as actual_cost, sum({$tokenExpr}) as token_total")
+            ->whereNotNull('ul.user_id')
+            ->groupBy('ul.user_id', 'ul.model')
+            ->orderByDesc('total_cost')
+            ->limit($limit)
+            ->get()
+            ->map(fn ($row): array => [
+                'user_id' => (int) $row->user_id,
+                'user_email' => $row->user_email,
+                'model' => $row->model,
+                'request_count' => (int) $row->request_count,
+                'total_cost' => (string) ($row->total_cost ?? '0'),
+                'actual_cost' => (string) ($row->actual_cost ?? '0'),
+                'token_total' => (string) ($row->token_total ?? '0'),
             ])
             ->all();
     }
@@ -215,41 +260,55 @@ class Sub2ApiReadRepository
     private function usageQuery(CarbonImmutable $from, CarbonImmutable $to, array $filters)
     {
         $query = $this->db()
-            ->table('usage_logs')
-            ->where('created_at', '>=', $from->toDateTimeString())
-            ->where('created_at', '<', $to->toDateTimeString());
+            ->table('usage_logs as ul')
+            ->leftJoin('users as u', 'u.id', '=', 'ul.user_id')
+            ->where('ul.created_at', '>=', $from->toDateTimeString())
+            ->where('ul.created_at', '<', $to->toDateTimeString());
 
         $model = trim((string) ($filters['model'] ?? ''));
         if ($model !== '') {
-            $query->where('model', $model);
+            $query->where('ul.model', $model);
         }
 
         $userId = (int) ($filters['user_id'] ?? 0);
         if ($userId > 0) {
-            $query->where('user_id', $userId);
+            $query->where('ul.user_id', $userId);
+        }
+
+        $kw = trim((string) ($filters['user_keyword'] ?? ''));
+        if ($kw !== '') {
+            $query->where(function ($sub) use ($kw): void {
+                if (ctype_digit($kw)) {
+                    $sub->where('ul.user_id', (int) $kw);
+                }
+
+                $sub->orWhere('u.email', 'like', "%{$kw}%")
+                    ->orWhere('u.username', 'like', "%{$kw}%");
+            });
         }
 
         return $query;
     }
 
-    private function tokenExpr(): string
+    private function tokenExpr(string $alias = ''): string
     {
         $cols = $this->db()->getSchemaBuilder()->getColumnListing('usage_logs');
+        $pre = $alias === '' ? '' : $alias.'.';
 
         foreach (['total_tokens', 'token_total', 'tokens'] as $col) {
             if (in_array($col, $cols, true)) {
-                return $col;
+                return "coalesce({$pre}{$col}, 0)";
             }
         }
 
         $parts = array_values(array_filter([
-            in_array('input_tokens', $cols, true) ? 'input_tokens' : null,
-            in_array('output_tokens', $cols, true) ? 'output_tokens' : null,
-            in_array('prompt_tokens', $cols, true) ? 'prompt_tokens' : null,
-            in_array('completion_tokens', $cols, true) ? 'completion_tokens' : null,
-            in_array('cache_creation_tokens', $cols, true) ? 'cache_creation_tokens' : null,
-            in_array('cache_read_tokens', $cols, true) ? 'cache_read_tokens' : null,
-            in_array('cached_tokens', $cols, true) ? 'cached_tokens' : null,
+            in_array('input_tokens', $cols, true) ? "coalesce({$pre}input_tokens, 0)" : null,
+            in_array('output_tokens', $cols, true) ? "coalesce({$pre}output_tokens, 0)" : null,
+            in_array('prompt_tokens', $cols, true) ? "coalesce({$pre}prompt_tokens, 0)" : null,
+            in_array('completion_tokens', $cols, true) ? "coalesce({$pre}completion_tokens, 0)" : null,
+            in_array('cache_creation_tokens', $cols, true) ? "coalesce({$pre}cache_creation_tokens, 0)" : null,
+            in_array('cache_read_tokens', $cols, true) ? "coalesce({$pre}cache_read_tokens, 0)" : null,
+            in_array('cached_tokens', $cols, true) ? "coalesce({$pre}cached_tokens, 0)" : null,
         ]));
 
         return count($parts) > 0 ? implode(' + ', $parts) : '0';

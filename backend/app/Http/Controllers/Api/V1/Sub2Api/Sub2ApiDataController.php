@@ -38,11 +38,13 @@ class Sub2ApiDataController extends Controller
         $filters = [
             'model' => $req->query('model', ''),
             'user_id' => $req->query('user_id', 0),
+            'user_keyword' => $req->query('user_keyword', ''),
         ];
 
         return response()->json([
             'summary' => $repo->usageSummary($from, $to, $filters),
             'models' => $repo->modelRanking($from, $to, $filters, $limit),
+            'user_models' => $repo->userModelRanking($from, $to, $filters, $limit),
             'sources' => $repo->rechargeSourceSummary(),
             'range' => [
                 'from' => ChinaTime::fmt($from),

@@ -2,20 +2,22 @@
 import { ApiOutlined, BarChartOutlined, TeamOutlined, ThunderboltOutlined } from '@ant-design/icons-vue'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
-import { BarChart, PieChart } from 'echarts/charts'
+import { BarChart, HeatmapChart } from 'echarts/charts'
 import {
+  GraphicComponent,
   GridComponent,
   LegendComponent,
   TooltipComponent,
+  VisualMapComponent,
 } from 'echarts/components'
 import { init, use, type ECharts } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { message } from 'ant-design-vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { getModelStats, type ModelRank, type ModelStatsRes } from '../api/sub2api'
+import { getModelStats, type ModelRank, type ModelStatsRes, type UserModelRank } from '../api/sub2api'
 import { useThemeStore } from '../stores/theme'
 
-use([BarChart, PieChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
+use([BarChart, HeatmapChart, GraphicComponent, GridComponent, LegendComponent, TooltipComponent, VisualMapComponent, CanvasRenderer])
 
 const themeStore = useThemeStore()
 const loading = ref(false)
@@ -24,11 +26,13 @@ const range = ref<[Dayjs, Dayjs]>([dayjs().subtract(7, 'day').startOf('day'), da
 const userFilter = ref('')
 
 const barChartEl = ref<HTMLDivElement | null>(null)
-const pieChartEl = ref<HTMLDivElement | null>(null)
+const heatChartEl = ref<HTMLDivElement | null>(null)
 let barChart: ECharts | null = null
-let pieChart: ECharts | null = null
+let heatChart: ECharts | null = null
 
 const topModels = computed<ModelRank[]>(() => (stats.value?.models || []).slice(0, 12))
+const userModels = computed<UserModelRank[]>(() => stats.value?.user_models || [])
+const topUserModels = computed<UserModelRank[]>(() => userModels.value.slice(0, 30))
 
 const metricCards = computed(() => [
   {
@@ -73,8 +77,13 @@ const axisColor = computed(() => isDark.value ? '#666' : '#ccc')
 const labelColor = computed(() => isDark.value ? '#bbb' : '#555')
 
 function drawBarChart() {
-  if (!barChartEl.value || !topModels.value.length) return
+  if (!barChartEl.value) return
   if (!barChart) barChart = init(barChartEl.value, isDark.value ? 'dark' : undefined)
+  if (!topModels.value.length) {
+    barChart.setOption(emptyChart('暂无模型消费数据'), true)
+    return
+  }
+
   const models = [...topModels.value].reverse()
   barChart.setOption({
     backgroundColor: 'transparent',
@@ -113,27 +122,49 @@ function drawBarChart() {
   })
 }
 
-function drawPieChart() {
-  if (!pieChartEl.value || !topModels.value.length) return
-  if (!pieChart) pieChart = init(pieChartEl.value, isDark.value ? 'dark' : undefined)
-  const top5 = topModels.value.slice(0, 5)
-  const rest = topModels.value.slice(5)
-  const restCount = rest.reduce((s, m) => s + m.request_count, 0)
-  const pieData = top5.map(m => ({ name: m.model.length > 20 ? m.model.slice(0, 20) + '…' : m.model, value: m.request_count }))
-  if (restCount > 0) pieData.push({ name: '其他', value: restCount })
+function drawHeatChart() {
+  if (!heatChartEl.value) return
+  if (!heatChart) heatChart = init(heatChartEl.value, isDark.value ? 'dark' : undefined)
+  if (!topUserModels.value.length) {
+    heatChart.setOption(emptyChart('暂无用户模型消费数据'), true)
+    return
+  }
 
-  pieChart.setOption({
+  const users = uniq(topUserModels.value.map(row => userLabel(row))).slice(0, 8)
+  const models = uniq(topUserModels.value.map(row => shortModel(row.model))).slice(0, 8)
+  const data: number[][] = topUserModels.value
+    .map(row => [models.indexOf(shortModel(row.model)), users.indexOf(userLabel(row)), Number(row.total_cost || 0)])
+    .filter(row => row[0] >= 0 && row[1] >= 0)
+  const max = Math.max(...data.map(row => Number(row[2])), 1)
+
+  heatChart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'item', formatter: '{b}: {c} 次 ({d}%)' },
-    legend: { orient: 'vertical', right: 8, top: 'center', textStyle: { color: labelColor.value, fontSize: 11 } },
-    series: [{
-      type: 'pie',
-      radius: ['40%', '70%'],
-      center: ['35%', '50%'],
-      data: pieData,
-      label: { show: false },
-      emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.5)' } },
-    }],
+    tooltip: {
+      position: 'top',
+      formatter: (p: any) => `${users[p.value[1]]}<br/>${models[p.value[0]]}<br/>消费：<b>${Number(p.value[2]).toFixed(6)}</b>`,
+    },
+    grid: { left: 96, right: 24, top: 20, bottom: 78 },
+    xAxis: {
+      type: 'category',
+      data: models,
+      axisLabel: { color: labelColor.value, rotate: 32, width: 110, overflow: 'truncate' },
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: axisColor.value } },
+    },
+    yAxis: {
+      type: 'category',
+      data: users,
+      axisLabel: { color: labelColor.value, width: 88, overflow: 'truncate' },
+      axisTick: { show: false },
+      axisLine: { lineStyle: { color: axisColor.value } },
+    },
+    visualMap: {
+      min: 0,
+      max,
+      show: false,
+      inRange: { color: ['#e0f2fe', '#3b82f6', '#7c3aed'] },
+    },
+    series: [{ type: 'heatmap', data, label: { show: false }, emphasis: { itemStyle: { borderColor: '#111827', borderWidth: 1 } } }],
   })
 }
 
@@ -146,10 +177,11 @@ async function loadStats() {
       to: to.format('YYYY-MM-DD HH:mm:ss'),
       limit: 30,
       user_id: userFilter.value,
+      user_keyword: userFilter.value,
     })
     await nextTick()
     drawBarChart()
-    drawPieChart()
+    drawHeatChart()
   } catch {
     message.error('读取模型消耗统计失败')
   } finally {
@@ -165,19 +197,56 @@ function changeRange(val: [Dayjs, Dayjs] | null) {
 
 watch(() => themeStore.themeName, async () => {
   barChart?.dispose()
-  pieChart?.dispose()
+  heatChart?.dispose()
   barChart = null
-  pieChart = null
+  heatChart = null
   await nextTick()
   drawBarChart()
-  drawPieChart()
+  drawHeatChart()
 })
 
 onMounted(loadStats)
 onBeforeUnmount(() => {
   barChart?.dispose()
-  pieChart?.dispose()
+  heatChart?.dispose()
 })
+
+function userLabel(row: UserModelRank) {
+  return row.user_email || `用户 #${row.user_id}`
+}
+
+function userModelKey(row: UserModelRank) {
+  return `${row.user_id}-${row.model}`
+}
+
+function shortModel(model: string) {
+  return model.length > 24 ? model.slice(0, 24) + '...' : model
+}
+
+function uniq(rows: string[]) {
+  return Array.from(new Set(rows))
+}
+
+function tokenText(val: number | string | undefined) {
+  const num = Number(val || 0)
+  if (num >= 100000000) return `${(num / 100000000).toFixed(2)}亿`
+  if (num >= 10000) return `${(num / 10000).toFixed(2)}万`
+  return num.toLocaleString('zh-CN')
+}
+
+function emptyChart(text: string) {
+  return {
+    graphic: {
+      type: 'text',
+      left: 'center',
+      top: 'middle',
+      style: { text, fill: labelColor.value, fontSize: 13 },
+    },
+    xAxis: { show: false },
+    yAxis: { show: false },
+    series: [],
+  }
+}
 </script>
 
 <template>
@@ -227,9 +296,50 @@ onBeforeUnmount(() => {
           <div ref="barChartEl" class="modelBarChart" />
         </div>
         <div class="modelChartCard">
-          <div class="modelChartTitle">请求占比（Top 5）</div>
-          <div ref="pieChartEl" class="modelPieChart" />
+          <div class="modelChartTitle">用户-模型消费热力图（Top 30）</div>
+          <div ref="heatChartEl" class="modelPieChart" />
         </div>
+      </div>
+
+      <div class="modelTableCard">
+        <div class="modelTableTitle">用户模型消费明细</div>
+        <a-table
+          :row-key="userModelKey"
+          :data-source="userModels"
+          :locale="{ emptyText: '暂无用户模型消费数据' }"
+          :pagination="{ pageSize: 12 }"
+          :scroll="{ x: 980 }"
+          size="small"
+        >
+          <a-table-column key="user" title="用户" :width="220">
+            <template #default="{ record }">
+              <div class="modelNameCell">
+                <span>{{ userLabel(record) }}</span>
+              </div>
+            </template>
+          </a-table-column>
+          <a-table-column key="model" title="模型" data-index="model" />
+          <a-table-column key="request_count" title="请求数" data-index="request_count" :width="110" align="right">
+            <template #default="{ record }">
+              {{ record.request_count.toLocaleString('zh-CN') }}
+            </template>
+          </a-table-column>
+          <a-table-column key="token_total" title="Token" data-index="token_total" :width="130" align="right">
+            <template #default="{ record }">
+              {{ tokenText(record.token_total) }}
+            </template>
+          </a-table-column>
+          <a-table-column key="total_cost" title="Total Cost" data-index="total_cost" :width="150" align="right">
+            <template #default="{ record }">
+              <span class="money">{{ Number(record.total_cost).toFixed(6) }}</span>
+            </template>
+          </a-table-column>
+          <a-table-column key="actual_cost" title="Actual Cost" data-index="actual_cost" :width="150" align="right">
+            <template #default="{ record }">
+              <span class="money">{{ Number(record.actual_cost).toFixed(6) }}</span>
+            </template>
+          </a-table-column>
+        </a-table>
       </div>
 
       <!-- 明细表格 -->

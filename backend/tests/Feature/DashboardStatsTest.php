@@ -61,6 +61,8 @@ class DashboardStatsTest extends TestCase
             'sub2api_user_email' => 'alpha@example.com',
             'operation' => LedgerAdjustment::OP_INCREMENT,
             'amount' => '120.00',
+            'cash_amount' => '100.00',
+            'gift_quota_amount' => '20.00',
             'status' => LedgerAdjustment::STATUS_SUCCEEDED,
             'adjust_reason' => 'recharge',
             'created_by' => $admin->id,
@@ -142,6 +144,10 @@ class DashboardStatsTest extends TestCase
             ->assertJsonPath('sub2api_balance_total', '21.00')
             ->assertJsonPath('recharge_rank.0.total_amount', '120.00')
             ->assertJsonPath('quota_rank.0.total_amount', '120.00')
+            ->assertJsonPath('user_cost_rank.0.user_email', 'alpha@example.com')
+            ->assertJsonPath('finance_trend.0.cash_amount', '100.00')
+            ->assertJsonPath('finance_trend.0.gift_quota_amount', '20.00')
+            ->assertJsonPath('finance_trend.0.sub2api_adjust_total', '120.00')
             ->assertJsonPath('models.0.model', 'gpt-4o');
     }
 

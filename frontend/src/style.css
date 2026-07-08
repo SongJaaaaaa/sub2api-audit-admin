@@ -823,6 +823,10 @@ a {
   height: 320px;
 }
 
+.soyHomeFinal .userCostChart {
+  height: 330px;
+}
+
 .soyHomeData .chartBox {
   height: 330px;
 }
@@ -2045,6 +2049,7 @@ a {
   .modelUsageGrid .chartBox,
   .modelUsageGrid .chartWide .chartBox,
   .soyHomeMain .trendChart,
+  .soyHomeFinal .userCostChart,
   .soyHomeData .chartBox,
   .trendChart {
     height: 242px;

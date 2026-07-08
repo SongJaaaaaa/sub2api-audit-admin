@@ -66,6 +66,16 @@ export interface ModelRank {
   token_total?: string
 }
 
+export interface UserModelRank {
+  user_id: number
+  user_email: string | null
+  model: string
+  request_count: number
+  total_cost: string
+  actual_cost: string
+  token_total?: string
+}
+
 export interface RechargeSource {
   type: string
   count: number
@@ -74,6 +84,7 @@ export interface RechargeSource {
 export interface ModelStatsRes {
   summary: UsageSummary
   models: ModelRank[]
+  user_models?: UserModelRank[]
   sources: {
     payment_orders_completed: number
     redeem_codes_used: RechargeSource[]
@@ -105,6 +116,7 @@ export function getModelStats(params: {
   limit?: number
   model?: string
   user_id?: number | string
+  user_keyword?: string
 }) {
   return http.get<unknown, ModelStatsRes>('/sub2api/model-stats', { params })
 }

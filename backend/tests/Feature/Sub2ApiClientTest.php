@@ -114,6 +114,7 @@ class Sub2ApiClientTest extends TestCase
 
         $summary = $repo->usageSummary($from, $to, []);
         $ranking = $repo->modelRanking($from, $to, [], 10);
+        $userModels = $repo->userModelRanking($from, $to, [], 10);
 
         $this->assertSame(3, $summary['request_count']);
         $this->assertSame(2, $summary['user_count']);
@@ -124,6 +125,9 @@ class Sub2ApiClientTest extends TestCase
         $this->assertSame(2, $ranking[0]['request_count']);
         $this->assertSame(2, $ranking[0]['user_count']);
         $this->assertSame('6', $ranking[0]['total_cost']);
+        $this->assertSame(1002, $userModels[0]['user_id']);
+        $this->assertSame('gpt-5.5', $userModels[0]['model']);
+        $this->assertSame('3.5', $userModels[0]['total_cost']);
     }
 
     public function test_recharge_source_counts_are_readable(): void
@@ -278,7 +282,13 @@ class Sub2ApiClientTest extends TestCase
         $this->getJson('/api/v1/sub2api/model-stats?from=2026-07-05 00:00:00&to=2026-07-06 00:00:00')
             ->assertOk()
             ->assertJsonPath('summary.request_count', 1)
-            ->assertJsonPath('models.0.model', 'gpt-5.5');
+            ->assertJsonPath('models.0.model', 'gpt-5.5')
+            ->assertJsonPath('user_models.0.user_email', 'alpha@example.com');
+
+        $this->getJson('/api/v1/sub2api/model-stats?from=2026-07-05 00:00:00&to=2026-07-06 00:00:00&user_keyword=alpha@example.com')
+            ->assertOk()
+            ->assertJsonPath('summary.request_count', 1)
+            ->assertJsonPath('user_models.0.user_id', 1001);
     }
 
     private function createSub2ApiTables(): void
