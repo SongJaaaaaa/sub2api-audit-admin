@@ -2,13 +2,12 @@
 import { ApiOutlined, BarChartOutlined, TeamOutlined, ThunderboltOutlined } from '@ant-design/icons-vue'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
-import { BarChart, HeatmapChart } from 'echarts/charts'
+import { BarChart } from 'echarts/charts'
 import {
   GraphicComponent,
   GridComponent,
   LegendComponent,
   TooltipComponent,
-  VisualMapComponent,
 } from 'echarts/components'
 import { init, use, type ECharts } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -17,7 +16,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { getModelStats, type ModelRank, type ModelStatsRes, type UserModelRank } from '../api/sub2api'
 import { useThemeStore } from '../stores/theme'
 
-use([BarChart, HeatmapChart, GraphicComponent, GridComponent, LegendComponent, TooltipComponent, VisualMapComponent, CanvasRenderer])
+use([BarChart, GraphicComponent, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
 const themeStore = useThemeStore()
 const loading = ref(false)
@@ -26,9 +25,9 @@ const range = ref<[Dayjs, Dayjs]>([dayjs().subtract(7, 'day').startOf('day'), da
 const userFilter = ref('')
 
 const barChartEl = ref<HTMLDivElement | null>(null)
-const heatChartEl = ref<HTMLDivElement | null>(null)
+const userModelChartEl = ref<HTMLDivElement | null>(null)
 let barChart: ECharts | null = null
-let heatChart: ECharts | null = null
+let userModelChart: ECharts | null = null
 
 const topModels = computed<ModelRank[]>(() => (stats.value?.models || []).slice(0, 12))
 const userModels = computed<UserModelRank[]>(() => stats.value?.user_models || [])
@@ -122,49 +121,53 @@ function drawBarChart() {
   })
 }
 
-function drawHeatChart() {
-  if (!heatChartEl.value) return
-  if (!heatChart) heatChart = init(heatChartEl.value, isDark.value ? 'dark' : undefined)
+function drawUserModelChart() {
+  if (!userModelChartEl.value) return
+  if (!userModelChart) userModelChart = init(userModelChartEl.value, isDark.value ? 'dark' : undefined)
   if (!topUserModels.value.length) {
-    heatChart.setOption(emptyChart('暂无用户模型消费数据'), true)
+    userModelChart.setOption(emptyChart('暂无用户模型消费数据'), true)
     return
   }
 
-  const users = uniq(topUserModels.value.map(row => userLabel(row))).slice(0, 8)
-  const models = uniq(topUserModels.value.map(row => shortModel(row.model))).slice(0, 8)
-  const data: number[][] = topUserModels.value
-    .map(row => [models.indexOf(shortModel(row.model)), users.indexOf(userLabel(row)), Number(row.total_cost || 0)])
-    .filter(row => row[0] >= 0 && row[1] >= 0)
-  const max = Math.max(...data.map(row => Number(row[2])), 1)
+  const rows = [...topUserModels.value].reverse()
 
-  heatChart.setOption({
+  userModelChart.setOption({
     backgroundColor: 'transparent',
     tooltip: {
-      position: 'top',
-      formatter: (p: any) => `${users[p.value[1]]}<br/>${models[p.value[0]]}<br/>消费：<b>${Number(p.value[2]).toFixed(6)}</b>`,
+      trigger: 'axis',
+      formatter: (p: any) => {
+        const row = rows[p[0].dataIndex]
+
+        return `${userLabel(row)}<br/>${row.model}<br/>消费：<b>${Number(row.total_cost || 0).toFixed(6)}</b><br/>请求：${row.request_count.toLocaleString('zh-CN')} 次<br/>Token：${tokenText(row.token_total)}`
+      },
     },
-    grid: { left: 96, right: 24, top: 20, bottom: 78 },
+    grid: { left: 150, right: 78, top: 12, bottom: 12, containLabel: true },
     xAxis: {
-      type: 'category',
-      data: models,
-      axisLabel: { color: labelColor.value, rotate: 32, width: 110, overflow: 'truncate' },
-      axisTick: { show: false },
+      type: 'value',
+      axisLabel: { color: labelColor.value, formatter: (v: number) => v.toFixed(4) },
       axisLine: { lineStyle: { color: axisColor.value } },
+      splitLine: { lineStyle: { color: axisColor.value } },
     },
     yAxis: {
       type: 'category',
-      data: users,
-      axisLabel: { color: labelColor.value, width: 88, overflow: 'truncate' },
+      data: rows.map(row => `${shortUser(userLabel(row))}\n${shortModel(row.model)}`),
+      axisLabel: { color: labelColor.value, width: 140, overflow: 'truncate', lineHeight: 15 },
       axisTick: { show: false },
       axisLine: { lineStyle: { color: axisColor.value } },
     },
-    visualMap: {
-      min: 0,
-      max,
-      show: false,
-      inRange: { color: ['#e0f2fe', '#3b82f6', '#7c3aed'] },
-    },
-    series: [{ type: 'heatmap', data, label: { show: false }, emphasis: { itemStyle: { borderColor: '#111827', borderWidth: 1 } } }],
+    series: [{
+      type: 'bar',
+      data: rows.map(row => Number(row.total_cost || 0)),
+      barWidth: 10,
+      itemStyle: { borderRadius: [0, 6, 6, 0], color: '#2563eb' },
+      label: {
+        show: true,
+        position: 'right',
+        color: labelColor.value,
+        formatter: (p: any) => Number(p.value).toFixed(4),
+        fontSize: 11,
+      },
+    }],
   })
 }
 
@@ -181,7 +184,7 @@ async function loadStats() {
     })
     await nextTick()
     drawBarChart()
-    drawHeatChart()
+    drawUserModelChart()
   } catch {
     message.error('读取模型消耗统计失败')
   } finally {
@@ -197,18 +200,18 @@ function changeRange(val: [Dayjs, Dayjs] | null) {
 
 watch(() => themeStore.themeName, async () => {
   barChart?.dispose()
-  heatChart?.dispose()
+  userModelChart?.dispose()
   barChart = null
-  heatChart = null
+  userModelChart = null
   await nextTick()
   drawBarChart()
-  drawHeatChart()
+  drawUserModelChart()
 })
 
 onMounted(loadStats)
 onBeforeUnmount(() => {
   barChart?.dispose()
-  heatChart?.dispose()
+  userModelChart?.dispose()
 })
 
 function userLabel(row: UserModelRank) {
@@ -220,11 +223,11 @@ function userModelKey(row: UserModelRank) {
 }
 
 function shortModel(model: string) {
-  return model.length > 24 ? model.slice(0, 24) + '...' : model
+  return model.length > 26 ? model.slice(0, 26) + '...' : model
 }
 
-function uniq(rows: string[]) {
-  return Array.from(new Set(rows))
+function shortUser(user: string) {
+  return user.length > 22 ? user.slice(0, 22) + '...' : user
 }
 
 function tokenText(val: number | string | undefined) {
@@ -296,8 +299,8 @@ function emptyChart(text: string) {
           <div ref="barChartEl" class="modelBarChart" />
         </div>
         <div class="modelChartCard">
-          <div class="modelChartTitle">用户-模型消费热力图（Top 30）</div>
-          <div ref="heatChartEl" class="modelPieChart" />
+          <div class="modelChartTitle">用户-模型消费排行（Top 30）</div>
+          <div ref="userModelChartEl" class="modelUserChart" />
         </div>
       </div>
 

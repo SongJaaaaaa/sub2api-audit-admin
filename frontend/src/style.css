@@ -2387,6 +2387,7 @@ a {
 }
 .modelBarChart { width: 100%; height: 320px; }
 .modelPieChart { width: 100%; height: 320px; }
+.modelUserChart { width: 100%; height: 520px; }
 
 .modelTableCard {
   padding: 16px;

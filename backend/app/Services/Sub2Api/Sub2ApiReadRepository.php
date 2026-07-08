@@ -204,6 +204,19 @@ class Sub2ApiReadRepository
             ->all();
     }
 
+    public function paymentRechargeTrend(CarbonImmutable $from, CarbonImmutable $to, array $excludeLedgerNos = []): array
+    {
+        return $this->incomeQuery($from, $to, $excludeLedgerNos)
+            ->get(['value', 'used_at'])
+            ->map(fn ($row): array => [
+                'date' => substr((string) ChinaTime::fmt($row->used_at), 0, 10),
+                'amount' => number_format((float) $row->value, 2, '.', ''),
+            ])
+            ->filter(fn (array $row): bool => $row['date'] !== '')
+            ->values()
+            ->all();
+    }
+
     private function incomeQuery(CarbonImmutable $from, CarbonImmutable $to, array $excludeLedgerNos = [])
     {
         $query = $this->db()

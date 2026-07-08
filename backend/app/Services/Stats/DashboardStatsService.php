@@ -16,24 +16,18 @@ class DashboardStatsService
         $summary = $this->repo->usageSummary($from, $to, []);
         $today = CarbonImmutable::now(config('ledger.timezone', 'Asia/Shanghai'));
         [$todayFrom, $todayTo] = [$today->startOfDay()->utc(), $today->endOfDay()->utc()];
-        $models = $this->repo->modelRanking($from, $to, [], $limit);
-        if ($group === 'gpt') {
-            $models = array_values(array_filter($models, fn (array $row): bool => preg_match('/gpt|chatgpt|o[1-9]/i', $row['model']) === 1));
-        } elseif ($group === 'claude') {
-            $models = array_values(array_filter($models, fn (array $row): bool => stripos($row['model'], 'claude') !== false));
-        }
 
         return [
             'summary' => $summary,
             'today_summary' => $this->repo->usageSummary($todayFrom, $todayTo, []),
-            'models' => array_slice($models, 0, $limit),
+            'models' => [],
             'recharge_total' => $this->rechargeTotal($from, $to),
             'today_recharge_total' => $this->rechargeTotal($todayFrom, $todayTo),
             'sub2api_balance_total' => $this->repo->balanceTotal(),
             'quota_total' => $this->quotaTotal($from, $to),
             'recharge_rank' => $this->rechargeRank($from, $to, $limit),
             'quota_rank' => $this->quotaRank($from, $to, $limit),
-            'user_token_rank' => $this->repo->userTokenRanking($from, $to, $limit),
+            'user_token_rank' => [],
             'user_cost_rank' => $this->repo->userCostRanking($from, $to, $limit),
             'finance_trend' => $this->financeTrend($from, $to),
             'range' => $this->range($from, $to),
@@ -87,20 +81,30 @@ class DashboardStatsService
             ->get(['operation', 'amount', 'cash_amount', 'gift_quota_amount', 'confirmed_at'])
             ->each(function (LedgerAdjustment $adj) use (&$rows): void {
                 $date = substr((string) ChinaTime::fmt($adj->confirmed_at), 0, 10);
-                if (! isset($rows[$date])) {
-                    return;
-                }
-
                 $signed = $adj->operation === LedgerAdjustment::OP_DECREMENT
                     ? -1 * (float) $adj->amount
                     : (float) $adj->amount;
 
-                $rows[$date]['cash_amount'] = number_format((float) $rows[$date]['cash_amount'] + (float) $adj->cash_amount, 2, '.', '');
-                $rows[$date]['gift_quota_amount'] = number_format((float) $rows[$date]['gift_quota_amount'] + (float) $adj->gift_quota_amount, 2, '.', '');
-                $rows[$date]['sub2api_adjust_total'] = number_format((float) $rows[$date]['sub2api_adjust_total'] + $signed, 2, '.', '');
+                $this->addTrend($rows, $date, (float) $adj->cash_amount, (float) $adj->gift_quota_amount, $signed);
             });
 
+        foreach ($this->repo->paymentRechargeTrend($from, $to, $this->auditLedgerNos()) as $row) {
+            $amount = (float) $row['amount'];
+            $this->addTrend($rows, $row['date'], $amount, 0, $amount);
+        }
+
         return array_values($rows);
+    }
+
+    private function addTrend(array &$rows, string $date, float $cash, float $gift, float $sub2api): void
+    {
+        if (! isset($rows[$date])) {
+            return;
+        }
+
+        $rows[$date]['cash_amount'] = number_format((float) $rows[$date]['cash_amount'] + $cash, 2, '.', '');
+        $rows[$date]['gift_quota_amount'] = number_format((float) $rows[$date]['gift_quota_amount'] + $gift, 2, '.', '');
+        $rows[$date]['sub2api_adjust_total'] = number_format((float) $rows[$date]['sub2api_adjust_total'] + $sub2api, 2, '.', '');
     }
 
     private function rechargeRank(CarbonImmutable $from, CarbonImmutable $to, int $limit): array

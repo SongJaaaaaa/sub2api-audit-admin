@@ -145,10 +145,9 @@ class DashboardStatsTest extends TestCase
             ->assertJsonPath('recharge_rank.0.total_amount', '120.00')
             ->assertJsonPath('quota_rank.0.total_amount', '120.00')
             ->assertJsonPath('user_cost_rank.0.user_email', 'alpha@example.com')
-            ->assertJsonPath('finance_trend.0.cash_amount', '100.00')
+            ->assertJsonPath('finance_trend.0.cash_amount', '125.00')
             ->assertJsonPath('finance_trend.0.gift_quota_amount', '20.00')
-            ->assertJsonPath('finance_trend.0.sub2api_adjust_total', '120.00')
-            ->assertJsonPath('models.0.model', 'gpt-4o');
+            ->assertJsonPath('finance_trend.0.sub2api_adjust_total', '145.00');
     }
 
     private function createSub2ApiTables(): void
