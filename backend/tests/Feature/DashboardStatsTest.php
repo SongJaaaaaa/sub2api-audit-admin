@@ -137,41 +137,23 @@ class DashboardStatsTest extends TestCase
         $res = $this->withToken($admin->createToken('admin-token')->plainTextToken)
             ->getJson('/api/v1/dashboard?from=2026-07-06 00:00:00&to=2026-07-06 23:59:59&model_group=gpt')
             ->assertOk();
-
-        // 实收现金 = 账本 cash_amount 之和 (100.00)
         $res->assertJsonPath('cash_total', '100.00');
         $res->assertJsonPath('today_cash_total', '100.00');
-
-        // 赠送额度 = 账本 gift_quota_amount 之和 (20.00)
         $res->assertJsonPath('gift_total', '20.00');
         $res->assertJsonPath('today_gift_total', '20.00');
-
-        // 外部调整 = redeem_codes.admin_balance 不在账本里的那条 (id=1, value=25.00)
         $res->assertJsonPath('external_total', '25.00');
-
-        // 到账总额 = 账本 amount(120) + 外部(25) = 145.00（保持不变）
-        $res->assertJsonPath('recharge_total', '145.00');
-        $res->assertJsonPath('today_recharge_total', '145.00');
-
-        // 其他汇总
-        $res->assertJsonPath('today_summary.total_cost', '3.2');
-        $res->assertJsonPath('sub2api_balance_total', '21.00');
-
-        // 充值榜：合并本系统账本和外部充值，按 total_amount 排序
-        $res->assertJsonPath('recharge_rank.0.sub2api_user_email', 'alpha@example.com');
-        $res->assertJsonPath('recharge_rank.0.total_amount', '120.00');
-
-        // 额度使用榜不变
-        $res->assertJsonPath('quota_rank.0.total_amount', '120.00');
-
-        // 用户消费榜不变
-        $res->assertJsonPath('user_cost_rank.0.user_email', 'alpha@example.com');
-
-        // 趋势图：finance_trend 同时含账本和外部调整
-        // cash_amount 趋势 = 账本 cash(100) + 外部 amount(25) = 125.00
-        $res->assertJsonPath('finance_trend.0.cash_amount', '125.00');
-        $res->assertJsonPath('finance_trend.0.gift_quota_amount', '20.00');
-        $res->assertJsonPath('finance_trend.0.sub2api_adjust_total', '145.00');
+        $res
+            ->assertJsonPath('recharge_total', '120.00')
+            ->assertJsonPath('today_recharge_total', '120.00')
+            ->assertJsonPath('today_summary.total_cost', '3.2')
+            ->assertJsonPath('sub2api_balance_total', '21.00')
+            ->assertJsonPath('recharge_rank.0.sub2api_user_email', 'alpha@example.com')
+            ->assertJsonPath('recharge_rank.0.total_amount', '120.00')
+            ->assertJsonPath('quota_rank.0.total_amount', '120.00')
+            ->assertJsonPath('user_cost_rank.0.user_email', 'alpha@example.com')
+            ->assertJsonPath('finance_trend.0.cash_amount', '100.00')
+            ->assertJsonPath('finance_trend.0.gift_quota_amount', '20.00')
+            ->assertJsonPath('finance_trend.0.adjust_total', '120.00');
     }
 
     private function createSub2ApiTables(): void
@@ -197,7 +179,6 @@ class DashboardStatsTest extends TestCase
             $table->decimal('actual_cost', 18, 6)->default(0);
             $table->timestamp('created_at');
         });
-
 
         Schema::connection('sub2api')->create('redeem_codes', function (Blueprint $table): void {
             $table->integer('id')->primary();

@@ -148,11 +148,11 @@ class Sub2ApiReadRepository
             ->limit($limit)
             ->get()
             ->map(fn ($row): array => [
-                'user_id'       => (int) $row->user_id,
-                'user_email'    => $row->user_email,
+                'user_id' => (int) $row->user_id,
+                'user_email' => $row->user_email,
                 'request_count' => (int) $row->request_count,
-                'token_total'   => (string) ($row->token_total ?? '0'),
-                'total_cost'    => (string) ($row->total_cost ?? '0'),
+                'token_total' => (string) ($row->token_total ?? '0'),
+                'total_cost' => (string) ($row->total_cost ?? '0'),
             ])
             ->all();
     }
@@ -179,7 +179,6 @@ class Sub2ApiReadRepository
             ])
             ->all();
     }
-
 
     public function paymentRechargeTotal(CarbonImmutable $from, CarbonImmutable $to, array $excludeLedgerNos = []): string
     {
@@ -234,6 +233,7 @@ class Sub2ApiReadRepository
 
         return $query;
     }
+
     public function balanceTotal(): string
     {
         return number_format((float) $this->db()
@@ -305,26 +305,38 @@ class Sub2ApiReadRepository
 
     private function tokenExpr(string $alias = ''): string
     {
-        $cols = $this->db()->getSchemaBuilder()->getColumnListing('usage_logs');
-        $pre = $alias === '' ? '' : $alias.'.';
+        static $baseExpr = null;
 
-        foreach (['total_tokens', 'token_total', 'tokens'] as $col) {
-            if (in_array($col, $cols, true)) {
-                return "coalesce({$pre}{$col}, 0)";
+        if ($baseExpr === null) {
+            $cols = $this->db()->getSchemaBuilder()->getColumnListing('usage_logs');
+
+            foreach (['total_tokens', 'token_total', 'tokens'] as $col) {
+                if (in_array($col, $cols, true)) {
+                    $baseExpr = "coalesce(ul.{$col}, 0)";
+                    break;
+                }
+            }
+
+            if ($baseExpr === null) {
+                $parts = array_values(array_filter([
+                    in_array('input_tokens', $cols, true) ? 'coalesce(ul.input_tokens, 0)' : null,
+                    in_array('output_tokens', $cols, true) ? 'coalesce(ul.output_tokens, 0)' : null,
+                    in_array('prompt_tokens', $cols, true) ? 'coalesce(ul.prompt_tokens, 0)' : null,
+                    in_array('completion_tokens', $cols, true) ? 'coalesce(ul.completion_tokens, 0)' : null,
+                    in_array('cache_creation_tokens', $cols, true) ? 'coalesce(ul.cache_creation_tokens, 0)' : null,
+                    in_array('cache_read_tokens', $cols, true) ? 'coalesce(ul.cache_read_tokens, 0)' : null,
+                    in_array('cached_tokens', $cols, true) ? 'coalesce(ul.cached_tokens, 0)' : null,
+                ]));
+
+                $baseExpr = count($parts) > 0 ? implode(' + ', $parts) : '0';
             }
         }
 
-        $parts = array_values(array_filter([
-            in_array('input_tokens', $cols, true) ? "coalesce({$pre}input_tokens, 0)" : null,
-            in_array('output_tokens', $cols, true) ? "coalesce({$pre}output_tokens, 0)" : null,
-            in_array('prompt_tokens', $cols, true) ? "coalesce({$pre}prompt_tokens, 0)" : null,
-            in_array('completion_tokens', $cols, true) ? "coalesce({$pre}completion_tokens, 0)" : null,
-            in_array('cache_creation_tokens', $cols, true) ? "coalesce({$pre}cache_creation_tokens, 0)" : null,
-            in_array('cache_read_tokens', $cols, true) ? "coalesce({$pre}cache_read_tokens, 0)" : null,
-            in_array('cached_tokens', $cols, true) ? "coalesce({$pre}cached_tokens, 0)" : null,
-        ]));
+        if ($alias === '' || $alias === 'ul') {
+            return $baseExpr;
+        }
 
-        return count($parts) > 0 ? implode(' + ', $parts) : '0';
+        return str_replace('ul.', $alias.'.', $baseExpr);
     }
 
     private function userRow(object $row): array

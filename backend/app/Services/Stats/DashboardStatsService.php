@@ -20,24 +20,19 @@ class DashboardStatsService
         return [
             'summary' => $summary,
             'today_summary' => $this->repo->usageSummary($todayFrom, $todayTo, []),
-            'models' => [],
-            // 实收现金（本系统 cash_amount 之和）
+            'models' => $this->repo->modelRanking($from, $to, [], min($limit, 12)),
             'cash_total' => $this->cashTotal($from, $to),
             'today_cash_total' => $this->cashTotal($todayFrom, $todayTo),
-            // 赠送额度（本系统 gift_quota_amount 之和）
             'gift_total' => $this->giftTotal($from, $to),
             'today_gift_total' => $this->giftTotal($todayFrom, $todayTo),
-            // 外部调整（不经本系统、直接在 sub2api 操作、无法分类）
             'external_total' => $this->externalTotal($from, $to),
-            // 到账总额（现金 + 赠送 + 外部），保留供趋势图等聚合场景使用
             'recharge_total' => $this->rechargeTotal($from, $to),
             'today_recharge_total' => $this->rechargeTotal($todayFrom, $todayTo),
             'sub2api_balance_total' => $this->repo->balanceTotal(),
             'quota_total' => $this->quotaTotal($from, $to),
-            // 入账榜：仅含本系统账本行，按实收现金排序
             'recharge_rank' => $this->rechargeRank($from, $to, $limit),
             'quota_rank' => $this->quotaRank($from, $to, $limit),
-            'user_token_rank' => [],
+            'user_token_rank' => $this->repo->userTokenRanking($from, $to, $limit),
             'user_cost_rank' => $this->repo->userCostRanking($from, $to, $limit),
             'finance_trend' => $this->financeTrend($from, $to),
             'range' => $this->range($from, $to),
@@ -81,11 +76,9 @@ class DashboardStatsService
 
     private function rechargeTotal(CarbonImmutable $from, CarbonImmutable $to): string
     {
-        $auditTotal = (float) $this->ledgerBase($from, $to)
+        return number_format((float) $this->ledgerBase($from, $to)
             ->where('operation', LedgerAdjustment::OP_INCREMENT)
-            ->sum('amount');
-
-        return number_format($auditTotal + (float) $this->repo->paymentRechargeTotal($from, $to, $this->auditLedgerNos()), 2, '.', '');
+            ->sum('amount'), 2, '.', '');
     }
 
     private function quotaTotal(CarbonImmutable $from, CarbonImmutable $to): string
@@ -105,7 +98,7 @@ class DashboardStatsService
                 'date' => $day->toDateString(),
                 'cash_amount' => '0.00',
                 'gift_quota_amount' => '0.00',
-                'sub2api_adjust_total' => '0.00',
+                'adjust_total' => '0.00',
             ];
         }
 
@@ -120,15 +113,10 @@ class DashboardStatsService
                 $this->addTrend($rows, $date, (float) $adj->cash_amount, (float) $adj->gift_quota_amount, $signed);
             });
 
-        foreach ($this->repo->paymentRechargeTrend($from, $to, $this->auditLedgerNos()) as $row) {
-            $amount = (float) $row['amount'];
-            $this->addTrend($rows, $row['date'], $amount, 0, $amount);
-        }
-
         return array_values($rows);
     }
 
-    private function addTrend(array &$rows, string $date, float $cash, float $gift, float $sub2api): void
+    private function addTrend(array &$rows, string $date, float $cash, float $gift, float $adjust): void
     {
         if (! isset($rows[$date])) {
             return;
@@ -136,16 +124,17 @@ class DashboardStatsService
 
         $rows[$date]['cash_amount'] = number_format((float) $rows[$date]['cash_amount'] + $cash, 2, '.', '');
         $rows[$date]['gift_quota_amount'] = number_format((float) $rows[$date]['gift_quota_amount'] + $gift, 2, '.', '');
-        $rows[$date]['sub2api_adjust_total'] = number_format((float) $rows[$date]['sub2api_adjust_total'] + $sub2api, 2, '.', '');
+        $rows[$date]['adjust_total'] = number_format((float) $rows[$date]['adjust_total'] + $adjust, 2, '.', '');
     }
 
     private function rechargeRank(CarbonImmutable $from, CarbonImmutable $to, int $limit): array
     {
-        $rows = [];
-        $auditRows = $this->ledgerBase($from, $to)
+        return $this->ledgerBase($from, $to)
             ->selectRaw('sub2api_user_id, max(sub2api_user_email) as sub2api_user_email, sum(amount) as total_amount, count(*) as entry_count')
             ->where('operation', LedgerAdjustment::OP_INCREMENT)
             ->groupBy('sub2api_user_id')
+            ->orderByDesc('total_amount')
+            ->limit($limit)
             ->get()
             ->map(fn ($row): array => [
                 'sub2api_user_id' => (int) $row->sub2api_user_id,
@@ -154,25 +143,8 @@ class DashboardStatsService
                 'entry_count' => (int) $row->entry_count,
             ])
             ->all();
-
-        foreach (array_merge($auditRows, $this->repo->paymentRechargeRanking($from, $to, $limit, $this->auditLedgerNos())) as $row) {
-            $key = (string) $row['sub2api_user_id'];
-            if (! isset($rows[$key])) {
-                $rows[$key] = $row;
-                continue;
-            }
-
-            if (! $rows[$key]['sub2api_user_email'] && $row['sub2api_user_email']) {
-                $rows[$key]['sub2api_user_email'] = $row['sub2api_user_email'];
-            }
-            $rows[$key]['total_amount'] = number_format((float) $rows[$key]['total_amount'] + (float) $row['total_amount'], 2, '.', '');
-            $rows[$key]['entry_count'] += (int) $row['entry_count'];
-        }
-
-        usort($rows, fn (array $a, array $b): int => (float) $b['total_amount'] <=> (float) $a['total_amount']);
-
-        return array_slice($rows, 0, $limit);
     }
+
     private function quotaRank(CarbonImmutable $from, CarbonImmutable $to, int $limit): array
     {
         return $this->ledgerBase($from, $to)

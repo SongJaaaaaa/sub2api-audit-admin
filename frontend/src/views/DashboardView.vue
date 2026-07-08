@@ -49,7 +49,7 @@ const rangeOptions = [
 
 const summary = computed(() => stats.value?.summary)
 const rechargeTop = computed(() => rechargeRank.value.slice(0, 10))
-const userCostTop = computed(() => (stats.value?.user_cost_rank || stats.value?.user_token_rank || []).slice(0, 10))
+const userCostTop = computed(() => (stats.value?.user_cost_rank ?? stats.value?.user_token_rank ?? []).slice(0, 10))
 const financeRows = computed(() => stats.value?.finance_trend || [])
 const hasFinanceTrend = computed(() => financeRows.value.length > 0)
 
@@ -190,12 +190,14 @@ function renderFinanceChart() {
 
   const isToday = rangeKey.value === 'today'
   const dates = financeRows.value.map((item) => item.date)
-  const recharge = financeRows.value.map((item) => Number(item.sub2api_adjust_total || 0))
+  const cash = financeRows.value.map((item) => Number(item.cash_amount || 0))
+  const gift = financeRows.value.map((item) => Number(item.gift_quota_amount || 0))
+  const adjust = financeRows.value.map((item) => Number(item.adjust_total || 0))
 
   financeChart.setOption(
     {
       backgroundColor: 'transparent',
-      color: ['#2f7cff'],
+      color: ['#2f7cff', '#14b86a', '#f59e0b'],
       grid: { left: 8, right: 8, top: 42, bottom: 8, containLabel: true },
       tooltip: {
         trigger: 'axis',
@@ -221,15 +223,33 @@ function renderFinanceChart() {
       series: isToday
         ? [
             {
-              name: '充值金额',
+              name: '入账金额',
+              type: 'bar',
+              stack: 'ledger',
+              barWidth: 42,
+              data: [sum(cash)],
+              itemStyle: { borderRadius: [0, 0, 0, 0] },
+            },
+            {
+              name: '赠送额度',
+              type: 'bar',
+              stack: 'ledger',
+              barWidth: 42,
+              data: [sum(gift)],
+              itemStyle: { borderRadius: [6, 6, 0, 0] },
+            },
+            {
+              name: '调额总额',
               type: 'bar',
               barWidth: 42,
-              data: [sum(recharge)],
+              data: [sum(adjust)],
               itemStyle: { borderRadius: [6, 6, 0, 0] },
             },
           ]
         : [
-            { name: '充值金额', type: 'line', smooth: true, symbolSize: 7, data: recharge },
+            { name: '入账金额', type: 'line', smooth: true, symbolSize: 7, data: cash },
+            { name: '赠送额度', type: 'line', smooth: true, symbolSize: 7, data: gift },
+            { name: '调额总额', type: 'line', smooth: true, symbolSize: 7, data: adjust },
           ],
     },
     true,
@@ -378,7 +398,9 @@ onBeforeUnmount(() => {
           <div v-show="hasFinanceTrend" ref="financeChartEl" class="chartBox trendChart"></div>
           <a-empty v-if="!hasFinanceTrend" class="chartEmpty" description="暂无充值趋势数据" />
           <div class="trendPills">
-            <span>充值金额</span>
+            <span>入账金额</span>
+            <span>赠送额度</span>
+            <span>调额总额</span>
           </div>
         </section>
 
