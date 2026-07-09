@@ -42,18 +42,15 @@ const form = reactive<AdjustmentFormState>({
 })
 
 const activeUsers = computed(() => users.value.filter((item) => item.status === 'active').length)
-const totalBalance = computed(() => users.value.reduce((sum, item) => sum + Number(item.balance || 0), 0))
 const totalRecharge = computed(() =>
   users.value.reduce((sum, item) => sum + Number(item.total_recharged || 0), 0),
 )
 const selectedName = computed(() => selected.value?.username || selected.value?.email || '-')
 const userCards = computed(() => [
   { label: '本页用户', value: page.total.toLocaleString('zh-CN'), icon: UserOutlined },
-  { label: '活跃账户', value: activeUsers.value.toLocaleString('zh-CN'), icon: AuditOutlined },
-  { label: '本页余额', value: moneyText(totalBalance.value), icon: WalletOutlined },
+  { label: '可充值账户', value: activeUsers.value.toLocaleString('zh-CN'), icon: AuditOutlined },
   { label: '本页累计充值', value: moneyText(totalRecharge.value), icon: CreditCardOutlined },
 ])
-
 async function loadUsers() {
   loading.value = true
   try {
@@ -113,7 +110,7 @@ async function loadHistory(id: number) {
     history.value = res.items
   } catch {
     history.value = []
-    message.error('读取额度变动记录失败')
+    message.error('读取充值记录失败')
   } finally {
     historyLoading.value = false
   }
@@ -143,7 +140,7 @@ async function submitAdjust() {
     loadHistory(selected.value.id)
   } catch (err) {
     const data = (err as { response?: { data?: AdjustmentRes } }).response?.data
-    message.error(data?.message || '调额未确认成功')
+    message.error(data?.message || '充值未确认成功')
   } finally {
     submitting.value = false
   }
@@ -181,15 +178,15 @@ onMounted(loadUsers)
   <section class="page quotaPage">
     <div class="quotaHero">
       <div>
-        <h1>Sub2API 额度管理</h1>
-        <p>管理用户在 Sub2API 中的可用额度，手动充值或扣减。</p>
+        <h1>Sub2API 充值管理</h1>
+        <p>查询用户充值数据，并为用户提交充值入账。</p>
       </div>
       <a-button :loading="loading" @click="loadUsers">刷新用户</a-button>
     </div>
 
     <div class="quotaNotice">
       <strong>说明：</strong>
-      API 额度是用户调用 Sub2API 接口的消费凭证。充值后用户可在额度范围内使用 API 服务，超出额度将被限制。所有变动均记录在审计日志中。
+      本页面只关注充值入账：选择用户后填写充值金额并提交确认，所有充值变动都会记录在审计日志中。
     </div>
 
     <div class="quotaMetricGrid">
@@ -204,7 +201,7 @@ onMounted(loadUsers)
       <section class="panel quotaUserPanel">
         <div class="panelHead">
           <h2>选择用户</h2>
-          <span class="panelMeta">点击后进入调额区</span>
+          <span class="panelMeta">点击后进入充值区</span>
         </div>
       <a-input-search
         v-model:value="keyword"
@@ -215,7 +212,7 @@ onMounted(loadUsers)
         @search="search"
       />
         <a-spin :spinning="loading">
-          <a-empty v-if="users.length === 0" description="暂无可调额用户数据" />
+          <a-empty v-if="users.length === 0" description="暂无可充值用户数据" />
           <div v-else class="quotaUserList">
             <button
               v-for="item in users"
@@ -248,7 +245,7 @@ onMounted(loadUsers)
         <div v-if="!selected" class="panel quotaEmpty">
           <WalletOutlined />
           <h2>请从左侧选择一个用户</h2>
-          <p>选择后可查看其 API 额度详情并执行充值或扣减操作。</p>
+          <p>选择后可查看账户信息并提交充值入账。</p>
         </div>
 
         <template v-else>
@@ -268,26 +265,26 @@ onMounted(loadUsers)
 
           <section class="panel quotaAdjustPanel">
             <div class="panelHead">
-              <h2>额度调整</h2>
-              <span class="panelMeta">立即提交至 Sub2API 二次确认</span>
+              <h2>充值入账</h2>
+              <span class="panelMeta">提交至 Sub2API 二次确认</span>
             </div>
             <AdjustmentForm v-model:value="form" :current-balance="selected.balance" />
             <div class="quotaFormActions">
               <a-button @click="resetForm">重置</a-button>
-              <a-button type="primary" :loading="submitting" @click="submitAdjust">确认调整</a-button>
+              <a-button type="primary" :loading="submitting" @click="submitAdjust">确认充值</a-button>
             </div>
             <p class="quotaWarn">
-              * 额度调整只有在 Sub2API 真实入账并二次确认成功后，才会生成成功记录和财务账本。
+              * 充值入账只有在 Sub2API 真实入账并二次确认成功后，才会生成成功记录和财务账本。
             </p>
           </section>
 
           <section class="panel quotaHistoryPanel">
             <div class="panelHead">
-              <h2>额度变动记录</h2>
+              <h2>充值记录</h2>
               <span class="panelMeta">同步 Sub2API 最近 8 条</span>
             </div>
             <a-spin :spinning="historyLoading">
-              <a-empty v-if="history.length === 0" description="暂无额度变动记录" />
+              <a-empty v-if="history.length === 0" description="暂无充值记录" />
               <div v-else class="quotaHistoryList">
                 <button v-for="item in history" :key="item.id" type="button" class="quotaHistoryItem" @click="openHistory(item)">
                   <div class="historyIcon" :class="item.operation">
@@ -295,9 +292,9 @@ onMounted(loadUsers)
                     <MinusCircleOutlined v-else />
                   </div>
                   <div class="historyInfo">
-                    <strong>调整人员：{{ item.operator_name || 'Sub2API' }}</strong>
-                    <span>调整账号：{{ item.adjusted_account || selected.email }}</span>
-                    <span>调整前：{{ item.before_balance ?? '-' }} · 调整后：{{ item.after_balance ?? '-' }}</span>
+                    <strong>操作人员：{{ item.operator_name || 'Sub2API' }}</strong>
+                    <span>充值账号：{{ item.adjusted_account || selected.email }}</span>
+                    <span>充值前：{{ item.before_balance ?? '-' }} · 充值后：{{ item.after_balance ?? '-' }}</span>
                     <em>时间：{{ timeText(item) }}</em>
                   </div>
                   <strong class="historyMoney" :class="item.operation">
@@ -318,16 +315,16 @@ onMounted(loadUsers)
 
     <a-modal
       :open="!!selectedHistory"
-      title="额度变动详情"
+      title="充值记录详情"
       :footer="null"
       @cancel="selectedHistory = null"
     >
       <div v-if="selectedHistory" class="historyDetail">
-        <p><span>调整人员</span><strong>{{ selectedHistory.operator_name || 'Sub2API' }}</strong></p>
-        <p><span>调整账号</span><strong>{{ selectedHistory.adjusted_account }}</strong></p>
-        <p><span>调整金额</span><strong>{{ opSign(selectedHistory) }} {{ absMoneyText(selectedHistory.value) }}</strong></p>
-        <p><span>调整前</span><strong>{{ selectedHistory.before_balance ?? '-' }}</strong></p>
-        <p><span>调整后</span><strong>{{ selectedHistory.after_balance ?? '-' }}</strong></p>
+        <p><span>操作人员</span><strong>{{ selectedHistory.operator_name || 'Sub2API' }}</strong></p>
+        <p><span>充值账号</span><strong>{{ selectedHistory.adjusted_account }}</strong></p>
+        <p><span>充值金额</span><strong>{{ opSign(selectedHistory) }} {{ absMoneyText(selectedHistory.value) }}</strong></p>
+        <p><span>充值前</span><strong>{{ selectedHistory.before_balance ?? '-' }}</strong></p>
+        <p><span>充值后</span><strong>{{ selectedHistory.after_balance ?? '-' }}</strong></p>
         <p><span>时间</span><strong>{{ timeText(selectedHistory) }}</strong></p>
         <p><span>业务单号</span><strong>{{ selectedHistory.ledger_no || '-' }}</strong></p>
         <p><span>原因</span><strong>{{ selectedHistory.adjust_reason || selectedHistory.type || '-' }}</strong></p>

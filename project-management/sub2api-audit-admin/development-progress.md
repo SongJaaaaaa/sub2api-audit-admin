@@ -1,6 +1,6 @@
 # Sub2API 审计管理后台开发进度总览
 
-更新时间: 2026-07-06
+更新时间: 2026-07-09
 
 ## 1. 当前总状态
 
@@ -73,6 +73,7 @@
 
 | 日期 | 内容 |
 |---|---|
+| 2026-07-09 | 确认充值口径：首页主指标使用充值金额(`recharge_total`)，去掉赠送额度卡片；充值榜展示充值金额；用户额度页改为用户充值页，顶部去掉本页余额；更新 `api/dashboard.ts`、`DashboardView.vue`、`UsersQuotaView.vue`、`menu.ts`；`npm run build` 已通过 |
 | 2026-07-06 | 复验 S8 联调和 E2E：`php artisan test` 24 passed，`pnpm typecheck`、`pnpm build`、`pnpm e2e` 通过；真实 Sub2API 调额仍待测试用户和 Admin API 密钥 |
 | 2026-07-06 | 完成 12 前端业务页面：补列配置组件、调额表单组件，Playwright desktop/h5 冒烟通过 |
 | 2026-07-06 | 完成 13 本地联调和部署准备：`php artisan test`、`pnpm typecheck`、`pnpm build`、`pnpm e2e` 通过，新增部署文档、Caddy 和 supervisor 示例；真实 Sub2API 调额验收待测试用户和 Admin API 密钥 |

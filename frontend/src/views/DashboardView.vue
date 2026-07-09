@@ -55,7 +55,7 @@ const hasFinanceTrend = computed(() => financeRows.value.length > 0)
 
 const topCards = computed(() => [
   {
-    label: '成交额',
+    label: '充值金额',
     value: moneyText(stats.value?.recharge_total || 0),
     sub: `${rechargeTop.value.length} 位上榜用户`,
     icon: DollarOutlined,
@@ -184,20 +184,18 @@ function renderFinanceChart() {
   financeChart ||= init(financeChartEl.value)
 
   if (financeRows.value.length === 0) {
-    financeChart.setOption(emptyChart('暂无额度调整数据'), true)
+    financeChart.setOption(emptyChart('暂无充值数据'), true)
     return
   }
 
   const isToday = rangeKey.value === 'today'
   const dates = financeRows.value.map((item) => item.date)
-  const cash = financeRows.value.map((item) => Number(item.cash_amount || 0))
-  const gift = financeRows.value.map((item) => Number(item.gift_quota_amount || 0))
-  const sub2 = financeRows.value.map((item) => Number(item.sub2api_adjust_total || 0))
+  const recharge = financeRows.value.map((item) => Number(item.sub2api_adjust_total || 0))
 
   financeChart.setOption(
     {
       backgroundColor: 'transparent',
-      color: ['#2f7cff', '#14b86a', '#f59e0b'],
+      color: ['#2f7cff'],
       grid: { left: 8, right: 8, top: 42, bottom: 8, containLabel: true },
       tooltip: {
         trigger: 'axis',
@@ -223,33 +221,15 @@ function renderFinanceChart() {
       series: isToday
         ? [
             {
-              name: '入账金额',
-              type: 'bar',
-              stack: 'ledger',
-              barWidth: 42,
-              data: [sum(cash)],
-              itemStyle: { borderRadius: [0, 0, 0, 0] },
-            },
-            {
-              name: '赠送额度',
-              type: 'bar',
-              stack: 'ledger',
-              barWidth: 42,
-              data: [sum(gift)],
-              itemStyle: { borderRadius: [6, 6, 0, 0] },
-            },
-            {
-              name: 'Sub2API 调整总额',
+              name: '充值金额',
               type: 'bar',
               barWidth: 42,
-              data: [sum(sub2)],
+              data: [sum(recharge)],
               itemStyle: { borderRadius: [6, 6, 0, 0] },
             },
           ]
         : [
-            { name: '入账金额', type: 'line', smooth: true, symbolSize: 7, data: cash },
-            { name: '赠送额度', type: 'line', smooth: true, symbolSize: 7, data: gift },
-            { name: 'Sub2API 调整总额', type: 'line', smooth: true, symbolSize: 7, data: sub2 },
+            { name: '充值金额', type: 'line', smooth: true, symbolSize: 7, data: recharge },
           ],
     },
     true,
@@ -356,7 +336,7 @@ onBeforeUnmount(() => {
     <div class="pageHead dashboardHead">
       <div>
         <h1>首页看板</h1>
-        <p>Sub2API 统计、模型消费排行与额度调整审计</p>
+        <p>Sub2API 充值统计、模型消费排行与审计记录</p>
       </div>
       <div class="headActions">
         <a-segmented v-model:value="rangeKey" :options="rangeOptions" />
@@ -392,15 +372,13 @@ onBeforeUnmount(() => {
       <div class="soyHomeMain">
         <section class="panel chartPanel trendPanel">
           <div class="panelHead">
-            <h2>入账与额度调整趋势</h2>
+            <h2>充值趋势</h2>
             <span class="panelMeta">{{ rangeOptions.find((item) => item.value === rangeKey)?.label }}</span>
           </div>
           <div v-show="hasFinanceTrend" ref="financeChartEl" class="chartBox trendChart"></div>
-          <a-empty v-if="!hasFinanceTrend" class="chartEmpty" description="暂无额度调整趋势数据" />
+          <a-empty v-if="!hasFinanceTrend" class="chartEmpty" description="暂无充值趋势数据" />
           <div class="trendPills">
-            <span>入账金额</span>
-            <span>赠送额度</span>
-            <span>Sub2API 调整总额</span>
+            <span>充值金额</span>
           </div>
         </section>
 

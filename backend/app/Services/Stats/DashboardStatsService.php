@@ -21,10 +21,20 @@ class DashboardStatsService
             'summary' => $summary,
             'today_summary' => $this->repo->usageSummary($todayFrom, $todayTo, []),
             'models' => [],
+            // 实收现金（本系统 cash_amount 之和）
+            'cash_total' => $this->cashTotal($from, $to),
+            'today_cash_total' => $this->cashTotal($todayFrom, $todayTo),
+            // 赠送额度（本系统 gift_quota_amount 之和）
+            'gift_total' => $this->giftTotal($from, $to),
+            'today_gift_total' => $this->giftTotal($todayFrom, $todayTo),
+            // 外部调整（不经本系统、直接在 sub2api 操作、无法分类）
+            'external_total' => $this->externalTotal($from, $to),
+            // 到账总额（现金 + 赠送 + 外部），保留供趋势图等聚合场景使用
             'recharge_total' => $this->rechargeTotal($from, $to),
             'today_recharge_total' => $this->rechargeTotal($todayFrom, $todayTo),
             'sub2api_balance_total' => $this->repo->balanceTotal(),
             'quota_total' => $this->quotaTotal($from, $to),
+            // 入账榜：仅含本系统账本行，按实收现金排序
             'recharge_rank' => $this->rechargeRank($from, $to, $limit),
             'quota_rank' => $this->quotaRank($from, $to, $limit),
             'user_token_rank' => [],
@@ -39,12 +49,34 @@ class DashboardStatsService
         return [
             'summary' => $this->repo->usageSummary($from, $to, []),
             'models' => [],
+            'cash_total' => $this->cashTotal($from, $to),
+            'gift_total' => $this->giftTotal($from, $to),
+            'external_total' => $this->externalTotal($from, $to),
             'recharge_total' => $this->rechargeTotal($from, $to),
             'quota_total' => $this->quotaTotal($from, $to),
             'recharge_rank' => [],
             'quota_rank' => [],
             'range' => $this->range($from, $to),
         ];
+    }
+
+    private function cashTotal(CarbonImmutable $from, CarbonImmutable $to): string
+    {
+        return number_format((float) $this->ledgerBase($from, $to)
+            ->where('operation', LedgerAdjustment::OP_INCREMENT)
+            ->sum('cash_amount'), 2, '.', '');
+    }
+
+    private function giftTotal(CarbonImmutable $from, CarbonImmutable $to): string
+    {
+        return number_format((float) $this->ledgerBase($from, $to)
+            ->where('operation', LedgerAdjustment::OP_INCREMENT)
+            ->sum('gift_quota_amount'), 2, '.', '');
+    }
+
+    private function externalTotal(CarbonImmutable $from, CarbonImmutable $to): string
+    {
+        return $this->repo->paymentRechargeTotal($from, $to, $this->auditLedgerNos());
     }
 
     private function rechargeTotal(CarbonImmutable $from, CarbonImmutable $to): string
@@ -141,7 +173,6 @@ class DashboardStatsService
 
         return array_slice($rows, 0, $limit);
     }
-
     private function quotaRank(CarbonImmutable $from, CarbonImmutable $to, int $limit): array
     {
         return $this->ledgerBase($from, $to)
