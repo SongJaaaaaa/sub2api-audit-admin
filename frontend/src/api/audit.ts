@@ -1,6 +1,15 @@
 import { http } from './http'
 import type { PageRes } from './finance'
 
+export interface AuditSummary {
+  record_count: number
+  operator_count: number
+  action_count: number
+  target_count: number
+  high_risk_count: number
+  actions: Array<{ action: string; record_count: number }>
+}
+
 export interface AuditLog {
   id: number
   admin_id: number | null
@@ -22,6 +31,11 @@ export function getAuditLogs(params: {
   admin_id?: string | number
   from?: string
   to?: string
+  target_type?: string
+  target_id?: string | number
+  ip?: string
+  keyword?: string
+  risk?: '' | 'high'
 }) {
-  return http.get<unknown, PageRes<AuditLog>>('/audit-logs', { params })
+  return http.get<unknown, PageRes<AuditLog, AuditSummary>>('/audit-logs', { params })
 }

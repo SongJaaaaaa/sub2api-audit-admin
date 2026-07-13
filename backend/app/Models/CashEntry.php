@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class CashEntry extends Model
 {
@@ -27,5 +28,10 @@ class CashEntry extends Model
         return [
             'cash_amount' => 'decimal:2',
         ];
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(Admin::class, 'created_by');
     }
 }

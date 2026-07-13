@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import {
-  AuditOutlined,
-  CreditCardOutlined,
   MinusCircleOutlined,
   PlusCircleOutlined,
-  UserOutlined,
   WalletOutlined,
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
@@ -20,6 +17,7 @@ import AdjustmentForm, { type AdjustmentFormState } from '../components/ledger/A
 const loading = ref(false)
 const historyLoading = ref(false)
 const submitting = ref(false)
+const formKey = ref(0)
 const users = ref<Sub2User[]>([])
 const history = ref<Sub2BalanceHistoryItem[]>([])
 const selected = ref<Sub2User | null>(null)
@@ -41,16 +39,7 @@ const form = reactive<AdjustmentFormState>({
   admin_notes: '',
 })
 
-const activeUsers = computed(() => users.value.filter((item) => item.status === 'active').length)
-const totalRecharge = computed(() =>
-  users.value.reduce((sum, item) => sum + Number(item.total_recharged || 0), 0),
-)
 const selectedName = computed(() => selected.value?.username || selected.value?.email || '-')
-const userCards = computed(() => [
-  { label: '本页用户', value: page.total.toLocaleString('zh-CN'), icon: UserOutlined },
-  { label: '可充值账户', value: activeUsers.value.toLocaleString('zh-CN'), icon: AuditOutlined },
-  { label: '本页累计充值', value: moneyText(totalRecharge.value), icon: CreditCardOutlined },
-])
 async function loadUsers() {
   loading.value = true
   try {
@@ -90,6 +79,7 @@ function resetForm() {
   form.gift_quota_amount = ''
   form.adjust_reason = '充值'
   form.admin_notes = ''
+  formKey.value += 1
 }
 
 async function selectUser(row: Sub2User) {
@@ -184,19 +174,6 @@ onMounted(loadUsers)
       <a-button :loading="loading" @click="loadUsers">刷新用户</a-button>
     </div>
 
-    <div class="quotaNotice">
-      <strong>说明：</strong>
-      本页面只关注充值入账：选择用户后填写充值金额并提交确认，所有充值变动都会记录在审计日志中。
-    </div>
-
-    <div class="quotaMetricGrid">
-      <section v-for="item in userCards" :key="item.label" class="quotaMetric">
-        <component :is="item.icon" />
-        <span>{{ item.label }}</span>
-        <strong>{{ item.value }}</strong>
-      </section>
-    </div>
-
     <div class="quotaWorkGrid">
       <section class="panel quotaUserPanel">
         <div class="panelHead">
@@ -212,7 +189,7 @@ onMounted(loadUsers)
         @search="search"
       />
         <a-spin :spinning="loading">
-          <a-empty v-if="users.length === 0" description="暂无可充值用户数据" />
+          <a-empty v-if="!loading && users.length === 0" description="暂无可充值用户数据" />
           <div v-else class="quotaUserList">
             <button
               v-for="item in users"
@@ -257,7 +234,7 @@ onMounted(loadUsers)
                 <p>{{ selected.email }} · ID: {{ selected.id }}</p>
                 <div class="quotaInlineStats">
                   <span>API 可用余额 <strong class="money">{{ moneyText(selected.balance) }}</strong></span>
-                  <span>累计充入 <strong>{{ moneyText(selected.total_recharged) }}</strong></span>
+                  <span>Sub2API 累计充值字段 <strong>{{ moneyText(selected.total_recharged) }}</strong></span>
                 </div>
               </div>
             </div>
@@ -268,7 +245,7 @@ onMounted(loadUsers)
               <h2>充值入账</h2>
               <span class="panelMeta">提交至 Sub2API 二次确认</span>
             </div>
-            <AdjustmentForm v-model:value="form" :current-balance="selected.balance" />
+            <AdjustmentForm :key="formKey" v-model:value="form" :current-balance="selected.balance" />
             <div class="quotaFormActions">
               <a-button @click="resetForm">重置</a-button>
               <a-button type="primary" :loading="submitting" @click="submitAdjust">确认充值</a-button>
@@ -284,8 +261,8 @@ onMounted(loadUsers)
               <span class="panelMeta">同步 Sub2API 最近 8 条</span>
             </div>
             <a-spin :spinning="historyLoading">
-              <a-empty v-if="history.length === 0" description="暂无充值记录" />
-              <div v-else class="quotaHistoryList">
+              <a-empty v-if="!historyLoading && history.length === 0" description="暂无充值记录" />
+              <div v-else-if="history.length > 0" class="quotaHistoryList">
                 <button v-for="item in history" :key="item.id" type="button" class="quotaHistoryItem" @click="openHistory(item)">
                   <div class="historyIcon" :class="item.operation">
                     <PlusCircleOutlined v-if="item.operation === 'increment'" />

@@ -3,202 +3,349 @@
 namespace Tests\Feature;
 
 use App\Models\Admin;
-use App\Models\CashEntry;
 use App\Models\LedgerAdjustment;
+use App\Models\ReconciliationBatch;
+use App\Models\ReconciliationDiff;
+use App\Services\Ledger\LedgerCutoverService;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
+use Tests\Support\Sub2ApiTestDatabase;
 use Tests\TestCase;
 
 class DashboardStatsTest extends TestCase
 {
     use RefreshDatabase;
+    use Sub2ApiTestDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-03 12:00:00', 'Asia/Shanghai'));
+        $this->setUpSub2ApiDatabase();
+        config()->set('sub2api.admin_api.base_url', 'https://sub2api.test');
+        config()->set('sub2api.admin_api.key', 'test-key');
+    }
 
     protected function tearDown(): void
     {
         CarbonImmutable::setTestNow();
-        DB::disconnect('sub2api');
+        $this->tearDownSub2ApiDatabase();
 
         parent::tearDown();
     }
 
-    public function test_dashboard_stats_contains_recharge_quota_and_model_ranks(): void
+    public function test_dashboard_uses_cutover_ledger_official_usage_and_separate_rankings(): void
     {
-        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-06 12:00:00', 'Asia/Shanghai'));
-        config()->set('sub2api.db_connection', 'sub2api');
-        config()->set('database.connections.sub2api', [
-            'driver' => 'sqlite',
-            'database' => ':memory:',
-            'prefix' => '',
-            'foreign_key_constraints' => false,
-        ]);
-        DB::purge('sub2api');
-        $this->createSub2ApiTables();
+        $admin = $this->admin();
+        app(LedgerCutoverService::class)->setOnce('2026-07-01 10:00:00');
+        $this->seedBalanceUsers();
 
-        $admin = Admin::query()->create([
-            'name' => 'Admin',
+        $old = $this->adjustment($admin, [
+            'ledger_no' => 'ADJ-OLD',
+            'idempotency_key' => 'key-old',
+            'amount' => '200.00',
+            'cash_amount' => '100.00',
+            'gift_quota_amount' => '100.00',
+            'confirmed_at' => '2026-07-01 09:59:59',
+        ]);
+        $first = $this->adjustment($admin, [
+            'ledger_no' => 'ADJ-1',
+            'idempotency_key' => 'key-1',
+            'sub2api_source_id' => 101,
+            'amount' => '120.00',
+            'cash_amount' => '100.00',
+            'gift_quota_amount' => '20.00',
+            'confirmed_at' => '2026-07-01 10:00:00',
+        ]);
+        $second = $this->adjustment($admin, [
+            'ledger_no' => 'ADJ-2',
+            'idempotency_key' => 'key-2',
+            'sub2api_user_id' => 1002,
+            'sub2api_user_email' => 'beta@example.com',
+            'amount' => '50.00',
+            'cash_amount' => '0.00',
+            'gift_quota_amount' => '50.00',
+            'confirmed_at' => '2026-07-02 23:59:59',
+        ]);
+        $this->adjustment($admin, [
+            'ledger_no' => 'ADJ-3',
+            'idempotency_key' => 'key-3',
+            'sub2api_source_id' => 103,
+            'operation' => LedgerAdjustment::OP_DECREMENT,
+            'amount' => '30.00',
+            'cash_amount' => '0.00',
+            'gift_quota_amount' => '0.00',
+            'confirmed_at' => '2026-07-03 00:00:00',
+        ]);
+        $this->adjustment($admin, [
+            'ledger_no' => 'ADJ-END',
+            'idempotency_key' => 'key-end',
+            'sub2api_source_id' => 104,
+            'amount' => '999.00',
+            'cash_amount' => '999.00',
+            'confirmed_at' => '2026-07-04 00:00:00',
+        ]);
+        $this->adjustment($admin, [
+            'ledger_no' => 'ADJ-EX',
+            'idempotency_key' => 'key-ex',
+            'status' => LedgerAdjustment::STATUS_EXCEPTION,
+            'amount' => '500.00',
+            'cash_amount' => '500.00',
+            'confirmed_at' => null,
+            'created_at' => '2026-07-02 12:00:00',
+        ]);
+
+        $batch = ReconciliationBatch::query()->create([
+            'batch_no' => 'REC-1',
+            'biz_date' => '2026-07-02',
+            'cash_total' => 0,
+            'quota_total' => 0,
+            'gift_total' => 0,
+            'sub2api_delta_total' => 0,
+            'diff_amount' => 0,
+            'status' => ReconciliationBatch::STATUS_ERROR,
+            'created_by' => $admin->id,
+        ]);
+        $this->reconcileDiff($batch, 'amount_mismatch', $first->id, 201);
+        $this->reconcileDiff($batch, 'direction_mismatch', $first->id, 201);
+        $this->reconcileDiff($batch, 'remote_external', null, 301);
+        $this->reconcileDiff($batch, 'remote_external', null, 301);
+        $this->reconcileDiff($batch, 'remote_audit_orphan', null, 302);
+
+        $this->fakeOfficialStats();
+
+        $res = $this->withToken($admin->createToken('dashboard')->plainTextToken)
+            ->getJson('/api/v1/dashboard?start_date=2026-07-01&end_date=2026-07-03&limit=3')
+            ->assertOk()
+            ->assertJsonPath('range.start_date', '2026-07-01')
+            ->assertJsonPath('range.end_date', '2026-07-03')
+            ->assertJsonPath('range.timezone', 'Asia/Shanghai')
+            ->assertJsonPath('cutover_at', '2026-07-01 10:00:00')
+            ->assertJsonPath('finance.cash_total', '100.00')
+            ->assertJsonPath('finance.gift_total', '70.00')
+            ->assertJsonPath('finance.adjustment_in_total', '170.00')
+            ->assertJsonPath('finance.adjustment_out_total', '30.00')
+            ->assertJsonPath('finance.adjustment_net_total', '140.00')
+            ->assertJsonPath('finance.trend.0.cash_total', '100.00')
+            ->assertJsonPath('finance.trend.1.gift_total', '50.00')
+            ->assertJsonPath('finance.trend.2.adjustment_out_total', '30.00')
+            ->assertJsonPath('usage.request_count', 3)
+            ->assertJsonPath('usage.total_tokens', 63)
+            ->assertJsonPath('usage.standard_cost', '4')
+            ->assertJsonPath('usage.actual_cost', '3.4')
+            ->assertJsonPath('usage.trend.1.request_count', 0)
+            ->assertJsonPath('balance.active_user_count', 2)
+            ->assertJsonPath('balance.active_user_balance', '20')
+            ->assertJsonPath('balance.total_recharged', '42')
+            ->assertJsonPath('rankings.recharge_users.0.user_id', 1001)
+            ->assertJsonPath('rankings.recharge_users.0.cash_total', '100.00')
+            ->assertJsonPath('rankings.user_actual_cost.0.user_id', 1002)
+            ->assertJsonPath('rankings.user_actual_cost.0.actual_cost', '8')
+            ->assertJsonPath('rankings.user_tokens.0.user_id', 1002)
+            ->assertJsonPath('rankings.user_tokens.0.total_tokens', 1200)
+            ->assertJsonPath('rankings.models.0.model', 'model-b')
+            ->assertJsonPath('rankings.models.0.total_tokens', 200)
+            ->assertJsonPath('alerts.unlinked_adjustment_count', 1)
+            ->assertJsonPath('alerts.reconcile_issue_count', 1)
+            ->assertJsonPath('alerts.external_adjustment_count', 1)
+            ->assertJsonPath('alerts.audit_orphan_count', 1)
+            ->assertJsonPath('alerts.last_reconciled_date', '2026-07-02');
+
+        $this->assertNull($res->json('summary'));
+        $this->assertNull($res->json('quota_rank'));
+        $this->assertNotContains($old->id, collect($res->json('recent_adjustments'))->pluck('id')->all());
+        $this->assertContains($second->id, collect($res->json('recent_adjustments'))->pluck('id')->all());
+
+        Http::assertSent(function (Request $req): bool {
+            if (! str_starts_with($req->url(), 'https://sub2api.test/api/v1/admin/dashboard/trend?')) {
+                return false;
+            }
+
+            return $req['start_date'] === '2026-07-01'
+                && $req['end_date'] === '2026-07-03'
+                && $req['timezone'] === 'Asia/Shanghai'
+                && $req['granularity'] === 'day';
+        });
+        Http::assertSent(fn (Request $req): bool => str_starts_with($req->url(), 'https://sub2api.test/api/v1/admin/dashboard/models?')
+            && $req['model_source'] === 'requested');
+        Http::assertSent(fn (Request $req): bool => str_starts_with($req->url(), 'https://sub2api.test/api/v1/admin/dashboard/users-ranking?')
+            && (int) $req['limit'] === 3);
+        Http::assertSent(fn (Request $req): bool => str_starts_with($req->url(), 'https://sub2api.test/api/v1/admin/dashboard/user-breakdown?')
+            && $req['model_source'] === 'requested'
+            && $req['sort_by'] === 'total_tokens'
+            && (int) $req['limit'] === 3);
+    }
+
+    public function test_dashboard_defaults_to_today_and_validates_date_pairs(): void
+    {
+        $admin = $this->admin();
+        $token = $admin->createToken('dashboard')->plainTextToken;
+        $this->insertSub2ApiUser();
+        $this->fakeOfficialStats();
+
+        $this->withToken($token)->getJson('/api/v1/dashboard')
+            ->assertOk()
+            ->assertJsonPath('range.start_date', '2026-07-03')
+            ->assertJsonPath('range.end_date', '2026-07-03');
+
+        $this->withToken($token)->getJson('/api/v1/dashboard?start_date=2026-07-01')
+            ->assertStatus(422);
+        $this->withToken($token)->getJson('/api/v1/dashboard?start_date=2026-07-03&end_date=2026-07-01')
+            ->assertStatus(422);
+        $this->withToken($token)->getJson('/api/v1/dashboard?limit=101')
+            ->assertStatus(422);
+    }
+
+    public function test_dashboard_returns_stable_502_when_official_stats_are_unavailable(): void
+    {
+        $admin = $this->admin();
+        $this->insertSub2ApiUser();
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/dashboard/trend*' => Http::response(['message' => 'down'], 503),
+        ]);
+
+        $this->withToken($admin->createToken('dashboard')->plainTextToken)
+            ->getJson('/api/v1/dashboard?start_date=2026-07-01&end_date=2026-07-03')
+            ->assertStatus(502)
+            ->assertExactJson([
+                'code' => 'SUB2API_STATS_UNAVAILABLE',
+                'message' => 'Sub2API 官方统计暂不可用',
+            ]);
+    }
+
+    private function admin(): Admin
+    {
+        return Admin::query()->create([
+            'name' => '管理员',
             'email' => 'admin@example.com',
             'password' => 'secret123',
             'status' => Admin::STATUS_ACTIVE,
         ]);
-        $cash = CashEntry::query()->create([
-            'entry_no' => 'CASH202607060001',
-            'sub2api_user_id' => 1001,
-            'sub2api_user_email' => 'alpha@example.com',
-            'direction' => CashEntry::DIR_IN,
-            'cash_amount' => '100.00',
-            'source' => 'ledger_adjustment',
-            'created_by' => $admin->id,
-        ]);
-        $cash->timestamps = false;
-        $cash->forceFill(['created_at' => '2026-07-06 02:00:00'])->save();
-        LedgerAdjustment::query()->create([
-            'ledger_no' => 'ADJ202607060003',
-            'idempotency_key' => 'key-3',
+    }
+
+    private function adjustment(Admin $admin, array $values): LedgerAdjustment
+    {
+        $row = LedgerAdjustment::query()->create(array_merge([
+            'ledger_no' => 'ADJ-'.uniqid(),
+            'idempotency_key' => 'key-'.uniqid(),
             'sub2api_user_id' => 1001,
             'sub2api_user_email' => 'alpha@example.com',
             'operation' => LedgerAdjustment::OP_INCREMENT,
-            'amount' => '120.00',
-            'cash_amount' => '100.00',
-            'gift_quota_amount' => '20.00',
+            'amount' => '10.00',
+            'cash_amount' => '10.00',
+            'gift_quota_amount' => '0.00',
             'status' => LedgerAdjustment::STATUS_SUCCEEDED,
-            'adjust_reason' => 'recharge',
+            'adjust_reason' => '充值',
             'created_by' => $admin->id,
-            'confirmed_at' => '2026-07-06 02:00:00',
-        ]);
-        DB::connection('sub2api')->table('users')->insert([
-            [
-                'id' => 1001,
-                'email' => 'alpha@example.com',
-                'username' => 'alpha',
-                'role' => 'user',
-                'balance' => '12.34',
-                'total_recharged' => '100.00',
-                'status' => 'active',
-                'created_at' => '2026-07-01 00:00:00',
-                'updated_at' => '2026-07-02 00:00:00',
-                'deleted_at' => null,
-            ],
-            [
-                'id' => 1002,
-                'email' => 'beta@example.com',
-                'username' => 'beta',
-                'role' => 'user',
-                'balance' => '8.66',
-                'total_recharged' => '25.00',
-                'status' => 'active',
-                'created_at' => '2026-07-01 00:00:00',
-                'updated_at' => '2026-07-02 00:00:00',
-                'deleted_at' => null,
-            ],
-        ]);
-        DB::connection('sub2api')->table('payment_orders')->insert([
-            'id' => 1,
-            'user_id' => 1002,
-            'amount' => '25.00',
-            'order_type' => 'balance',
-            'status' => 'COMPLETED',
-            'completed_at' => '2026-07-06 03:00:00',
-            'created_at' => '2026-07-06 02:50:00',
-        ]);
-        DB::connection('sub2api')->table('redeem_codes')->insert([
-            [
-                'id' => 1,
-                'type' => 'admin_balance',
-                'value' => '25.00',
-                'status' => 'used',
-                'used_by' => 1002,
-                'used_at' => '2026-07-06 03:00:00',
-                'notes' => 'Epay recharge',
-                'created_at' => '2026-07-06 02:50:00',
-            ],
-            [
-                'id' => 2,
-                'type' => 'admin_balance',
-                'value' => '120.00',
-                'status' => 'used',
-                'used_by' => 1001,
-                'used_at' => '2026-07-06 02:00:01',
-                'notes' => '[sub2api-audit ledger_no=ADJ202607060003]',
-                'created_at' => '2026-07-06 02:00:01',
-            ],
-        ]);
-        DB::connection('sub2api')->table('usage_logs')->insert([
-            'id' => 1,
-            'user_id' => 1001,
-            'model' => 'gpt-4o',
-            'total_cost' => '3.20',
-            'actual_cost' => '2.00',
-            'created_at' => '2026-07-06 02:00:00',
-        ]);
+            'confirmed_at' => '2026-07-01 12:00:00',
+        ], $values));
 
-        $res = $this->withToken($admin->createToken('admin-token')->plainTextToken)
-            ->getJson('/api/v1/dashboard?from=2026-07-06 00:00:00&to=2026-07-06 23:59:59&model_group=gpt')
-            ->assertOk();
-        $res->assertJsonPath('cash_total', '100.00');
-        $res->assertJsonPath('today_cash_total', '100.00');
-        $res->assertJsonPath('gift_total', '20.00');
-        $res->assertJsonPath('today_gift_total', '20.00');
-        $res->assertJsonPath('external_total', '25.00');
-        $res
-            ->assertJsonPath('recharge_total', '120.00')
-            ->assertJsonPath('today_recharge_total', '120.00')
-            ->assertJsonPath('today_summary.total_cost', '3.2')
-            ->assertJsonPath('sub2api_balance_total', '21.00')
-            ->assertJsonPath('recharge_rank.0.sub2api_user_email', 'alpha@example.com')
-            ->assertJsonPath('recharge_rank.0.total_amount', '120.00')
-            ->assertJsonPath('quota_rank.0.total_amount', '120.00')
-            ->assertJsonPath('user_cost_rank.0.user_email', 'alpha@example.com')
-            ->assertJsonPath('finance_trend.0.cash_amount', '100.00')
-            ->assertJsonPath('finance_trend.0.gift_quota_amount', '20.00')
-            ->assertJsonPath('finance_trend.0.adjust_total', '120.00');
+        if (isset($values['created_at'])) {
+            $row->timestamps = false;
+            $row->forceFill(['created_at' => $values['created_at'], 'updated_at' => $values['created_at']])->save();
+        }
+
+        return $row;
     }
 
-    private function createSub2ApiTables(): void
+    private function reconcileDiff(ReconciliationBatch $batch, string $type, ?int $localId, int $remoteId): void
     {
-        Schema::connection('sub2api')->create('users', function (Blueprint $table): void {
-            $table->integer('id')->primary();
-            $table->string('email');
-            $table->string('username')->nullable();
-            $table->string('role')->nullable();
-            $table->decimal('balance', 16, 2)->default(0);
-            $table->decimal('total_recharged', 16, 2)->default(0);
-            $table->string('status')->nullable();
-            $table->timestamp('created_at')->nullable();
-            $table->timestamp('updated_at')->nullable();
-            $table->timestamp('deleted_at')->nullable();
-        });
+        ReconciliationDiff::query()->create([
+            'reconciliation_batch_id' => $batch->id,
+            'type' => $type,
+            'title' => $type,
+            'amount' => '1.00',
+            'local_adjustment_id' => $localId,
+            'remote_event_id' => $remoteId,
+        ]);
+    }
 
-        Schema::connection('sub2api')->create('usage_logs', function (Blueprint $table): void {
-            $table->integer('id')->primary();
-            $table->integer('user_id');
-            $table->string('model');
-            $table->decimal('total_cost', 18, 6)->default(0);
-            $table->decimal('actual_cost', 18, 6)->default(0);
-            $table->timestamp('created_at');
-        });
+    private function seedBalanceUsers(): void
+    {
+        $this->insertSub2ApiUser(['id' => 1001, 'balance' => '12.5', 'total_recharged' => '10']);
+        $this->insertSub2ApiUser(['id' => 1002, 'email' => 'beta@example.com', 'username' => 'beta', 'balance' => '7.5', 'total_recharged' => '20']);
+        $this->insertSub2ApiUser(['id' => 1003, 'email' => 'admin@remote.test', 'role' => 'admin', 'balance' => '100', 'total_recharged' => '5']);
+        $this->insertSub2ApiUser(['id' => 1004, 'email' => 'disabled@example.com', 'status' => 'disabled', 'balance' => '100', 'total_recharged' => '7']);
+        $this->insertSub2ApiUser(['id' => 1005, 'email' => 'deleted@example.com', 'balance' => '100', 'total_recharged' => '9', 'deleted_at' => '2026-07-02 00:00:00']);
+    }
 
-        Schema::connection('sub2api')->create('redeem_codes', function (Blueprint $table): void {
-            $table->integer('id')->primary();
-            $table->string('type')->nullable();
-            $table->decimal('value', 16, 2)->default(0);
-            $table->string('status')->nullable();
-            $table->integer('used_by')->nullable();
-            $table->timestamp('used_at')->nullable();
-            $table->text('notes')->nullable();
-            $table->timestamp('created_at')->nullable();
-        });
+    private function fakeOfficialStats(): void
+    {
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/dashboard/trend*' => Http::response($this->official('trend', [
+                [
+                    'date' => '2026-07-01',
+                    'requests' => 2,
+                    'input_tokens' => 10,
+                    'output_tokens' => 20,
+                    'cache_creation_tokens' => 3,
+                    'cache_read_tokens' => 4,
+                    'total_tokens' => 37,
+                    'cost' => '1.5',
+                    'actual_cost' => '1.2',
+                ],
+                [
+                    'date' => '2026-07-03',
+                    'requests' => 1,
+                    'input_tokens' => 5,
+                    'output_tokens' => 6,
+                    'cache_creation_tokens' => 7,
+                    'cache_read_tokens' => 8,
+                    'total_tokens' => 26,
+                    'cost' => '2.5',
+                    'actual_cost' => '2.2',
+                ],
+            ])),
+            'https://sub2api.test/api/v1/admin/dashboard/models*' => Http::response($this->official('models', [
+                $this->modelRow('model-a', 100),
+                $this->modelRow('model-b', 200),
+            ])),
+            'https://sub2api.test/api/v1/admin/dashboard/users-ranking*' => Http::response($this->official('ranking', [
+                ['user_id' => 1001, 'email' => 'alpha@example.com', 'actual_cost' => '4', 'requests' => 10, 'tokens' => 1000],
+                ['user_id' => 1002, 'email' => 'beta@example.com', 'actual_cost' => '8', 'requests' => 5, 'tokens' => 500],
+            ])),
+            'https://sub2api.test/api/v1/admin/dashboard/user-breakdown*' => Http::response($this->official('users', [
+                $this->userTokenRow(1001, 900, '10'),
+                $this->userTokenRow(1002, 1200, '2'),
+            ])),
+        ]);
+    }
 
-        Schema::connection('sub2api')->create('payment_orders', function (Blueprint $table): void {
-            $table->integer('id')->primary();
-            $table->integer('user_id')->nullable();
-            $table->decimal('amount', 16, 2)->default(0);
-            $table->string('order_type')->nullable();
-            $table->string('status')->nullable();
-            $table->timestamp('completed_at')->nullable();
-            $table->timestamp('created_at')->nullable();
-        });
+    private function official(string $field, array $rows): array
+    {
+        return ['code' => 0, 'message' => 'success', 'data' => [$field => $rows]];
+    }
+
+    private function modelRow(string $model, int $tokens): array
+    {
+        return [
+            'model' => $model,
+            'requests' => 2,
+            'input_tokens' => 10,
+            'output_tokens' => 20,
+            'cache_creation_tokens' => 30,
+            'cache_read_tokens' => 40,
+            'total_tokens' => $tokens,
+            'cost' => '3.5',
+            'actual_cost' => '3.1',
+        ];
+    }
+
+    private function userTokenRow(int $id, int $tokens, string $actual): array
+    {
+        return [
+            'user_id' => $id,
+            'email' => $id === 1001 ? 'alpha@example.com' : 'beta@example.com',
+            'requests' => 2,
+            'input_tokens' => 10,
+            'output_tokens' => 20,
+            'cache_tokens' => 30,
+            'total_tokens' => $tokens,
+            'cost' => '3.5',
+            'actual_cost' => $actual,
+        ];
     }
 }

@@ -1,93 +1,185 @@
-﻿# Sub2API 统计接口清单
+# Sub2API 统计来源与接口口径
 
-来源：`https://api.sjiaa.cc.cd/admin/usage` 当前前端包。
+## 1. 数据源边界
 
-说明：
+| 数据源 | 本系统用途 | 禁止事项 |
+|---|---|---|
+| 本地审计 SQLite | 现金、赠送、调增、调减、净额、充值用户排行、调额记录 | 不得拿远端调额或支付事件补成本地实收入账 |
+| Sub2API 官方 Admin API | 请求、Token、标准消费、实际消费、用户用量排行、requested 模型统计 | 官方失败时不得用数据库 SQL 降级重算 |
+| Sub2API PostgreSQL 只读连接 | 当前普通用户余额、远端后台调额关联、历史余额事件、真实对账 | 不得直接更新用户余额或远端业务表 |
 
-- 前端 axios 默认 `baseURL` 是 `/api/v1`，所以下表接口实际请求路径需要加 `/api/v1` 前缀。
-- 例如：`GET /admin/usage/stats` 实际是 `GET /api/v1/admin/usage/stats`。
-- 后台接口需要登录态 / Authorization。
+模型和用量统计不再由审计系统直接聚合 `usage_logs`，避免产生第三套统计口径。
 
-## Admin Usage 页面主接口
+## 2. 时间口径
 
-| 模块 | 方法 | 接口 | 主要用途 | 常见参数 | 主要统计/返回内容 |
-|---|---:|---|---|---|---|
-| 用量明细 | GET | `/admin/usage` | 查询后台用量日志列表 | `page`, `page_size`, `user_id`, `api_key_id`, `account_id`, `model`, `group_id`, `request_type`, `stream`, `billing_type`, `billing_mode`, `start_date`, `end_date`, `sort_by`, `sort_order`, `exact_total` | 用量日志明细、分页总数 |
-| 用量汇总 | GET | `/admin/usage/stats` | 查询当前筛选范围的总览统计 | 同 `/admin/usage` 的筛选条件 | 总请求数、总 Token、输入/输出 Token、缓存 Token、总费用、实际费用、账号成本、平均耗时 |
-| 用户搜索 | GET | `/admin/usage/search-users` | 用量页用户筛选下拉搜索 | `q` | 用户 ID、邮箱、删除状态 |
-| API Key 搜索 | GET | `/admin/usage/search-api-keys` | 用量页 API Key 筛选下拉搜索 | `user_id`, `q` | API Key ID、名称、归属用户 |
-| 清理任务列表 | GET | `/admin/usage/cleanup-tasks` | 查看用量清理任务 | `page`, `page_size` | 任务状态、清理范围、删除行数、错误信息、创建时间 |
-| 创建清理任务 | POST | `/admin/usage/cleanup-tasks` | 提交用量清理任务 | `start_date`, `end_date`, `timezone` | 任务创建结果 |
-| 取消清理任务 | POST | `/admin/usage/cleanup-tasks/{id}/cancel` | 取消 pending/running 的清理任务 | `id` | 取消结果 |
+- 对外日期参数均为包含首尾日期的 `YYYY-MM-DD`。
+- 业务时区固定为 `Asia/Shanghai`。
+- 官方 Admin API 参数固定包含：
 
-## Admin Dashboard 统计接口
+```text
+start_date=YYYY-MM-DD
+end_date=YYYY-MM-DD
+timezone=Asia/Shanghai
+```
 
-这些接口会被 `/admin/usage` 页里的趋势图、模型/分组/端点分布、用户消费排行等组件复用。
+- 本地 SQLite 查询使用中国时间半开区间：`[开始日 00:00:00, 结束日次日 00:00:00)`。
+- 远端 PostgreSQL 查询将同一边界转换为 UTC 后使用半开区间。
+- 切账时间只限制账务、历史分类、告警和对账；官方用量始终展示用户选择的完整中国自然日。
 
-| 模块 | 方法 | 接口 | 主要用途 | 常见参数 | 主要统计/返回内容 |
-|---|---:|---|---|---|---|
-| 总览 | GET | `/admin/dashboard/stats` | 后台 Dashboard 总览 | 无或时间参数 | 请求、用户、Token、费用等汇总 |
-| 实时指标 | GET | `/admin/dashboard/realtime` | 实时统计 | 无 | 实时请求/流量/状态指标 |
-| 用量趋势 | GET | `/admin/dashboard/trend` | 趋势图 | `start_date`, `end_date`, `granularity`, 筛选条件 | 按日/小时的请求、Token、费用趋势 |
-| 快照 V2 | GET | `/admin/dashboard/snapshot-v2` | 一次性获取统计快照 | `start_date`, `end_date`, `granularity`, `user_id`, `api_key_id`, `model`, `group_id`, `request_type`, `billing_type` 等 | 汇总卡片、趋势、模型分布、分组分布、端点分布 |
-| 模型统计 | GET | `/admin/dashboard/models` | 模型分布/排行 | `start_date`, `end_date`, `model_source`, 其他筛选 | 请求模型、上游模型、映射模型的请求数、Token、费用、账号成本 |
-| 分组统计 | GET | `/admin/dashboard/groups` | 分组分布 | `start_date`, `end_date`, 其他筛选 | 分组请求数、Token、实际费用、标准费用、账号成本 |
-| 用户拆分 | GET | `/admin/dashboard/user-breakdown` | 图表行展开后的用户明细 | `start_date`, `end_date`, `model`, `model_source`, `group_id`, `endpoint`, `endpoint_type` 等 | 某模型/分组/端点下的用户请求、Token、费用 |
-| 用户消费排行 | GET | `/admin/dashboard/users-ranking` | 用户消费排行 | `start_date`, `end_date`, 筛选条件 | 用户、请求数、Token、实际消费 |
-| 用户趋势 | GET | `/admin/dashboard/users-trend` | 用户维度趋势 | `start_date`, `end_date`, `user_id` 等 | 用户请求/Token/费用趋势 |
-| API Key 趋势 | GET | `/admin/dashboard/api-keys-trend` | API Key 维度趋势 | `start_date`, `end_date`, `api_key_id` 等 | API Key 请求/Token/费用趋势 |
-| 批量用户用量 | POST | `/admin/dashboard/users-usage` | 批量查询用户用量 | `user_ids` | 多用户用量统计 |
-| 批量 API Key 用量 | POST | `/admin/dashboard/api-keys-usage` | 批量查询 API Key 用量 | `api_key_ids` | 多 API Key 用量统计 |
+## 3. 官方 Admin API
 
-## Usage Dashboard 普通用量接口
+后端通过 `SUB2API_ADMIN_API_URL` 和 `SUB2API_ADMIN_API_KEY` 调用以下接口。
 
-这些是普通用量页/用户侧用量统计接口，同样属于 Sub2API 用量统计能力。
+### 3.1 用量趋势
 
-| 模块 | 方法 | 接口 | 主要用途 | 常见参数 | 主要统计/返回内容 |
-|---|---:|---|---|---|---|
-| 用户用量汇总 | GET | `/usage/stats` | 查询当前用户或指定 API Key 的用量汇总 | `period` 或 `start_date`, `end_date`, `api_key_id` | 请求数、Token、费用、耗时 |
-| 用户 Dashboard 总览 | GET | `/usage/dashboard/stats` | 用户侧 Dashboard 汇总 | 无或时间参数 | 用户侧总览统计 |
-| 用户趋势 | GET | `/usage/dashboard/trend` | 用户侧趋势图 | `start_date`, `end_date`, `granularity`, `api_key_id` | 请求/Token/费用趋势 |
-| 用户模型统计 | GET | `/usage/dashboard/models` | 用户侧模型分布 | `start_date`, `end_date`, `api_key_id` | 模型请求、Token、费用 |
-| 用户快照 V2 | GET | `/usage/dashboard/snapshot-v2` | 用户侧统计快照 | `start_date`, `end_date`, `granularity`, `api_key_id` | 汇总、趋势、分布 |
-| 批量 API Key 用量 | POST | `/usage/dashboard/api-keys-usage` | 用户侧批量 API Key 用量 | `api_key_ids` | 多 Key 请求、Token、费用 |
-| 用户错误列表 | GET | `/usage/errors` | 查询当前用户错误请求 | `page`, `page_size`, 筛选条件 | 错误请求列表、分页 |
-| 用户错误详情 | GET | `/usage/errors/{id}` | 查询错误详情 | `id` | 错误详情 |
+```http
+GET /api/v1/admin/dashboard/trend
+```
 
-## Ops / 错误统计接口
+固定参数：
 
-`/admin/usage` 的错误 Tab 使用其中一部分；Ops 页面也复用这些统计接口。
+```text
+start_date
+end_date
+timezone=Asia/Shanghai
+granularity=day
+```
 
-| 模块 | 方法 | 接口 | 主要用途 | 常见参数 | 主要统计/返回内容 |
-|---|---:|---|---|---|---|
-| Ops 总览 | GET | `/admin/ops/dashboard/overview` | 运维总览 | 时间范围、平台、分组 | 成功数、错误数、限流数、Token、延迟 |
-| Ops 快照 V2 | GET | `/admin/ops/dashboard/snapshot-v2` | 运维统计快照 | 时间范围、平台、分组 | 吞吐、错误、延迟、Token、账号状态等 |
-| 吞吐趋势 | GET | `/admin/ops/dashboard/throughput-trend` | QPS/TPS/请求趋势 | 时间范围、平台、分组 | 吞吐趋势 |
-| 延迟直方图 | GET | `/admin/ops/dashboard/latency-histogram` | 延迟分布 | 时间范围、平台、分组 | P50/P90/P95/P99、直方图 |
-| 错误趋势 | GET | `/admin/ops/dashboard/error-trend` | 错误趋势 | 时间范围、平台、分组 | 错误数、429/529、业务限流趋势 |
-| 错误分布 | GET | `/admin/ops/dashboard/error-distribution` | 错误分类分布 | 时间范围、平台、分组 | 错误类型/分类占比 |
-| OpenAI Token 统计 | GET | `/admin/ops/dashboard/openai-token-stats` | OpenAI Token 统计 | 时间范围、平台、分组 | Token 消耗统计 |
-| 并发统计 | GET | `/admin/ops/concurrency` | 系统/平台并发 | `platform`, `group_id` | 并发、队列等 |
-| 用户并发统计 | GET | `/admin/ops/user-concurrency` | 用户并发 | 无或筛选条件 | 用户并发统计 |
-| 账号可用性 | GET | `/admin/ops/account-availability` | 账号池可用性 | `platform`, `group_id` | 可用/异常/停用账号数量 |
-| 实时流量摘要 | GET | `/admin/ops/realtime-traffic` | 实时流量 | 时间窗口参数 | 实时请求、Token、错误、吞吐 |
-| 错误日志列表 | GET | `/admin/ops/errors` | 后台错误日志列表 | `page`, `page_size`, `type`, `category`, `status_code`, `sort_by`, `sort_order` | 错误明细、分页 |
-| 错误详情 | GET | `/admin/ops/errors/{id}` | 错误日志详情 | `id` | 请求 ID、用户/账号、模型、端点、状态、消息 |
-| 请求错误列表 | GET | `/admin/ops/request-errors` | 请求错误列表 | 分页和筛选 | 请求侧错误 |
-| 请求错误详情 | GET | `/admin/ops/request-errors/{id}` | 请求错误详情 | `id` | 请求错误详情 |
-| 关联上游错误 | GET | `/admin/ops/request-errors/{id}/upstream-errors` | 查看请求关联的上游错误 | `id` | 上游错误列表 |
-| 上游错误列表 | GET | `/admin/ops/upstream-errors` | 上游错误列表 | 分页和筛选 | 上游错误 |
-| 上游错误详情 | GET | `/admin/ops/upstream-errors/{id}` | 上游错误详情 | `id` | 上游错误详情 |
-| QPS WebSocket | WS | `/api/v1/admin/ops/ws/qps` | 实时 QPS 推送 | 登录态 | 实时 QPS 数据流 |
+映射字段：
 
-## 页面表格字段参考
+```text
+date
+requests
+input_tokens
+output_tokens
+cache_creation_tokens
+cache_read_tokens
+total_tokens
+cost
+actual_cost
+```
 
-| 表格 | 字段 |
-|---|---|
-| 用量明细表 | 用户、API Key、账号、模型、Reasoning Effort、端点、分组、类型、计费模式、Token、费用、首 Token、耗时、时间、User Agent、IP 地址 |
-| 用量 Excel 导出 | 时间、用户、API Key、账号、模型、上游模型、Reasoning Effort、分组、入站端点、上游端点、类型、输入 Token、输出 Token、缓存读取 Token、缓存创建 Token、输入成本、输出成本、缓存读取成本、缓存创建成本、用户倍率、账号倍率、原始成本、用户计费、账号计费、首 Token、耗时、Request ID、User Agent、IP 地址 |
-| 错误列表 | 用户、API Key、账号、平台、模型、端点、分组、类型、分类、状态码、错误消息、时间、User Agent、IP、操作 |
-| 模型分布表 | 模型、请求数、Token、Actual、账号成本、Standard |
-| 分组分布表 | 分组、请求数、Token、Actual、账号成本、Standard |
-| 端点分布表 | 端点、请求数、Token、Actual、Standard |
+首页请求数、Token、标准消费、实际消费及用量趋势均来自该接口。
 
+### 3.2 requested 模型统计
+
+```http
+GET /api/v1/admin/dashboard/models
+```
+
+固定参数：
+
+```text
+start_date
+end_date
+timezone=Asia/Shanghai
+model_source=requested
+```
+
+模型榜按 `total_tokens` 降序展示。requested 模型为空时，沿用 Sub2API 官方回退规则：使用实际 `model` 值。
+
+### 3.3 用户实际消费排行
+
+```http
+GET /api/v1/admin/dashboard/users-ranking
+```
+
+固定传日期、时区和 `limit`。该榜按官方 `actual_cost` 口径展示，不使用 `cost` 或本地调额金额代替。
+
+### 3.4 用户 Token 排行和指定模型用户排行
+
+```http
+GET /api/v1/admin/dashboard/user-breakdown
+```
+
+固定参数：
+
+```text
+start_date
+end_date
+timezone=Asia/Shanghai
+model_source=requested
+sort_by=total_tokens
+limit
+```
+
+指定模型时额外传：
+
+```text
+model=<请求模型>
+```
+
+首页用户 Token 榜与模型页指定模型用户榜均使用该接口；不得与用户实际消费榜混为同一榜单。
+
+## 4. 指标定义
+
+### 4.1 Token
+
+总 Token 完全沿用官方字段，并应等于：
+
+```text
+input_tokens
++ output_tokens
++ cache_creation_tokens
++ cache_read_tokens
+```
+
+不同官方接口可能把两类缓存 Token 合并为 `cache_tokens` 返回；审计系统只做字段映射，不用自定义 SQL重新计算官方排行。
+
+### 4.2 消费
+
+- `standard_cost` 映射官方 `cost`。
+- `actual_cost` 映射官方 `actual_cost`。
+- 用户消费排行只按 `actual_cost`。
+- 模型页同时展示标准消费和实际消费，但默认排序仍为 Token。
+
+### 4.3 本地财务
+
+- `cash_total`：切账后范围内，本系统成功调增单的 `cash_amount`。
+- `gift_total`：同范围成功调增单的赠送额度。
+- `adjustment_in_total`：成功调增金额合计。
+- `adjustment_out_total`：成功调减金额绝对值合计。
+- `adjustment_net_total`：调增减去调减。
+- 实收入账用户榜只按 `cash_amount`，不混入赠送、总调额或外部事件。
+
+## 5. 审计系统接口
+
+### 首页
+
+```http
+GET /api/v1/dashboard?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD&limit=10
+```
+
+- 日期均缺省时默认今天。
+- 只传一个日期、日期逆序或非法日期返回 `422`。
+- `limit` 默认 10，最大 100。
+- 响应分为 `finance`、`usage`、`balance`、`rankings`、`recent_adjustments` 和 `alerts`。
+
+### 模型统计
+
+```http
+GET /api/v1/sub2api/model-stats?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD&limit=20
+GET /api/v1/sub2api/model-stats?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD&model=<模型>&limit=20
+```
+
+- 未指定模型：返回 requested 模型统计。
+- 指定模型：返回该请求模型下的用户 Token 排行。
+- 页面不混入充值、赠送或账务汇总。
+
+## 6. 官方统计失败策略
+
+以下情况统一返回：
+
+```text
+HTTP 502
+code=SUB2API_STATS_UNAVAILABLE
+```
+
+包括：
+
+- Admin API 网络或超时失败。
+- Admin API 返回非成功 HTTP 状态。
+- 响应顶层或数据字段形态不符合已确认结构。
+- 必需行字段缺失。
+
+前端必须显示“Sub2API 官方统计暂不可用”，清空旧统计和图表，不得把失败显示为 0。后端只记录路径、HTTP 状态、异常类型、实际字段键等安全结构化信息，不记录密码、API Key、Authorization 或完整敏感响应。

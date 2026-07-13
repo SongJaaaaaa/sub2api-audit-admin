@@ -19,6 +19,11 @@ class AuditLogController extends Controller
             'admin_id' => $req->query('admin_id', 0),
             'from' => $req->query('from', ''),
             'to' => $req->query('to', ''),
+            'target_type' => $req->query('target_type', ''),
+            'target_id' => $req->query('target_id', 0),
+            'ip' => $req->query('ip', ''),
+            'keyword' => $req->query('keyword', ''),
+            'risk' => $req->query('risk', ''),
         ], $page, $pageSize));
     }
 }

@@ -2,206 +2,139 @@
 
 namespace Tests\Feature;
 
+use App\Exceptions\Sub2ApiStatsException;
+use App\Models\LedgerAdjustment;
 use App\Services\Sub2Api\Sub2ApiAdminClient;
 use App\Services\Sub2Api\Sub2ApiReadRepository;
+use App\Support\ChinaDateRange;
+use App\Support\Sub2ApiNoteTag;
 use Carbon\CarbonImmutable;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Schema;
+use Tests\Support\Sub2ApiTestDatabase;
 use Tests\TestCase;
 
 class Sub2ApiClientTest extends TestCase
 {
+    use RefreshDatabase;
+    use Sub2ApiTestDatabase;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        config()->set('database.connections.sub2api', [
-            'driver' => 'sqlite',
-            'database' => ':memory:',
-            'prefix' => '',
-            'foreign_key_constraints' => false,
-        ]);
-        DB::purge('sub2api');
-
-        $this->createSub2ApiTables();
+        $this->setUpSub2ApiDatabase();
+        config()->set('sub2api.admin_api.base_url', 'https://sub2api.test');
+        config()->set('sub2api.admin_api.key', 'test-key');
     }
 
     protected function tearDown(): void
     {
-        DB::disconnect('sub2api');
+        $this->tearDownSub2ApiDatabase();
 
         parent::tearDown();
     }
 
-    public function test_user_search_returns_public_user_fields(): void
+    public function test_user_search_returns_only_public_fields(): void
     {
-        DB::connection('sub2api')->table('users')->insert([
-            [
-                'id' => 1001,
-                'email' => 'alpha@example.com',
-                'username' => 'alpha',
-                'role' => 'user',
-                'balance' => '12.34',
-                'total_recharged' => '100.00',
-                'status' => 'active',
-                'created_at' => '2026-07-01 00:00:00',
-                'updated_at' => '2026-07-02 00:00:00',
-                'deleted_at' => null,
-            ],
-            [
-                'id' => 1002,
-                'email' => 'beta@example.com',
-                'username' => 'beta',
-                'role' => 'user',
-                'balance' => '0.00',
-                'total_recharged' => '0.00',
-                'status' => 'disabled',
-                'created_at' => '2026-07-01 00:00:00',
-                'updated_at' => '2026-07-02 00:00:00',
-                'deleted_at' => null,
-            ],
+        $this->insertSub2ApiUser([
+            'balance' => '12.34',
+            'total_recharged' => '100.00',
+        ]);
+        $this->insertSub2ApiUser([
+            'id' => 1002,
+            'email' => 'beta@example.com',
+            'username' => 'beta',
+            'status' => 'disabled',
         ]);
 
         $repo = app(Sub2ApiReadRepository::class);
         $res = $repo->users(['keyword' => 'alpha'], 1, 20);
+        $detail = $repo->user(1001);
 
         $this->assertSame(1, $res['total']);
+        $this->assertSame(1, $res['summary']['user_count']);
+        $this->assertSame(1, $res['summary']['active_count']);
+        $this->assertSame(0, $res['summary']['disabled_count']);
+        $this->assertSame('12.34', $res['summary']['balance_total']);
+        $this->assertSame(0, $res['summary']['negative_balance_count']);
+        $this->assertSame(0, $res['summary']['zero_balance_count']);
+        $this->assertSame([
+            'id',
+            'email',
+            'username',
+            'role',
+            'balance',
+            'total_recharged',
+            'status',
+            'created_at',
+            'updated_at',
+        ], array_keys($res['items'][0]));
         $this->assertSame(1001, $res['items'][0]['id']);
         $this->assertSame('alpha@example.com', $res['items'][0]['email']);
-        $this->assertSame('alpha', $res['items'][0]['username']);
         $this->assertSame('12.34', $res['items'][0]['balance']);
-        $this->assertSame('100.00', $res['items'][0]['total_recharged']);
-        $this->assertSame('active', $res['items'][0]['status']);
-        $this->assertArrayNotHasKey('password', $res['items'][0]);
-
-        $detail = $repo->user(1001);
+        $this->assertSame('100', $res['items'][0]['total_recharged']);
         $this->assertSame('alpha@example.com', $detail['email']);
     }
 
-    public function test_usage_stats_group_by_model(): void
+    public function test_active_balance_snapshot_excludes_admin_disabled_and_deleted_users(): void
     {
-        DB::connection('sub2api')->table('usage_logs')->insert([
-            [
-                'id' => 1,
-                'user_id' => 1001,
-                'model' => 'gpt-5.5',
-                'total_cost' => '2.50',
-                'actual_cost' => '2.00',
-                'created_at' => '2026-07-05 01:00:00',
-            ],
-            [
-                'id' => 2,
-                'user_id' => 1002,
-                'model' => 'gpt-5.5',
-                'total_cost' => '3.50',
-                'actual_cost' => '3.00',
-                'created_at' => '2026-07-05 02:00:00',
-            ],
-            [
-                'id' => 3,
-                'user_id' => 1001,
-                'model' => 'claude-opus-4-8',
-                'total_cost' => '1.00',
-                'actual_cost' => '0.80',
-                'created_at' => '2026-07-05 03:00:00',
-            ],
-        ]);
+        $this->insertSub2ApiUser(['id' => 1001, 'balance' => '12.5']);
+        $this->insertSub2ApiUser(['id' => 1002, 'email' => 'beta@example.com', 'username' => 'beta', 'balance' => '7.5']);
+        $this->insertSub2ApiUser(['id' => 1003, 'email' => 'admin@example.com', 'role' => 'admin', 'balance' => '100']);
+        $this->insertSub2ApiUser(['id' => 1004, 'email' => 'disabled@example.com', 'status' => 'disabled', 'balance' => '100']);
+        $this->insertSub2ApiUser(['id' => 1005, 'email' => 'deleted@example.com', 'balance' => '100', 'deleted_at' => '2026-07-01 00:00:00']);
 
-        $repo = app(Sub2ApiReadRepository::class);
-        $from = CarbonImmutable::parse('2026-07-05 00:00:00');
-        $to = CarbonImmutable::parse('2026-07-06 00:00:00');
+        $res = app(Sub2ApiReadRepository::class)->activeUserBalanceSnapshot();
 
-        $summary = $repo->usageSummary($from, $to, []);
-        $ranking = $repo->modelRanking($from, $to, [], 10);
-        $userModels = $repo->userModelRanking($from, $to, [], 10);
-
-        $this->assertSame(3, $summary['request_count']);
-        $this->assertSame(2, $summary['user_count']);
-        $this->assertSame(2, $summary['model_count']);
-        $this->assertSame('7', $summary['total_cost']);
-        $this->assertSame('5.8', $summary['actual_cost']);
-        $this->assertSame('gpt-5.5', $ranking[0]['model']);
-        $this->assertSame(2, $ranking[0]['request_count']);
-        $this->assertSame(2, $ranking[0]['user_count']);
-        $this->assertSame('6', $ranking[0]['total_cost']);
-        $this->assertSame(1002, $userModels[0]['user_id']);
-        $this->assertSame('gpt-5.5', $userModels[0]['model']);
-        $this->assertSame('3.5', $userModels[0]['total_cost']);
+        $this->assertSame(2, $res['active_user_count']);
+        $this->assertSame('20', $res['active_user_balance']);
+        $this->assertArrayHasKey('as_of', $res);
     }
 
-    public function test_recharge_source_counts_are_readable(): void
+    public function test_remote_events_use_utc_half_open_boundaries(): void
     {
-        DB::connection('sub2api')->table('payment_orders')->insert([
-            [
-                'id' => 1,
-                'user_id' => 1001,
-                'amount' => '20.00',
-                'order_type' => 'balance',
-                'status' => 'COMPLETED',
-                'completed_at' => '2026-07-05 01:00:00',
-                'created_at' => '2026-07-05 00:50:00',
-            ],
-        ]);
+        $this->insertSub2ApiUser();
         DB::connection('sub2api')->table('redeem_codes')->insert([
-            [
-                'id' => 10,
-                'type' => 'admin_balance',
-                'value' => '50.00',
-                'status' => 'used',
-                'used_by' => 1001,
-                'used_at' => '2026-07-05 02:00:00',
-                'notes' => '充值',
-                'created_at' => '2026-07-05 01:50:00',
-            ],
-            [
-                'id' => 11,
-                'type' => 'balance',
-                'value' => '10.00',
-                'status' => 'used',
-                'used_by' => 1002,
-                'used_at' => '2026-07-05 03:00:00',
-                'notes' => '兑换',
-                'created_at' => '2026-07-05 02:50:00',
-            ],
+            $this->redeem(1, '2026-07-01 15:59:59'),
+            $this->redeem(2, '2026-07-01 16:00:00'),
+            $this->redeem(3, '2026-07-02 15:59:59.999999'),
+            $this->redeem(4, '2026-07-02 16:00:00'),
         ]);
 
-        $summary = app(Sub2ApiReadRepository::class)->rechargeSourceSummary();
+        $start = CarbonImmutable::parse('2026-07-02 00:00:00', 'Asia/Shanghai')->utc();
+        $end = CarbonImmutable::parse('2026-07-03 00:00:00', 'Asia/Shanghai')->utc();
+        $events = app(Sub2ApiReadRepository::class)->adminAdjustmentEvents($start, $end);
 
-        $this->assertSame(1, $summary['payment_orders_completed']);
-        $this->assertSame([
-            ['type' => 'admin_balance', 'count' => 1],
-            ['type' => 'balance', 'count' => 1],
-        ], $summary['redeem_codes_used']);
+        $this->assertSame([2, 3], collect($events)->pluck('remote_event_id')->all());
     }
 
-    public function test_admin_client_calls_users_api_without_leaking_key(): void
+    public function test_source_lookup_requires_user_and_complete_idempotency_key(): void
     {
-        config()->set('sub2api.admin_api.base_url', 'https://sub2api.test');
-        config()->set('sub2api.admin_api.key', 'secret-key');
+        $exact = Sub2ApiNoteTag::make('ADJ-SAME', 'idem-1');
+        $prefix = Sub2ApiNoteTag::make('ADJ-SAME', 'idem-10');
+        $wrong = Sub2ApiNoteTag::make('ADJ-SAME', 'different-key');
 
-        Http::fake([
-            'https://sub2api.test/api/v1/admin/users?page=1&page_size=20' => Http::response([
-                'data' => [
-                    ['id' => 1001, 'email' => 'alpha@example.com'],
-                ],
-            ]),
+        DB::connection('sub2api')->table('redeem_codes')->insert([
+            $this->redeem(10, '2026-07-01 16:00:00', ['used_by' => 1001, 'notes' => $exact]),
+            $this->redeem(11, '2026-07-01 16:01:00', ['used_by' => 1002, 'notes' => $exact]),
+            $this->redeem(12, '2026-07-01 16:02:00', ['used_by' => 1001, 'notes' => $prefix]),
+            $this->redeem(13, '2026-07-01 16:03:00', ['used_by' => 1001, 'notes' => $wrong]),
         ]);
 
-        $res = app(Sub2ApiAdminClient::class)->users(1, 20);
+        $rows = app(Sub2ApiReadRepository::class)->findAdminAdjustmentSources(1001, 'idem-1');
 
-        $this->assertSame(1001, $res['data'][0]['id']);
-        Http::assertSent(fn ($request): bool => $request->url() === 'https://sub2api.test/api/v1/admin/users?page=1&page_size=20'
-            && $request->hasHeader('x-api-key', 'secret-key'));
+        $this->assertSame([10], collect($rows)->pluck('id')->all());
+        $this->assertSame('idem-1', Sub2ApiNoteTag::idempotencyKey($rows[0]['notes']));
     }
 
-    public function test_admin_client_sends_idempotency_key_for_balance_update(): void
+    public function test_admin_client_sends_full_idempotency_key_for_balance_update(): void
     {
-        config()->set('sub2api.admin_api.base_url', 'https://sub2api.test');
-        config()->set('sub2api.admin_api.key', 'secret-key');
-
         Http::fake([
             'https://sub2api.test/api/v1/admin/users/1001/balance' => Http::response([
+                'code' => 0,
                 'data' => ['id' => 1001, 'balance' => '88.00'],
             ]),
         ]);
@@ -210,35 +143,80 @@ class Sub2ApiClientTest extends TestCase
             1001,
             '10.00',
             'increment',
-            'ledger_no=ADJ202607050001',
-            'idem-1001',
+            Sub2ApiNoteTag::make('ADJ-1', 'idem-1001-full'),
+            'idem-1001-full',
         );
 
-        Http::assertSent(fn ($request): bool => $request->url() === 'https://sub2api.test/api/v1/admin/users/1001/balance'
-            && $request->hasHeader('Idempotency-Key', 'idem-1001')
-            && (float) $request['balance'] === 10.0
-            && $request['operation'] === 'add');
+        Http::assertSent(fn (Request $req): bool => $req->url() === 'https://sub2api.test/api/v1/admin/users/1001/balance'
+            && $req->hasHeader('x-api-key', 'test-key')
+            && $req->hasHeader('Idempotency-Key', 'idem-1001-full')
+            && (float) $req['balance'] === 10.0
+            && $req['operation'] === 'add');
     }
 
-    public function test_sub2api_balance_history_route_returns_admin_api_data(): void
+    public function test_stats_wrapper_requires_success_code(): void
+    {
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/dashboard/trend*' => Http::response([
+                'code' => 1,
+                'data' => ['trend' => []],
+            ]),
+        ]);
+
+        $this->expectException(Sub2ApiStatsException::class);
+        $this->expectExceptionMessage('Sub2API 官方统计响应结构异常');
+        app(Sub2ApiAdminClient::class)->dashboardTrend(
+            ChinaDateRange::make('2026-07-01', '2026-07-02'),
+        );
+    }
+
+    public function test_stats_wrapper_rejects_rows_with_missing_fields(): void
+    {
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/dashboard/trend*' => Http::response([
+                'code' => 0,
+                'data' => [
+                    'trend' => [[
+                        'date' => '2026-07-01',
+                        'requests' => 1,
+                    ]],
+                ],
+            ]),
+        ]);
+
+        $this->expectException(Sub2ApiStatsException::class);
+        $this->expectExceptionMessage('Sub2API 官方统计响应字段异常');
+        app(Sub2ApiAdminClient::class)->dashboardTrend(
+            ChinaDateRange::make('2026-07-01', '2026-07-02'),
+        );
+    }
+
+    public function test_admin_client_users_and_balance_history_routes_keep_working(): void
     {
         $this->withoutMiddleware();
-        config()->set('sub2api.admin_api.base_url', 'https://sub2api.test');
-        config()->set('sub2api.admin_api.key', 'secret-key');
-
         Http::fake([
+            'https://sub2api.test/api/v1/admin/users?page=1&page_size=20' => Http::response([
+                'data' => [['id' => 1001, 'email' => 'alpha@example.com']],
+            ]),
             'https://sub2api.test/api/v1/admin/users/1001' => Http::response([
                 'data' => ['id' => 1001, 'email' => 'alpha@example.com', 'balance' => '45.00'],
             ]),
             'https://sub2api.test/api/v1/admin/users/1001/balance-history?page=1&page_size=8' => Http::response([
                 'data' => [
-                    'items' => [
-                        ['id' => 88, 'type' => 'admin_balance', 'value' => -5, 'status' => 'used', 'used_at' => '2026-07-07T00:00:00+08:00'],
-                    ],
+                    'items' => [[
+                        'id' => 88,
+                        'type' => 'admin_balance',
+                        'value' => -5,
+                        'status' => 'used',
+                        'used_at' => '2026-07-07T00:00:00+08:00',
+                    ]],
                     'total' => 1,
                 ],
             ]),
         ]);
+
+        $users = app(Sub2ApiAdminClient::class)->users(1, 20);
+        $this->assertSame(1001, $users['data'][0]['id']);
 
         $this->getJson('/api/v1/sub2api/users/1001/balance-history?page=1&page_size=8')
             ->assertOk()
@@ -250,90 +228,70 @@ class Sub2ApiClientTest extends TestCase
             ->assertJsonPath('items.0.after_balance', '45.00');
     }
 
-    public function test_sub2api_routes_return_real_repository_data(): void
+    public function test_balance_history_does_not_reuse_source_linked_adjustment_by_legacy_key(): void
     {
         $this->withoutMiddleware();
-
-        DB::connection('sub2api')->table('users')->insert([
-            'id' => 1001,
-            'email' => 'alpha@example.com',
-            'username' => 'alpha',
-            'role' => 'user',
-            'balance' => '12.34',
-            'total_recharged' => '100.00',
-            'status' => 'active',
-            'created_at' => '2026-07-01 00:00:00',
-            'updated_at' => '2026-07-02 00:00:00',
-            'deleted_at' => null,
+        $adj = LedgerAdjustment::query()->create([
+            'ledger_no' => 'ADJ-SOURCE-88',
+            'idempotency_key' => 'same-key',
+            'sub2api_user_id' => 1001,
+            'sub2api_source_id' => 88,
+            'operation' => LedgerAdjustment::OP_INCREMENT,
+            'amount' => '5.00',
+            'status' => LedgerAdjustment::STATUS_SUCCEEDED,
+            'adjust_reason' => '测试关联',
+            'confirmed_at' => '2026-07-07 08:00:00',
         ]);
-        DB::connection('sub2api')->table('usage_logs')->insert([
-            'id' => 1,
-            'user_id' => 1001,
-            'model' => 'gpt-5.5',
-            'total_cost' => '2.50',
-            'actual_cost' => '2.00',
-            'created_at' => '2026-07-05 01:00:00',
+        $notes = Sub2ApiNoteTag::make('REMOTE', 'same-key');
+
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/users/1001' => Http::response([
+                'data' => ['id' => 1001, 'email' => 'alpha@example.com', 'balance' => '50.00'],
+            ]),
+            'https://sub2api.test/api/v1/admin/users/1001/balance-history?page=1&page_size=20' => Http::response([
+                'data' => [
+                    'items' => [
+                        [
+                            'id' => 89,
+                            'type' => 'admin_balance',
+                            'value' => 2,
+                            'status' => 'used',
+                            'used_at' => '2026-07-07T09:00:00+08:00',
+                            'notes' => $notes,
+                        ],
+                        [
+                            'id' => 88,
+                            'type' => 'admin_balance',
+                            'value' => 5,
+                            'status' => 'used',
+                            'used_at' => '2026-07-07T08:00:00+08:00',
+                            'notes' => $notes,
+                        ],
+                    ],
+                    'total' => 2,
+                ],
+            ]),
         ]);
 
-        $this->getJson('/api/v1/sub2api/users?keyword=alpha')
-            ->assertOk()
-            ->assertJsonPath('items.0.email', 'alpha@example.com');
+        $res = $this->getJson('/api/v1/sub2api/users/1001/balance-history')->assertOk();
 
-        $this->getJson('/api/v1/sub2api/model-stats?from=2026-07-05 00:00:00&to=2026-07-06 00:00:00')
-            ->assertOk()
-            ->assertJsonPath('summary.request_count', 1)
-            ->assertJsonPath('models.0.model', 'gpt-5.5')
-            ->assertJsonPath('user_models.0.user_email', 'alpha@example.com');
-
-        $this->getJson('/api/v1/sub2api/model-stats?from=2026-07-05 00:00:00&to=2026-07-06 00:00:00&user_keyword=alpha@example.com')
-            ->assertOk()
-            ->assertJsonPath('summary.request_count', 1)
-            ->assertJsonPath('user_models.0.user_id', 1001);
+        $res->assertJsonPath('items.0.id', 89)
+            ->assertJsonPath('items.0.ledger_adjustment_id', null)
+            ->assertJsonPath('items.1.id', 88)
+            ->assertJsonPath('items.1.ledger_adjustment_id', $adj->id);
     }
 
-    private function createSub2ApiTables(): void
+    private function redeem(int $id, string $usedAt, array $values = []): array
     {
-        Schema::connection('sub2api')->create('users', function ($table): void {
-            $table->integer('id')->primary();
-            $table->string('email');
-            $table->string('username')->nullable();
-            $table->string('role')->nullable();
-            $table->decimal('balance', 16, 2)->default(0);
-            $table->decimal('total_recharged', 16, 2)->default(0);
-            $table->string('status')->nullable();
-            $table->timestamp('created_at')->nullable();
-            $table->timestamp('updated_at')->nullable();
-            $table->timestamp('deleted_at')->nullable();
-        });
-
-        Schema::connection('sub2api')->create('usage_logs', function ($table): void {
-            $table->integer('id')->primary();
-            $table->integer('user_id');
-            $table->string('model');
-            $table->decimal('total_cost', 18, 6)->default(0);
-            $table->decimal('actual_cost', 18, 6)->default(0);
-            $table->timestamp('created_at');
-        });
-
-        Schema::connection('sub2api')->create('payment_orders', function ($table): void {
-            $table->integer('id')->primary();
-            $table->integer('user_id')->nullable();
-            $table->decimal('amount', 16, 2)->default(0);
-            $table->string('order_type')->nullable();
-            $table->string('status')->nullable();
-            $table->timestamp('completed_at')->nullable();
-            $table->timestamp('created_at')->nullable();
-        });
-
-        Schema::connection('sub2api')->create('redeem_codes', function ($table): void {
-            $table->integer('id')->primary();
-            $table->string('type')->nullable();
-            $table->decimal('value', 16, 2)->default(0);
-            $table->string('status')->nullable();
-            $table->integer('used_by')->nullable();
-            $table->timestamp('used_at')->nullable();
-            $table->text('notes')->nullable();
-            $table->timestamp('created_at')->nullable();
-        });
+        return array_merge([
+            'id' => $id,
+            'type' => 'admin_balance',
+            'value' => '10.00',
+            'status' => 'used',
+            'used_by' => 1001,
+            'used_at' => $usedAt,
+            'notes' => Sub2ApiNoteTag::make('ADJ-'.$id, 'idem-'.$id),
+            'created_at' => $usedAt,
+        ], $values);
     }
 }

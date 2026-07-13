@@ -3,12 +3,17 @@ import { HistoryOutlined, MinusCircleOutlined, PlusCircleOutlined } from '@ant-d
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import { onMounted, reactive, ref } from 'vue'
-import { getSub2BalanceHistory, getSub2Users, type Sub2BalanceHistoryItem, type Sub2User } from '../api/sub2api'
+import { getSub2BalanceHistory, getSub2Users, type Sub2BalanceHistoryItem, type Sub2User, type UserSummary } from '../api/sub2api'
 
+import ColumnSettings from '../components/table/ColumnSettings.vue'
+import { useTableColumns } from '../composables/useTableColumns'
 const loading = ref(false)
 const historyLoading = ref(false)
 const drawerOpen = ref(false)
 const users = ref<Sub2User[]>([])
+const loaded = ref(false)
+const loadError = ref('')
+const summary = reactive<UserSummary>({ user_count: 0, active_count: 0, disabled_count: 0, balance_total: '0.00', average_balance: '0.00', negative_balance_count: 0, zero_balance_count: 0 })
 const history = ref<Sub2BalanceHistoryItem[]>([])
 const selectedUser = ref<Sub2User | null>(null)
 const historyPage = reactive({ current: 1, pageSize: 10, total: 0 })
@@ -19,17 +24,18 @@ const page = reactive({
   total: 0,
 })
 
-const columns = [
+const allColumns = [
   { title: 'ID', dataIndex: 'id', width: 90 },
   { title: '邮箱', dataIndex: 'email' },
   { title: '用户名', dataIndex: 'username' },
   { title: '角色', dataIndex: 'role', width: 100 },
   { title: '余额', dataIndex: 'balance', align: 'right', width: 120 },
-  { title: '累计充值', dataIndex: 'total_recharged', align: 'right', width: 130 },
+  { title: 'Sub2API 累计充值字段', dataIndex: 'total_recharged', align: 'right', width: 190 },
   { title: '状态', dataIndex: 'status', width: 110 },
   { title: '创建时间', dataIndex: 'created_at', width: 180 },
   { title: '操作', dataIndex: 'action', fixed: 'right', width: 90 },
 ] as const
+const { columns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('sub2api-users-columns', allColumns, 1200)
 
 async function loadUsers() {
   loading.value = true
@@ -41,7 +47,11 @@ async function loadUsers() {
     })
     users.value = res.items
     page.total = res.total
+    Object.assign(summary, res.summary)
+    loaded.value = true
+    loadError.value = ''
   } catch {
+    loadError.value = 'Sub2API 用户数据暂不可用，不展示零值。'
     message.error('读取 Sub2API 用户失败')
   } finally {
     loading.value = false
@@ -121,7 +131,7 @@ onMounted(loadUsers)
     <div class="pageHead">
       <div>
         <h1>Sub2API 用户</h1>
-        <p>只读数据源，点击"详情"可查看历史充值记录</p>
+        <p>只读数据源；Sub2API 累计充值字段不代表本地现金实收</p>
       </div>
       <a-input-search
         v-model:value="keyword"
@@ -133,6 +143,21 @@ onMounted(loadUsers)
       />
     </div>
 
+    <a-alert v-if="loadError" class="loadAlert" type="error" show-icon :message="loadError" />
+
+    <div v-if="loaded" class="summaryGrid">
+      <section><span>用户总数</span><strong>{{ summary.user_count }}</strong></section>
+      <section><span>启用用户数</span><strong class="positive">{{ summary.active_count }}</strong></section>
+      <section><span>禁用用户数</span><strong>{{ summary.disabled_count }}</strong></section>
+      <section><span>余额合计</span><strong class="money">{{ summary.balance_total }}</strong></section>
+      <section><span>平均余额</span><strong class="money">{{ summary.average_balance }}</strong></section>
+      <section><span>负余额用户数</span><strong class="negative">{{ summary.negative_balance_count }}</strong></section>
+      <section><span>零余额用户数</span><strong>{{ summary.zero_balance_count }}</strong></section>
+    </div>
+
+    <div class="tableTools">
+      <ColumnSettings v-model:value="visibleCols" v-model:width="tableWidth" :options="colOptions" @reset="resetColumns" />
+    </div>
     <a-table
       row-key="id"
       :columns="columns"
@@ -140,7 +165,7 @@ onMounted(loadUsers)
       :loading="loading"
       :locale="{ emptyText: '暂无 Sub2API 用户数据' }"
       :pagination="page"
-      :scroll="{ x: 1200 }"
+      :scroll="{ x: tableWidth }"
       @change="change"
     >
       <template #bodyCell="{ column, record }">
@@ -187,7 +212,7 @@ onMounted(loadUsers)
               <strong class="money">{{ Number(selectedUser.balance || 0).toFixed(2) }}</strong>
             </div>
             <div class="userOverviewStat">
-              <span>累计充值</span>
+              <span>Sub2API 累计充值字段</span>
               <strong>{{ Number(selectedUser.total_recharged || 0).toFixed(2) }}</strong>
             </div>
             <div class="userOverviewStat">
@@ -243,3 +268,14 @@ onMounted(loadUsers)
     </a-drawer>
   </section>
 </template>
+
+<style scoped>
+.loadAlert { margin-bottom: 14px; }
+.summaryGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.summaryGrid section { padding: 14px 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); }
+.summaryGrid span { display: block; color: var(--text-secondary, #7a8395); font-size: 12px; margin-bottom: 6px; }
+.summaryGrid strong { font-size: 21px; }
+.positive { color: #389e0d; } .negative { color: #cf1322; }
+@media (max-width: 760px) { .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .summaryGrid { grid-template-columns: 1fr; } }
+</style>

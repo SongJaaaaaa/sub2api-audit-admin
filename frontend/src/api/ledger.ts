@@ -5,6 +5,7 @@ export interface LedgerAdjustment {
   ledger_no: string
   idempotency_key: string
   sub2api_user_id: number
+  sub2api_source_id: number | null
   sub2api_user_email: string | null
   operation: 'increment' | 'decrement'
   amount: string
@@ -20,6 +21,23 @@ export interface LedgerAdjustment {
   called_at: string | null
   confirmed_at: string | null
   created_at: string | null
+  created_by: number | null
+  operator_name: string | null
+  operator_email: string | null
+}
+
+export interface LedgerSummary {
+  record_count: number
+  user_count: number
+  increment_total: string
+  decrement_total: string
+  net_total: string
+  cash_total: string
+  gift_total: string
+  amount_total?: string
+  oldest_created_at?: string | null
+  over_24h_count?: number
+  types?: Array<{ type: string; record_count: number; user_count: number; amount_total: string }>
 }
 
 export interface AdjustmentListRes {
@@ -27,6 +45,7 @@ export interface AdjustmentListRes {
   total: number
   page: number
   page_size: number
+  summary: LedgerSummary
 }
 
 export interface AdjustmentRes {
@@ -39,6 +58,12 @@ export function getLedgerAdjustments(params: {
   page_size: number
   status?: 'succeeded' | 'voided' | 'exception' | 'abnormal' | 'all'
   sub2api_user_id?: number | string
+  sub2api_user_email?: string
+  created_by?: number
+  start_date?: string
+  end_date?: string
+  min_amount?: string
+  max_amount?: string
 }) {
   return http.get<unknown, AdjustmentListRes>('/ledger-adjustments', { params })
 }

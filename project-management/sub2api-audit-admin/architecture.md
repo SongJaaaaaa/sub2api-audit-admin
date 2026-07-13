@@ -2,13 +2,14 @@
 
 ## 1. 架构目标
 
-新系统是纯管理后台，核心目标是:
+系统是只面向管理员的审计后台，核心目标是：
 
-- 看清 Sub2API 用户使用情况、模型消费、充值和额度使用排行。
-- 统一记录现金、额度、赠送额度、经营支出。
-- 从新系统调整 Sub2API 额度，并保证不会出现“新系统成功但 Sub2API 未入账”。
-- 对 Sub2API 外部直改进行扫描回收和补录。
-- 提供可追溯的附件、富文本、操作审计和对账闭环。
+- 从本系统安全调整 Sub2API 用户余额，并形成可追溯台账。
+- 正确区分实收、赠送、正向调额、负向调额和调额净额。
+- 完全沿用 Sub2API 官方口径展示请求、Token、标准消费、实际消费和模型统计。
+- 通过只读远端数据展示当前余额、历史余额事件并完成真实对账。
+- 对未关联成功单、外部后台调额和审计孤儿提供告警，不猜测、不自动认领。
+- 提供附件、富文本、操作审计、CSV 导出和桌面/H5 管理页面。
 
 ## 2. 系统上下文
 
@@ -16,150 +17,194 @@
 管理员浏览器
     |
     v
-Vue3 + AntDesignVue 管理前端
+Vue 3 + Ant Design Vue 前端
     |
     v
 Laravel API 后端
     |
-    |-- 本系统 PostgreSQL: 账本、附件索引、对账批次、审计日志
-    |-- Redis: 缓存、队列、锁
-    |-- 私有文件存储: 凭证图片、PDF、附件
+    |-- 本地 SQLite
+    |     调额账本 / 财务账 / 审计日志 / 切账设置 / 对账批次与差异
     |
-    |-- Sub2API PostgreSQL 只读连接: users / usage_logs / redeem_codes / payment_orders
+    |-- 私有文件存储
+    |     凭证图片 / PDF / 其他附件
     |
-    `-- Sub2API Admin API: 用户查询、额度调整、余额历史、账号统计
+    |-- Sub2API Admin API
+    |     用户查询 / 余额调整 / 二次确认 / 官方 Dashboard 统计
+    |
+    `-- Sub2API PostgreSQL 只读连接
+          用户余额 / 后台调额事件 / 兑换码 / 支付订单 / 历史账 / 对账
 ```
 
-## 3. 后端模块
+远端 PostgreSQL 不承担本系统主库职责，也不用于重新计算官方用量统计。
+
+## 3. 三类数据源边界
+
+| 数据源 | 负责内容 | 明确禁止 |
+|---|---|---|
+| 本地审计 SQLite | `cash_total`、赠送、调增、调减、净额、实收入账用户榜、调额记录、告警和对账结果 | 不得把远端外部调额或支付事件算成本地实收入账 |
+| Sub2API 官方 Admin API | 请求数、四类 Token、标准消费、实际消费、用户实际消费榜、用户 Token 榜、requested 模型榜 | 官方接口失败时不得降级为自定义 SQL |
+| Sub2API PostgreSQL 只读连接 | 当前普通启用用户余额、远端事件关联、历史余额事件、真实对账 | 不得直接写用户余额、兑换码、支付订单或其他业务表 |
+
+官方统计接口包括：
+
+```text
+/api/v1/admin/dashboard/trend
+/api/v1/admin/dashboard/models
+/api/v1/admin/dashboard/users-ranking
+/api/v1/admin/dashboard/user-breakdown
+```
+
+## 4. 时间与切账
+
+- 业务时区固定为 `Asia/Shanghai`。
+- 对外参数为包含首尾日期的 `start_date`、`end_date`。
+- 本地 SQLite 使用中国时间半开区间：`[开始日 00:00:00, 结束日次日 00:00:00)`。
+- 远端 PostgreSQL 查询将相同边界转换为 UTC 半开区间。
+- 官方 Admin API 传自然日日期和 `timezone=Asia/Shanghai`。
+- 切账时间保存在 `system_settings.ledger_cutover_at`，首次写入后永久锁定。
+- 切账只限制账务统计、历史/当前分类、告警和对账；官方用量仍按完整中国自然日展示。
+
+## 5. 后端模块
 
 | 模块 | 责任 |
 |---|---|
-| Admin Auth | 管理员登录、退出、当前管理员 |
-| Sub2API Integration | 只读库查询、Admin API client、连接健康检查 |
-| Ledger Adjustment | 强一致调额、正式成功单、作废异常单 |
-| Finance Ledger | 现金账、赠送额度账、经营账 |
-| Dashboard Stats | 首页排行榜、时间筛选、模型分类 |
-| Attachment | 私有附件上传、下载、权限控制 |
-| Rich Text | 富文本保存前过滤、展示安全处理 |
-| Reconcile | 中国时区日报、0 差异对账、差异明细 |
-| Audit | 所有危险操作留痕 |
+| Admin Auth | 管理员登录、退出、当前管理员和 Sanctum 鉴权 |
+| Sub2API Integration | 官方 Admin API client、只读库查询、用户和余额历史入口 |
+| Ledger Adjustment | 幂等调额、官方 API 调用、余额二次确认、远端 source ID 关联 |
+| Ledger Cutover | 首次锁定切账时间、账务查询求交集 |
+| Finance Ledger | 现金、赠送、经营账和调额明细 |
+| Dashboard Stats | 本地财务、官方用量、当前余额快照、四类独立排行和告警 |
+| Model Stats | requested 模型统计和指定模型下用户 Token 排行 |
+| Balance Events | 历史/当前远端余额事件只读列表和 CSV 导出 |
+| Reconcile | 中国业务日真实对账、七类差异、同日幂等补跑和 Scheduler |
+| Attachment / Rich Text | 私有附件、下载鉴权和富文本过滤 |
+| Audit | 调额、财务、附件和对账等管理操作留痕 |
 
-## 4. 前端模块
+## 6. 前端模块
 
-| 模块 | 页面 |
+| 模块 | 页面或能力 |
 |---|---|
-| Layout | 登录页、管理端布局、侧边栏、顶栏 |
-| ThemeResponsive | 图标主题按钮、跟随系统/浅色/深色主题、H5 抽屉菜单、移动端布局 |
-| Dashboard | 充值榜、额度使用榜、模型消费榜、时间筛选 |
-| UsersQuota | 用户搜索、当前额度、发起调额 |
-| Ledger | 额度调整记录、列显示配置、详情抽屉 |
-| GiftQuota | 赠送额度记录 |
-| OperationExpense | 平台经营账 |
-| Reconcile | 对账批次、差异结果 |
-| ExceptionCenter | 作废单、异常单、补充原因 |
-| AuditLog | 操作审计查询 |
-| Attachment | 上传、预览、下载 |
+| Layout | 登录、管理布局、侧边栏、顶栏、主题切换和 H5 抽屉 |
+| Dashboard | 三张 KPI、财务趋势、消费/Token 趋势、四类排行、最近调额和告警入口 |
+| Sub2API Users | 用户搜索、当前余额和发起调额 |
+| Model Stats | requested 模型榜、指定模型下用户 Token 榜 |
+| Ledger / Finance | 调额记录、现金账、赠送账和经营账 |
+| Balance Events | 历史账只读筛选、分页和 CSV 导出 |
+| Reconcile | 批次、状态、汇总和七类差异明细 |
+| Audit / Exception | 操作审计、失败和作废记录 |
+| Attachment | 私有附件上传、预览和下载 |
 
-前端必须把手机 H5 作为正式使用场景，不只按桌面后台验收。全局主题支持三种模式:
+金额、Token 和请求数使用各自的格式化方式，避免用金额格式展示 Token 或请求数。
 
-- 跟随系统。
-- 固定浅色。
-- 固定深色。
-
-主题入口使用图标按钮，系统模式用显示器图标，浅色用太阳图标，深色用月亮图标。主题选择保存在浏览器本地，刷新后保持管理员上次选择。
-
-## 5. 强一致调额链路
+## 7. 调额链路
 
 ```text
 管理员提交调额
     |
     v
-创建 ledger_adjustments 内部执行记录
+创建 ledger_adjustments 执行记录
     |
     v
-生成 ledger_no / idempotency_key / notes 标签
+生成 ledger_no、完整 idempotency_key 和审计备注标签
     |
     v
-调用 Sub2API POST /api/v1/admin/users/{id}/balance
+调用 Sub2API 官方余额调整 API
     |
     v
-二次查询用户详情或余额历史确认
+二次查询并确认用户余额
     |
-    |-- 成功 -> 写正式成功账本、现金账、赠送账、审计
+    |-- 未确认成功：记录失败/异常，不展示为成功
     |
-    `-- 失败/超时 -> 原单作废或异常，必须填写原因，不显示成功
+    `-- 确认成功：保存本地成功账本
+              |
+              v
+       按 used_by + 完整 idempotency_key 查询远端事件
+              |
+              |-- 唯一匹配：保存 sub2api_source_id
+              `-- 0 或多条：保留成功，source ID 为空并写 warning
 ```
 
-业务页面只展示二次确认后的成功记录为成功。内部执行中状态只用于后端流程，不作为成功账单展示。
+`ledger_no` 只用于展示，禁止作为关联或兜底匹配条件。
 
-## 6. 反向同步链路
+## 8. 首页统计口径
+
+### 财务
+
+- `cash_total`：切账后范围内，本系统成功调增单的 `cash_amount`。
+- `gift_total`：同范围成功调增单的赠送额度。
+- `adjustment_in_total`：成功正向调额合计。
+- `adjustment_out_total`：成功负向调额绝对值合计。
+- `adjustment_net_total`：有符号调额净额。
+- 实收入账用户榜只按 `cash_amount` 排序。
+
+### 用量
+
+- Token 等于输入、输出、缓存创建、缓存读取四类 Token 之和。
+- 用户实际消费榜按官方 `actual_cost`。
+- 用户 Token 榜与用户实际消费榜分开。
+- 模型固定为 requested 语义，默认按 Token 排序。
+
+### 当前余额
+
+只统计：
 
 ```text
-Sub2API 后台发生调额
-    |
-    v
-扫描 redeem_codes / balance-history / 可用外部记录
-    |
-    v
-识别 source_platform = sub2api 或 scanner
-    |
-    v
-写入基础记录
-    |
-    v
-管理员后续补充备注、富文本、附件
+role=user
+status=active
+deleted_at IS NULL
 ```
 
-反向同步不猜测原因。能识别的只写确定字段，不能确定的进入待补充状态。
+该卡片是当前快照，不受首页日期筛选影响。
 
-## 7. 数据源
+## 9. 历史账
 
-| 数据 | 来源 |
-|---|---|
-| 用户和当前额度 | Sub2API `users` / Admin users API |
-| 充值和兑换 | `payment_orders`、`redeem_codes` |
-| 调额回收 | `redeem_codes.type = admin_balance`、余额历史接口 |
-| 模型消费 | `usage_logs` |
-| 上游账号统计 | Admin accounts stats API |
-| 本系统正式账 | 本系统 PostgreSQL |
-| 附件 | 本系统私有存储 |
+历史账只读聚合以下远端事件：
 
-## 8. 部署架构
+- 后台余额调额 `admin_adjustment`
+- 余额兑换码 `balance_redeem`
+- 已完成且实际改变余额的支付订单 `payment_order`
 
-建议部署在和 Sub2API 同服务器或同内网:
+第一版不包含 `affiliate_balance`。关联状态为：
+
+- `linked`：已由 source ID 或旧记录完整幂等键关联本地单。
+- `audit_orphan`：带本审计系统完整标记，但找不到本地记录。
+- `external`：非本审计系统产生。
+
+历史页面不得认领、补录、修改或删除远端事件，也不得影响当前实收入账统计。
+
+## 10. 真实对账
+
+对账只比较本地成功调额与远端后台余额调额事件，匹配优先级为：
+
+1. `sub2api_source_id`
+2. 旧记录的 `used_by + 完整 idempotency_key`
+3. 禁止使用 `ledger_no`
+
+差异类型固定为：
 
 ```text
-Caddy / Nginx
-    |
-    |-- admin.example.com -> frontend dist
-    |
-    `-- api.example.com -> Laravel API
-
-Laravel API
-    |
-    |-- 本系统 PostgreSQL
-    |-- Redis
-    |-- Sub2API PostgreSQL 内网只读连接
-    `-- Sub2API Admin API 内网或白名单 HTTPS
+local_missing_remote
+remote_external
+remote_audit_orphan
+user_mismatch
+direction_mismatch
+amount_mismatch
+duplicate_source_link
 ```
 
-不要把 Sub2API PostgreSQL 直接暴露到公网。开发机访问时使用 SSH 隧道。
+状态固定为：
 
-## 9. 安全边界
+```text
+ok | warning | error
+```
 
-- 管理员才能登录。
-- 附件不放 public 目录。
-- 下载附件必须走后端鉴权。
-- 富文本入库前过滤危险标签和脚本。
-- 调额、作废、补账、删除附件都写审计。
-- Sub2API Admin API Key 只放 `.env` 或部署密钥，不提交到代码。
+同一中国业务日期只保留一个批次；手动补跑在事务内替换原差异明细。Scheduler 每天 `00:15 Asia/Shanghai` 处理上一自然日，并使用 `withoutOverlapping`。
 
-## 10. 时间和金额口径
+## 11. 安全边界
 
-- 业务时区: `Asia/Shanghai`
-- 数据库存储: 推荐 UTC
-- 展示和统计: 转中国时区
-- 金额: decimal，两位小数
-- 额度: decimal，两位小数
-- 汇率: 1 元 = 1 Sub2API 额度
-- 对账差异: 必须为 0
+- 只有管理员可访问业务接口。
+- Sub2API PostgreSQL 使用只读账号，不暴露公网。
+- Admin API Key 和数据库口令只放生产密钥配置，不提交仓库。
+- 日志不得记录密码、Token、API Key、Authorization 或完整敏感响应。
+- 官方响应结构不符合约定时记录安全字段形态并返回稳定错误，不写猜测式兼容。
+- 附件不放 public 目录，下载必须经过后端鉴权。

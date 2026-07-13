@@ -2,11 +2,11 @@
 
 namespace App\Services\Ledger;
 
-use App\Support\ChinaTime;
 use App\Models\Admin;
 use App\Models\LedgerAdjustment;
 use App\Services\Audit\AuditLogService;
 use App\Services\Sub2Api\Sub2ApiAdminClient;
+use App\Support\ChinaTime;
 use App\Support\Money;
 use App\Support\SafeHtml;
 use App\Support\Sub2ApiNoteTag;
@@ -21,6 +21,7 @@ class LedgerAdjustmentService
         private readonly Sub2ApiBalanceVerifier $verifier,
         private readonly FinanceLedgerService $finance,
         private readonly AuditLogService $audit,
+        private readonly LedgerSourceLinkService $sourceLink,
     ) {}
 
     public function adjust(Admin $admin, array $data): LedgerAdjustment
@@ -101,6 +102,8 @@ class LedgerAdjustmentService
                 'confirmed_at' => now(),
             ]);
             $adj = $adj->refresh();
+            $this->sourceLink->link($adj);
+            $adj = $adj->refresh();
             $this->finance->recordAdjustment($admin, $adj);
             $this->audit->record($admin, 'ledger_adjustment.succeeded', 'ledger_adjustment', $adj->id, null, $this->row($adj));
 
@@ -140,8 +143,72 @@ class LedgerAdjustmentService
             $query->where('sub2api_user_id', $userId);
         }
 
+        $email = trim((string) ($filters['sub2api_user_email'] ?? ''));
+        if ($email !== '') {
+            $query->where('sub2api_user_email', 'like', '%'.$email.'%');
+        }
+
+        $createdBy = (int) ($filters['created_by'] ?? 0);
+        if ($createdBy > 0) {
+            $query->where('created_by', $createdBy);
+        }
+
+        $dateCol = $status === 'abnormal' ? 'created_at' : 'confirmed_at';
+        $startDate = trim((string) ($filters['start_date'] ?? ''));
+        if ($startDate !== '') {
+            $query->where($dateCol, '>=', $startDate.' 00:00:00');
+        }
+
+        $endDate = trim((string) ($filters['end_date'] ?? ''));
+        if ($endDate !== '') {
+            $query->where($dateCol, '<', date('Y-m-d 00:00:00', strtotime($endDate.' +1 day')));
+        }
+
+        $minAmount = trim((string) ($filters['min_amount'] ?? ''));
+        if ($minAmount !== '') {
+            $query->where('amount', '>=', $minAmount);
+        }
+
+        $maxAmount = trim((string) ($filters['max_amount'] ?? ''));
+        if ($maxAmount !== '') {
+            $query->where('amount', '<=', $maxAmount);
+        }
+
         $total = (clone $query)->count();
+        $increment = Money::fmt((clone $query)->where('operation', LedgerAdjustment::OP_INCREMENT)->sum('amount'));
+        $decrement = Money::fmt((clone $query)->where('operation', LedgerAdjustment::OP_DECREMENT)->sum('amount'));
+        $summary = [
+            'record_count' => $total,
+            'user_count' => (clone $query)->distinct()->count('sub2api_user_id'),
+            'increment_total' => $increment,
+            'decrement_total' => $decrement,
+            'net_total' => Money::sub($increment, $decrement),
+            'cash_total' => Money::fmt((clone $query)->sum('cash_amount')),
+            'gift_total' => Money::fmt((clone $query)->sum('gift_quota_amount')),
+            'amount_total' => Money::fmt((clone $query)->sum('amount')),
+        ];
+
+        if ($status === 'abnormal') {
+            $summary['amount_total'] = Money::fmt((clone $query)->sum('amount'));
+            $summary['oldest_created_at'] = ChinaTime::fmt((clone $query)->min('created_at'));
+            $summary['over_24h_count'] = (clone $query)
+                ->where('created_at', '<', now(config('ledger.timezone', 'Asia/Shanghai'))->subDay())
+                ->count();
+            $summary['types'] = (clone $query)
+                ->selectRaw('status, COUNT(*) as record_count, COUNT(DISTINCT sub2api_user_id) as user_count, SUM(amount) as amount_total')
+                ->groupBy('status')
+                ->orderByDesc('record_count')
+                ->get()
+                ->map(fn ($row): array => [
+                    'type' => $row->status,
+                    'record_count' => (int) $row->record_count,
+                    'user_count' => (int) $row->user_count,
+                    'amount_total' => Money::fmt($row->amount_total),
+                ])
+                ->all();
+        }
         $items = $query
+            ->with('creator:id,name,email')
             ->orderByDesc('id')
             ->forPage($page, $pageSize)
             ->get()
@@ -153,6 +220,7 @@ class LedgerAdjustmentService
             'total' => $total,
             'page' => $page,
             'page_size' => $pageSize,
+            'summary' => $summary,
         ];
     }
 
@@ -163,6 +231,7 @@ class LedgerAdjustmentService
             'ledger_no' => $adj->ledger_no,
             'idempotency_key' => $adj->idempotency_key,
             'sub2api_user_id' => $adj->sub2api_user_id,
+            'sub2api_source_id' => $adj->sub2api_source_id,
             'sub2api_user_email' => $adj->sub2api_user_email,
             'operation' => $adj->operation,
             'amount' => $adj->amount,
@@ -172,6 +241,9 @@ class LedgerAdjustmentService
             'after_balance' => $adj->after_balance,
             'status' => $adj->status,
             'adjust_reason' => $adj->adjust_reason,
+            'created_by' => $adj->created_by,
+            'operator_name' => $adj->creator?->name,
+            'operator_email' => $adj->creator?->email,
             'admin_notes' => $adj->admin_notes,
             'sub2api_notes' => $adj->sub2api_notes,
             'exception_reason' => $adj->exception_reason,

@@ -23,8 +23,12 @@ class FinanceLedgerController extends Controller
     {
         return response()->json($service->expenses([
             'category' => $req->query('category', ''),
-            'from'     => $req->query('from', ''),
-            'to'       => $req->query('to', ''),
+            'from' => $req->query('from', ''),
+            'to' => $req->query('to', ''),
+            'created_by' => $req->query('created_by', 0),
+            'min_amount' => $req->query('min_amount', ''),
+            'max_amount' => $req->query('max_amount', ''),
+            'keyword' => $req->query('keyword', ''),
         ], $this->page($req), $this->pageSize($req)));
     }
 
@@ -45,7 +49,15 @@ class FinanceLedgerController extends Controller
 
     private function filters(Request $req): array
     {
-        return ['sub2api_user_id' => $req->query('sub2api_user_id', 0)];
+        return [
+            'sub2api_user_id' => $req->query('sub2api_user_id', 0),
+            'sub2api_user_email' => $req->query('sub2api_user_email', ''),
+            'start_date' => $req->query('start_date', ''),
+            'end_date' => $req->query('end_date', ''),
+            'created_by' => $req->query('created_by', 0),
+            'business_no' => $req->query('business_no', ''),
+            'link_status' => $req->query('link_status', ''),
+        ];
     }
 
     private function page(Request $req): int

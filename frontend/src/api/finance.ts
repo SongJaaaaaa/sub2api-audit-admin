@@ -1,10 +1,21 @@
 import { http } from './http'
 
-export interface PageRes<T> {
+export interface PageRes<T, S = unknown> {
   items: T[]
   total: number
   page: number
   page_size: number
+  summary?: S
+}
+
+export interface FinanceSummary {
+  record_count: number
+  user_count: number
+  amount_total: string
+  linked_count: number
+  unlinked_count: number
+  related_cash_count?: number
+  missing_cash_count?: number
 }
 
 export interface CashEntry {
@@ -17,6 +28,9 @@ export interface CashEntry {
   cash_amount: string
   source: string
   remark: string | null
+  created_by: number | null
+  operator_name: string | null
+  operator_email: string | null
   created_at: string | null
 }
 
@@ -29,7 +43,25 @@ export interface GiftQuotaEntry {
   quota_amount: string
   source: string
   remark: string | null
+  created_by: number | null
+  operator_name: string | null
+  operator_email: string | null
+  has_related_cash: boolean
   created_at: string | null
+}
+
+export interface ExpenseSummary {
+  record_count: number
+  category_count: number
+  amount_total: string
+  max_amount: string
+  daily_average: string | null
+}
+
+export interface ExpenseCategory {
+  category: string
+  record_count: number
+  amount_total: string
 }
 
 export interface OperationExpense {
@@ -40,19 +72,44 @@ export interface OperationExpense {
   paid_at: string
   remark: string | null
   content_html: string | null
+  created_by: number | null
+  operator_name: string | null
+  operator_email: string | null
   created_at: string | null
 }
 
-export function getCashEntries(params: { page: number; page_size: number; sub2api_user_id?: string | number }) {
-  return http.get<unknown, PageRes<CashEntry>>('/finance/cash', { params })
+export interface FinanceParams {
+  page: number
+  page_size: number
+  sub2api_user_id?: string | number
+  sub2api_user_email?: string
+  start_date?: string
+  end_date?: string
+  created_by?: number
+  business_no?: string
+  link_status?: 'linked' | 'unlinked' | ''
 }
 
-export function getGiftEntries(params: { page: number; page_size: number; sub2api_user_id?: string | number }) {
-  return http.get<unknown, PageRes<GiftQuotaEntry>>('/finance/gifts', { params })
+export function getCashEntries(params: FinanceParams) {
+  return http.get<unknown, PageRes<CashEntry, FinanceSummary>>('/finance/cash', { params })
 }
 
-export function getOperationExpenses(params: { page: number; page_size: number; category?: string; from?: string; to?: string }) {
-  return http.get<unknown, PageRes<OperationExpense>>('/finance/expenses', { params })
+export function getGiftEntries(params: FinanceParams) {
+  return http.get<unknown, PageRes<GiftQuotaEntry, FinanceSummary>>('/finance/gifts', { params })
+}
+
+export function getOperationExpenses(params: {
+  page: number
+  page_size: number
+  category?: string
+  from?: string
+  to?: string
+  created_by?: number
+  min_amount?: string
+  max_amount?: string
+  keyword?: string
+}) {
+  return http.get<unknown, PageRes<OperationExpense, ExpenseSummary> & { categories: ExpenseCategory[] }>('/finance/expenses', { params })
 }
 
 export function createOperationExpense(data: {

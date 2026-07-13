@@ -3,188 +3,359 @@
 namespace App\Services\Stats;
 
 use App\Models\LedgerAdjustment;
+use App\Models\ReconciliationBatch;
+use App\Models\ReconciliationDiff;
+use App\Services\Ledger\LedgerCutoverService;
+use App\Services\Sub2Api\Sub2ApiAdminClient;
 use App\Services\Sub2Api\Sub2ApiReadRepository;
+use App\Support\ChinaDateRange;
 use App\Support\ChinaTime;
-use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 
 class DashboardStatsService
 {
-    public function __construct(private readonly Sub2ApiReadRepository $repo) {}
+    public function __construct(
+        private readonly Sub2ApiAdminClient $client,
+        private readonly Sub2ApiReadRepository $repo,
+        private readonly LedgerCutoverService $cutover,
+    ) {}
 
-    public function data(CarbonImmutable $from, CarbonImmutable $to, string $group, int $limit): array
+    public function data(ChinaDateRange $range, int $limit): array
     {
-        $summary = $this->repo->usageSummary($from, $to, []);
-        $today = CarbonImmutable::now(config('ledger.timezone', 'Asia/Shanghai'));
-        [$todayFrom, $todayTo] = [$today->startOfDay()->utc(), $today->endOfDay()->utc()];
+        $trend = $this->usageTrend($range, $this->client->dashboardTrend($range)['trend']);
+        $models = $this->modelRanking($this->client->dashboardModels($range)['models'], $limit);
+        $costUsers = $this->userCostRanking($this->client->dashboardUsersRanking($range, $limit)['ranking'], $limit);
+        $tokenUsers = $this->userTokenRanking($this->client->dashboardUserBreakdown($range, $limit)['users'], $limit);
+        $finance = $this->finance($range);
+        $cutover = $this->cutover->get();
 
         return [
-            'summary' => $summary,
-            'today_summary' => $this->repo->usageSummary($todayFrom, $todayTo, []),
-            'models' => $this->repo->modelRanking($from, $to, [], min($limit, 12)),
-            'cash_total' => $this->cashTotal($from, $to),
-            'today_cash_total' => $this->cashTotal($todayFrom, $todayTo),
-            'gift_total' => $this->giftTotal($from, $to),
-            'today_gift_total' => $this->giftTotal($todayFrom, $todayTo),
-            'external_total' => $this->externalTotal($from, $to),
-            'recharge_total' => $this->rechargeTotal($from, $to),
-            'today_recharge_total' => $this->rechargeTotal($todayFrom, $todayTo),
-            'sub2api_balance_total' => $this->repo->balanceTotal(),
-            'quota_total' => $this->quotaTotal($from, $to),
-            'recharge_rank' => $this->rechargeRank($from, $to, $limit),
-            'quota_rank' => $this->quotaRank($from, $to, $limit),
-            'user_token_rank' => $this->repo->userTokenRanking($from, $to, $limit),
-            'user_cost_rank' => $this->repo->userCostRanking($from, $to, $limit),
-            'finance_trend' => $this->financeTrend($from, $to),
-            'range' => $this->range($from, $to),
+            'range' => [
+                'start_date' => $range->startDate,
+                'end_date' => $range->endDate,
+                'timezone' => $range->timezone,
+            ],
+            'cutover_at' => $cutover ? ChinaTime::fmtUtc($cutover) : null,
+            'finance' => $finance,
+            'usage' => [
+                ...$this->usageSummary($trend),
+                'trend' => $trend,
+            ],
+            'balance' => $this->repo->activeUserBalanceSnapshot(),
+            'rankings' => [
+                'recharge_users' => $this->rechargeRanking($range, $limit),
+                'user_tokens' => $tokenUsers,
+                'user_actual_cost' => $costUsers,
+                'models' => $models,
+            ],
+            'recent_adjustments' => $this->recentAdjustments($range, $limit),
+            'alerts' => $this->alerts($range),
         ];
     }
 
-    public function overview(CarbonImmutable $from, CarbonImmutable $to): array
+    private function finance(ChinaDateRange $range): array
     {
-        return [
-            'summary' => $this->repo->usageSummary($from, $to, []),
-            'models' => [],
-            'cash_total' => $this->cashTotal($from, $to),
-            'gift_total' => $this->giftTotal($from, $to),
-            'external_total' => $this->externalTotal($from, $to),
-            'recharge_total' => $this->rechargeTotal($from, $to),
-            'quota_total' => $this->quotaTotal($from, $to),
-            'recharge_rank' => [],
-            'quota_rank' => [],
-            'range' => $this->range($from, $to),
-        ];
-    }
+        $rows = $this->ledgerBase($range)
+            ?->get(['operation', 'amount', 'cash_amount', 'gift_quota_amount', 'confirmed_at'])
+            ?? collect();
+        $in = 0.0;
+        $out = 0.0;
+        $cash = 0.0;
+        $gift = 0.0;
+        $trend = [];
 
-    private function cashTotal(CarbonImmutable $from, CarbonImmutable $to): string
-    {
-        return number_format((float) $this->ledgerBase($from, $to)
-            ->where('operation', LedgerAdjustment::OP_INCREMENT)
-            ->sum('cash_amount'), 2, '.', '');
-    }
-
-    private function giftTotal(CarbonImmutable $from, CarbonImmutable $to): string
-    {
-        return number_format((float) $this->ledgerBase($from, $to)
-            ->where('operation', LedgerAdjustment::OP_INCREMENT)
-            ->sum('gift_quota_amount'), 2, '.', '');
-    }
-
-    private function externalTotal(CarbonImmutable $from, CarbonImmutable $to): string
-    {
-        return $this->repo->paymentRechargeTotal($from, $to, $this->auditLedgerNos());
-    }
-
-    private function rechargeTotal(CarbonImmutable $from, CarbonImmutable $to): string
-    {
-        return number_format((float) $this->ledgerBase($from, $to)
-            ->where('operation', LedgerAdjustment::OP_INCREMENT)
-            ->sum('amount'), 2, '.', '');
-    }
-
-    private function quotaTotal(CarbonImmutable $from, CarbonImmutable $to): string
-    {
-        return number_format((float) $this->ledgerBase($from, $to)->sum('amount'), 2, '.', '');
-    }
-
-    private function financeTrend(CarbonImmutable $from, CarbonImmutable $to): array
-    {
-        $tz = config('ledger.timezone', 'Asia/Shanghai');
-        $start = $from->setTimezone($tz)->startOfDay();
-        $end = $to->setTimezone($tz)->startOfDay();
-        $rows = [];
-
-        for ($day = $start; $day <= $end; $day = $day->addDay()) {
-            $rows[$day->toDateString()] = [
-                'date' => $day->toDateString(),
-                'cash_amount' => '0.00',
-                'gift_quota_amount' => '0.00',
-                'adjust_total' => '0.00',
+        foreach ($range->dates() as $date) {
+            $trend[$date] = [
+                'date' => $date,
+                'cash_total' => '0.00',
+                'gift_total' => '0.00',
+                'adjustment_in_total' => '0.00',
+                'adjustment_out_total' => '0.00',
+                'adjustment_net_total' => '0.00',
             ];
         }
 
-        $this->ledgerBase($from, $to)
-            ->get(['operation', 'amount', 'cash_amount', 'gift_quota_amount', 'confirmed_at'])
-            ->each(function (LedgerAdjustment $adj) use (&$rows): void {
-                $date = substr((string) ChinaTime::fmt($adj->confirmed_at), 0, 10);
-                $signed = $adj->operation === LedgerAdjustment::OP_DECREMENT
-                    ? -1 * (float) $adj->amount
-                    : (float) $adj->amount;
+        foreach ($rows as $row) {
+            $amount = (float) $row->amount;
+            $isIn = $row->operation === LedgerAdjustment::OP_INCREMENT;
+            $date = substr((string) ChinaTime::fmt($row->confirmed_at), 0, 10);
 
-                $this->addTrend($rows, $date, (float) $adj->cash_amount, (float) $adj->gift_quota_amount, $signed);
-            });
+            if ($isIn) {
+                $in += $amount;
+                $cash += (float) $row->cash_amount;
+                $gift += (float) $row->gift_quota_amount;
+            } else {
+                $out += abs($amount);
+            }
 
-        return array_values($rows);
-    }
+            if (! isset($trend[$date])) {
+                continue;
+            }
 
-    private function addTrend(array &$rows, string $date, float $cash, float $gift, float $adjust): void
-    {
-        if (! isset($rows[$date])) {
-            return;
+            $item = &$trend[$date];
+            if ($isIn) {
+                $item['cash_total'] = $this->money((float) $item['cash_total'] + (float) $row->cash_amount);
+                $item['gift_total'] = $this->money((float) $item['gift_total'] + (float) $row->gift_quota_amount);
+                $item['adjustment_in_total'] = $this->money((float) $item['adjustment_in_total'] + $amount);
+            } else {
+                $item['adjustment_out_total'] = $this->money((float) $item['adjustment_out_total'] + abs($amount));
+            }
+            $item['adjustment_net_total'] = $this->money(
+                (float) $item['adjustment_in_total'] - (float) $item['adjustment_out_total'],
+            );
+            unset($item);
         }
 
-        $rows[$date]['cash_amount'] = number_format((float) $rows[$date]['cash_amount'] + $cash, 2, '.', '');
-        $rows[$date]['gift_quota_amount'] = number_format((float) $rows[$date]['gift_quota_amount'] + $gift, 2, '.', '');
-        $rows[$date]['adjust_total'] = number_format((float) $rows[$date]['adjust_total'] + $adjust, 2, '.', '');
+        return [
+            'cash_total' => $this->money($cash),
+            'gift_total' => $this->money($gift),
+            'adjustment_in_total' => $this->money($in),
+            'adjustment_out_total' => $this->money($out),
+            'adjustment_net_total' => $this->money($in - $out),
+            'trend' => array_values($trend),
+        ];
     }
 
-    private function rechargeRank(CarbonImmutable $from, CarbonImmutable $to, int $limit): array
+    private function usageTrend(ChinaDateRange $range, array $rows): array
     {
-        return $this->ledgerBase($from, $to)
-            ->selectRaw('sub2api_user_id, max(sub2api_user_email) as sub2api_user_email, sum(amount) as total_amount, count(*) as entry_count')
+        $trend = [];
+        foreach ($range->dates() as $date) {
+            $trend[$date] = [
+                'date' => $date,
+                'request_count' => 0,
+                'input_tokens' => 0,
+                'output_tokens' => 0,
+                'cache_creation_tokens' => 0,
+                'cache_read_tokens' => 0,
+                'total_tokens' => 0,
+                'standard_cost' => '0',
+                'actual_cost' => '0',
+            ];
+        }
+
+        foreach ($rows as $row) {
+            $date = (string) ($row['date'] ?? '');
+            if (! isset($trend[$date])) {
+                continue;
+            }
+
+            $trend[$date] = [
+                'date' => $date,
+                'request_count' => (int) $row['requests'],
+                'input_tokens' => (int) $row['input_tokens'],
+                'output_tokens' => (int) $row['output_tokens'],
+                'cache_creation_tokens' => (int) $row['cache_creation_tokens'],
+                'cache_read_tokens' => (int) $row['cache_read_tokens'],
+                'total_tokens' => (int) $row['total_tokens'],
+                'standard_cost' => $this->decimal($row['cost'], 10),
+                'actual_cost' => $this->decimal($row['actual_cost'], 10),
+            ];
+        }
+
+        return array_values($trend);
+    }
+
+    private function usageSummary(array $trend): array
+    {
+        $requests = 0;
+        $tokens = 0;
+        $standard = 0.0;
+        $actual = 0.0;
+
+        foreach ($trend as $row) {
+            $requests += $row['request_count'];
+            $tokens += $row['total_tokens'];
+            $standard += (float) $row['standard_cost'];
+            $actual += (float) $row['actual_cost'];
+        }
+
+        return [
+            'request_count' => $requests,
+            'total_tokens' => $tokens,
+            'standard_cost' => $this->decimal($standard, 10),
+            'actual_cost' => $this->decimal($actual, 10),
+        ];
+    }
+
+    private function rechargeRanking(ChinaDateRange $range, int $limit): array
+    {
+        $query = $this->ledgerBase($range);
+        if (! $query) {
+            return [];
+        }
+
+        return $query
             ->where('operation', LedgerAdjustment::OP_INCREMENT)
+            ->where('cash_amount', '>', 0)
+            ->selectRaw('sub2api_user_id, max(sub2api_user_email) as email, sum(cash_amount) as cash_total, count(*) as entry_count')
             ->groupBy('sub2api_user_id')
-            ->orderByDesc('total_amount')
+            ->orderByDesc('cash_total')
             ->limit($limit)
             ->get()
             ->map(fn ($row): array => [
-                'sub2api_user_id' => (int) $row->sub2api_user_id,
-                'sub2api_user_email' => $row->sub2api_user_email,
-                'total_amount' => number_format((float) $row->total_amount, 2, '.', ''),
+                'user_id' => (int) $row->sub2api_user_id,
+                'email' => $row->email,
+                'cash_total' => $this->money($row->cash_total),
                 'entry_count' => (int) $row->entry_count,
             ])
             ->all();
     }
 
-    private function quotaRank(CarbonImmutable $from, CarbonImmutable $to, int $limit): array
+    private function userTokenRanking(array $rows, int $limit): array
     {
-        return $this->ledgerBase($from, $to)
-            ->selectRaw("sub2api_user_id, max(sub2api_user_email) as sub2api_user_email, sum(case when operation = 'decrement' then -amount else amount end) as total_amount, count(*) as entry_count")
-            ->groupBy('sub2api_user_id')
-            ->orderByDesc('total_amount')
-            ->limit($limit)
-            ->get()
-            ->map(fn ($row): array => [
-                'sub2api_user_id' => $row->sub2api_user_id,
-                'sub2api_user_email' => $row->sub2api_user_email,
-                'total_amount' => number_format((float) $row->total_amount, 2, '.', ''),
-                'entry_count' => (int) $row->entry_count,
-            ])->all();
-    }
-
-    private function ledgerBase(CarbonImmutable $from, CarbonImmutable $to)
-    {
-        return LedgerAdjustment::query()
-            ->where('status', LedgerAdjustment::STATUS_SUCCEEDED)
-            ->where('confirmed_at', '>=', $from->toDateTimeString())
-            ->where('confirmed_at', '<=', $to->toDateTimeString());
-    }
-
-    private function auditLedgerNos(): array
-    {
-        return LedgerAdjustment::query()
-            ->where('status', LedgerAdjustment::STATUS_SUCCEEDED)
-            ->where('operation', LedgerAdjustment::OP_INCREMENT)
-            ->pluck('ledger_no')
-            ->filter()
+        return collect($rows)
+            ->sortByDesc(fn (array $row): int => (int) $row['total_tokens'])
+            ->take($limit)
             ->values()
+            ->map(fn (array $row): array => [
+                'user_id' => (int) $row['user_id'],
+                'email' => $row['email'] ?? null,
+                'request_count' => (int) $row['requests'],
+                'input_tokens' => (int) $row['input_tokens'],
+                'output_tokens' => (int) $row['output_tokens'],
+                'cache_tokens' => (int) $row['cache_tokens'],
+                'total_tokens' => (int) $row['total_tokens'],
+                'standard_cost' => $this->decimal($row['cost'], 10),
+                'actual_cost' => $this->decimal($row['actual_cost'], 10),
+            ])
             ->all();
     }
 
-    private function range(CarbonImmutable $from, CarbonImmutable $to): array
+    private function userCostRanking(array $rows, int $limit): array
     {
+        return collect($rows)
+            ->sortByDesc(fn (array $row): float => (float) $row['actual_cost'])
+            ->take($limit)
+            ->values()
+            ->map(fn (array $row): array => [
+                'user_id' => (int) $row['user_id'],
+                'email' => $row['email'] ?? null,
+                'actual_cost' => $this->decimal($row['actual_cost'], 10),
+                'request_count' => (int) $row['requests'],
+                'total_tokens' => (int) $row['tokens'],
+            ])
+            ->all();
+    }
+
+    private function modelRanking(array $rows, int $limit): array
+    {
+        return collect($rows)
+            ->sortByDesc(fn (array $row): int => (int) $row['total_tokens'])
+            ->take($limit)
+            ->values()
+            ->map(fn (array $row): array => [
+                'model' => (string) $row['model'],
+                'request_count' => (int) $row['requests'],
+                'input_tokens' => (int) $row['input_tokens'],
+                'output_tokens' => (int) $row['output_tokens'],
+                'cache_creation_tokens' => (int) $row['cache_creation_tokens'],
+                'cache_read_tokens' => (int) $row['cache_read_tokens'],
+                'total_tokens' => (int) $row['total_tokens'],
+                'standard_cost' => $this->decimal($row['cost'], 10),
+                'actual_cost' => $this->decimal($row['actual_cost'], 10),
+            ])
+            ->all();
+    }
+
+    private function recentAdjustments(ChinaDateRange $range, int $limit): array
+    {
+        $bounds = $this->cutover->ledgerLocalBounds($range);
+        if (! $bounds) {
+            return [];
+        }
+
+        [$start, $end] = $bounds;
+
+        return LedgerAdjustment::query()
+            ->whereIn('status', [
+                LedgerAdjustment::STATUS_SUCCEEDED,
+                LedgerAdjustment::STATUS_EXCEPTION,
+                LedgerAdjustment::STATUS_VOIDED,
+            ])
+            ->whereRaw('COALESCE(confirmed_at, created_at) >= ?', [$start->format(ChinaTime::FORMAT)])
+            ->whereRaw('COALESCE(confirmed_at, created_at) < ?', [$end->format(ChinaTime::FORMAT)])
+            ->orderByRaw('COALESCE(confirmed_at, created_at) DESC')
+            ->limit($limit)
+            ->get()
+            ->map(fn (LedgerAdjustment $row): array => [
+                'id' => $row->id,
+                'ledger_no' => $row->ledger_no,
+                'sub2api_source_id' => $row->sub2api_source_id,
+                'sub2api_user_id' => $row->sub2api_user_id,
+                'sub2api_user_email' => $row->sub2api_user_email,
+                'operation' => $row->operation,
+                'amount' => $row->amount,
+                'cash_amount' => $row->cash_amount,
+                'gift_quota_amount' => $row->gift_quota_amount,
+                'status' => $row->status,
+                'adjust_reason' => $row->adjust_reason,
+                'exception_reason' => $row->exception_reason,
+                'event_at' => ChinaTime::fmt($row->confirmed_at ?? $row->created_at),
+            ])
+            ->all();
+    }
+
+    private function alerts(ChinaDateRange $range): array
+    {
+        $unlinked = $this->ledgerBase($range)?->whereNull('sub2api_source_id')->count() ?? 0;
+        $diffs = ReconciliationDiff::query()
+            ->join('reconciliation_batches as rb', 'rb.id', '=', 'reconciliation_diffs.reconciliation_batch_id')
+            ->where('rb.biz_date', '>=', $range->startDate)
+            ->where('rb.biz_date', '<=', $range->endDate)
+            ->get([
+                'reconciliation_diffs.id',
+                'reconciliation_diffs.type',
+                'reconciliation_diffs.local_adjustment_id',
+                'reconciliation_diffs.remote_event_id',
+            ]);
+
+        $issues = $diffs->whereIn('type', [
+            'local_missing_remote',
+            'user_mismatch',
+            'direction_mismatch',
+            'amount_mismatch',
+            'duplicate_source_link',
+        ]);
+        $issueKeys = $issues->map(fn ($row): string => $row->local_adjustment_id
+            ? 'local:'.$row->local_adjustment_id
+            : ($row->remote_event_id ? 'remote:'.$row->remote_event_id : 'diff:'.$row->id));
+        $external = $diffs->where('type', 'remote_external')->pluck('remote_event_id')->filter()->unique()->count();
+        $orphans = $diffs->where('type', 'remote_audit_orphan')->pluck('remote_event_id')->filter()->unique()->count();
+        $last = ReconciliationBatch::query()->max('biz_date');
+
         return [
-            'from' => ChinaTime::fmt($from),
-            'to' => ChinaTime::fmt($to),
+            'unlinked_adjustment_count' => (int) $unlinked,
+            'reconcile_issue_count' => $issueKeys->unique()->count(),
+            'external_adjustment_count' => $external,
+            'audit_orphan_count' => $orphans,
+            'last_reconciled_date' => $last ? substr((string) $last, 0, 10) : null,
         ];
+    }
+
+    private function ledgerBase(ChinaDateRange $range): ?Builder
+    {
+        $bounds = $this->cutover->ledgerLocalBounds($range);
+        if (! $bounds) {
+            return null;
+        }
+
+        [$start, $end] = $bounds;
+
+        return LedgerAdjustment::query()
+            ->where('status', LedgerAdjustment::STATUS_SUCCEEDED)
+            ->where('confirmed_at', '>=', $start->format(ChinaTime::FORMAT))
+            ->where('confirmed_at', '<', $end->format(ChinaTime::FORMAT));
+    }
+
+    private function money(mixed $value): string
+    {
+        return number_format((float) $value, 2, '.', '');
+    }
+
+    private function decimal(mixed $value, int $scale): string
+    {
+        $text = number_format((float) $value, $scale, '.', '');
+
+        return rtrim(rtrim($text, '0'), '.') ?: '0';
     }
 }

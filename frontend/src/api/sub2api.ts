@@ -12,11 +12,22 @@ export interface Sub2User {
   updated_at: string | null
 }
 
+export interface UserSummary {
+  user_count: number
+  active_count: number
+  disabled_count: number
+  balance_total: string
+  average_balance: string
+  negative_balance_count: number
+  zero_balance_count: number
+}
+
 export interface UserListRes {
   items: Sub2User[]
   total: number
   page: number
   page_size: number
+  summary: UserSummary
 }
 
 export interface Sub2BalanceHistoryItem {
@@ -48,51 +59,52 @@ export interface Sub2BalanceHistoryRes {
   total_recharged: string | number | null
 }
 
-export interface UsageSummary {
-  request_count: number
-  user_count: number
-  model_count: number
-  total_cost: string
-  actual_cost: string
-  token_total?: string
-}
-
-export interface ModelRank {
+export interface ModelStat {
   model: string
   request_count: number
-  user_count: number
-  total_cost: string
+  input_tokens: number
+  output_tokens: number
+  cache_creation_tokens: number
+  cache_read_tokens: number
+  total_tokens: number
+  standard_cost: string
   actual_cost: string
-  token_total?: string
 }
 
-export interface UserModelRank {
+export interface ModelUserRank {
   user_id: number
-  user_email: string | null
-  model: string
+  email: string | null
   request_count: number
-  total_cost: string
+  input_tokens: number
+  output_tokens: number
+  cache_tokens: number
+  total_tokens: number
+  standard_cost: string
   actual_cost: string
-  token_total?: string
 }
 
-export interface RechargeSource {
-  type: string
-  count: number
+export interface ModelStatsSummary {
+  model_count: number
+  request_count: number
+  total_tokens: number
+  cache_tokens: number
+  cache_rate: number
+  standard_cost: string
+  actual_cost: string
+  top3_token_rate: number
 }
 
 export interface ModelStatsRes {
-  summary: UsageSummary
-  models: ModelRank[]
-  user_models?: UserModelRank[]
-  sources: {
-    payment_orders_completed: number
-    redeem_codes_used: RechargeSource[]
-  }
   range: {
-    from: string
-    to: string
+    start_date: string
+    end_date: string
+    timezone: string
   }
+  model_source: 'requested'
+  selected_model: string | null
+  summary: ModelStatsSummary
+  models: ModelStat[]
+  users: ModelUserRank[]
 }
 
 export function getSub2Users(params: {
@@ -111,12 +123,10 @@ export function getSub2BalanceHistory(userId: number, params: {
 }
 
 export function getModelStats(params: {
-  from: string
-  to: string
-  limit?: number
+  start_date?: string
+  end_date?: string
   model?: string
-  user_id?: number | string
-  user_keyword?: string
+  limit?: number
 }) {
   return http.get<unknown, ModelStatsRes>('/sub2api/model-stats', { params })
 }

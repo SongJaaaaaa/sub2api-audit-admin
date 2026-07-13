@@ -3,6 +3,7 @@
 namespace App\Services\Sub2Api;
 
 use App\Support\ChinaTime;
+use App\Support\Sub2ApiNoteTag;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
@@ -40,6 +41,16 @@ class Sub2ApiReadRepository
         }
 
         $total = (clone $query)->count();
+        $balanceTotal = (float) (clone $query)->sum('balance');
+        $summary = [
+            'user_count' => $total,
+            'active_count' => (clone $query)->where('status', 'active')->count(),
+            'disabled_count' => (clone $query)->where('status', '!=', 'active')->count(),
+            'balance_total' => $this->decimal($balanceTotal, 2),
+            'average_balance' => $this->decimal($total > 0 ? $balanceTotal / $total : 0, 2),
+            'negative_balance_count' => (clone $query)->where('balance', '<', 0)->count(),
+            'zero_balance_count' => (clone $query)->where('balance', 0)->count(),
+        ];
         $items = $query
             ->orderByDesc('id')
             ->forPage($page, $pageSize)
@@ -52,6 +63,7 @@ class Sub2ApiReadRepository
             'total' => $total,
             'page' => $page,
             'page_size' => $pageSize,
+            'summary' => $summary,
         ];
     }
 
@@ -77,276 +89,166 @@ class Sub2ApiReadRepository
         return $row ? $this->userRow($row) : null;
     }
 
-    public function usageSummary(CarbonImmutable $from, CarbonImmutable $to, array $filters): array
+    public function activeUserBalanceSnapshot(): array
     {
-        $query = $this->usageQuery($from, $to, $filters);
-        $tokenExpr = $this->tokenExpr('ul');
+        $query = $this->db()
+            ->table('users')
+            ->where('role', 'user')
+            ->where('status', 'active')
+            ->whereNull('deleted_at');
 
         return [
-            'request_count' => (int) (clone $query)->count(),
-            'user_count' => (int) (clone $query)->distinct('ul.user_id')->count('ul.user_id'),
-            'model_count' => (int) (clone $query)->distinct('ul.model')->count('ul.model'),
-            'total_cost' => (string) ((clone $query)->sum('ul.total_cost') ?: '0'),
-            'actual_cost' => (string) ((clone $query)->sum('ul.actual_cost') ?: '0'),
-            'token_total' => (string) ($tokenExpr === '0' ? 0 : ((clone $query)->sum(DB::raw($tokenExpr)) ?: '0')),
+            'active_user_count' => (int) (clone $query)->count(),
+            'active_user_balance' => $this->decimal((clone $query)->sum('balance'), 8),
+            'total_recharged' => $this->decimal($this->db()->table('users')->whereNull('deleted_at')->sum('total_recharged'), 8),
+            'as_of' => now(config('ledger.timezone', 'Asia/Shanghai'))->format(ChinaTime::FORMAT),
         ];
     }
 
-    public function modelRanking(CarbonImmutable $from, CarbonImmutable $to, array $filters, int $limit): array
+    public function findAdminAdjustmentSources(int $userId, string $idempotencyKey): array
     {
-        $tokenExpr = $this->tokenExpr('ul');
-
-        return $this->usageQuery($from, $to, $filters)
-            ->selectRaw("ul.model, count(*) as request_count, count(distinct ul.user_id) as user_count, sum(ul.total_cost) as total_cost, sum(ul.actual_cost) as actual_cost, sum({$tokenExpr}) as token_total")
-            ->groupBy('ul.model')
-            ->orderByDesc('total_cost')
-            ->limit($limit)
+        return $this->db()
+            ->table('redeem_codes')
+            ->select(['id', 'used_by', 'value', 'notes', 'used_at', 'created_at'])
+            ->whereRaw('LOWER(type) = ?', ['admin_balance'])
+            ->whereRaw('LOWER(status) = ?', ['used'])
+            ->where('used_by', $userId)
+            ->where('notes', 'like', '%idempotency_key='.$idempotencyKey.'%')
+            ->orderBy('id')
             ->get()
-            ->map(fn ($row): array => [
-                'model' => $row->model,
-                'request_count' => (int) $row->request_count,
-                'user_count' => (int) $row->user_count,
-                'total_cost' => (string) $row->total_cost,
-                'actual_cost' => (string) $row->actual_cost,
-                'token_total' => (string) ($row->token_total ?? '0'),
-            ])
-            ->all();
-    }
-
-    public function userCostRanking(CarbonImmutable $from, CarbonImmutable $to, int $limit): array
-    {
-        $tokenExpr = $this->tokenExpr('ul');
-
-        return $this->usageQuery($from, $to, [])
-            ->selectRaw("ul.user_id, max(u.email) as user_email, count(*) as request_count, sum({$tokenExpr}) as token_total, sum(ul.total_cost) as total_cost")
-            ->whereNotNull('ul.user_id')
-            ->groupBy('ul.user_id')
-            ->orderByDesc('total_cost')
-            ->limit($limit)
-            ->get()
-            ->map(fn ($row): array => [
-                'user_id' => (int) $row->user_id,
-                'user_email' => $row->user_email,
-                'request_count' => (int) $row->request_count,
-                'token_total' => (string) ($row->token_total ?? '0'),
-                'total_cost' => (string) ($row->total_cost ?? '0'),
-            ])
-            ->all();
-    }
-
-    public function userTokenRanking(CarbonImmutable $from, CarbonImmutable $to, int $limit): array
-    {
-        $tokenExpr = $this->tokenExpr('ul');
-        if ($tokenExpr === '0') {
-            return [];
-        }
-
-        return $this->usageQuery($from, $to, [])
-            ->selectRaw("ul.user_id, max(u.email) as user_email, count(*) as request_count, sum({$tokenExpr}) as token_total, sum(ul.total_cost) as total_cost")
-            ->groupBy('ul.user_id')
-            ->orderByDesc('token_total')
-            ->limit($limit)
-            ->get()
-            ->map(fn ($row): array => [
-                'user_id' => (int) $row->user_id,
-                'user_email' => $row->user_email,
-                'request_count' => (int) $row->request_count,
-                'token_total' => (string) ($row->token_total ?? '0'),
-                'total_cost' => (string) ($row->total_cost ?? '0'),
-            ])
-            ->all();
-    }
-
-    public function userModelRanking(CarbonImmutable $from, CarbonImmutable $to, array $filters, int $limit): array
-    {
-        $tokenExpr = $this->tokenExpr('ul');
-
-        return $this->usageQuery($from, $to, $filters)
-            ->selectRaw("ul.user_id, max(u.email) as user_email, ul.model, count(*) as request_count, sum(ul.total_cost) as total_cost, sum(ul.actual_cost) as actual_cost, sum({$tokenExpr}) as token_total")
-            ->whereNotNull('ul.user_id')
-            ->groupBy('ul.user_id', 'ul.model')
-            ->orderByDesc('total_cost')
-            ->limit($limit)
-            ->get()
-            ->map(fn ($row): array => [
-                'user_id' => (int) $row->user_id,
-                'user_email' => $row->user_email,
-                'model' => $row->model,
-                'request_count' => (int) $row->request_count,
-                'total_cost' => (string) ($row->total_cost ?? '0'),
-                'actual_cost' => (string) ($row->actual_cost ?? '0'),
-                'token_total' => (string) ($row->token_total ?? '0'),
-            ])
-            ->all();
-    }
-
-    public function paymentRechargeTotal(CarbonImmutable $from, CarbonImmutable $to, array $excludeLedgerNos = []): string
-    {
-        return number_format((float) $this->incomeQuery($from, $to, $excludeLedgerNos)->sum('value'), 2, '.', '');
-    }
-
-    public function paymentRechargeRanking(CarbonImmutable $from, CarbonImmutable $to, int $limit, array $excludeLedgerNos = []): array
-    {
-        return $this->incomeQuery($from, $to, $excludeLedgerNos)
-            ->leftJoin('users', 'users.id', '=', 'redeem_codes.used_by')
-            ->selectRaw('redeem_codes.used_by as sub2api_user_id, max(users.email) as sub2api_user_email, sum(redeem_codes.value) as total_amount, count(*) as entry_count')
-            ->groupBy('redeem_codes.used_by')
-            ->orderByDesc('total_amount')
-            ->limit($limit)
-            ->get()
-            ->map(fn ($row): array => [
-                'sub2api_user_id' => (int) $row->sub2api_user_id,
-                'sub2api_user_email' => $row->sub2api_user_email,
-                'total_amount' => number_format((float) $row->total_amount, 2, '.', ''),
-                'entry_count' => (int) $row->entry_count,
-            ])
-            ->all();
-    }
-
-    public function paymentRechargeTrend(CarbonImmutable $from, CarbonImmutable $to, array $excludeLedgerNos = []): array
-    {
-        return $this->incomeQuery($from, $to, $excludeLedgerNos)
-            ->get(['value', 'used_at'])
-            ->map(fn ($row): array => [
-                'date' => substr((string) ChinaTime::fmt($row->used_at), 0, 10),
-                'amount' => number_format((float) $row->value, 2, '.', ''),
-            ])
-            ->filter(fn (array $row): bool => $row['date'] !== '')
+            ->filter(fn ($row): bool => Sub2ApiNoteTag::idempotencyKey($row->notes ?? null) === $idempotencyKey)
+            ->map(fn ($row): array => $this->redeemRow($row))
             ->values()
             ->all();
     }
 
-    private function incomeQuery(CarbonImmutable $from, CarbonImmutable $to, array $excludeLedgerNos = [])
+    public function adminAdjustmentEvents(CarbonImmutable $startUtc, CarbonImmutable $endUtc): array
     {
-        $query = $this->db()
-            ->table('redeem_codes')
-            ->whereRaw('LOWER(redeem_codes.type) = ?', ['admin_balance'])
-            ->whereRaw('LOWER(redeem_codes.status) = ?', ['used'])
-            ->whereNotNull('redeem_codes.used_by')
-            ->where('redeem_codes.value', '>', 0)
-            ->where('redeem_codes.used_at', '>=', $from->toDateTimeString())
-            ->where('redeem_codes.used_at', '<=', $to->toDateTimeString());
-
-        foreach ($excludeLedgerNos as $ledgerNo) {
-            $query->where('redeem_codes.notes', 'not like', '%ledger_no='.$ledgerNo.'%');
-        }
-
-        return $query;
+        return $this->redeemEvents('admin_balance', $startUtc, $endUtc, 'admin_adjustment');
     }
 
-    public function balanceTotal(): string
+    public function balanceRedeemEvents(CarbonImmutable $startUtc, CarbonImmutable $endUtc): array
     {
-        return number_format((float) $this->db()
-            ->table('users')
-            ->whereNull('deleted_at')
-            ->sum('balance'), 2, '.', '');
+        return $this->redeemEvents('balance', $startUtc, $endUtc, 'balance_redeem');
     }
 
-    public function rechargeSourceSummary(): array
+    public function paymentOrderEvents(CarbonImmutable $startUtc, CarbonImmutable $endUtc): array
     {
-        $payments = $this->db()
-            ->table('payment_orders')
-            ->whereRaw('LOWER(order_type) = ?', ['balance'])
-            ->whereRaw('LOWER(status) = ?', ['completed'])
-            ->count();
+        [$start, $end] = $this->remoteBounds($startUtc, $endUtc);
 
-        $redeems = $this->db()
-            ->table('redeem_codes')
-            ->selectRaw('type, count(*) as count')
-            ->whereRaw('LOWER(redeem_codes.status) = ?', ['used'])
-            ->whereNotNull('redeem_codes.used_by')
-            ->groupBy('type')
-            ->orderBy('type')
+        return $this->db()
+            ->table('payment_orders as po')
+            ->leftJoin('users as u', 'u.id', '=', 'po.user_id')
+            ->select([
+                'po.id',
+                'po.user_id',
+                'po.user_email',
+                'po.user_name',
+                'po.amount',
+                'po.out_trade_no',
+                'po.completed_at',
+                'po.created_at',
+                'u.email as current_email',
+                'u.username as current_username',
+            ])
+            ->whereRaw('LOWER(po.order_type) = ?', ['balance'])
+            ->whereRaw('LOWER(po.status) = ?', ['completed'])
+            ->whereNotNull('po.completed_at')
+            ->where('po.amount', '!=', 0)
+            ->where('po.completed_at', '>=', $start)
+            ->where('po.completed_at', '<', $end)
             ->get()
             ->map(fn ($row): array => [
-                'type' => $row->type,
-                'count' => (int) $row->count,
+                'source' => 'payment_order',
+                'remote_event_id' => (int) $row->id,
+                'sub2api_user_id' => (int) $row->user_id,
+                'user_email' => $row->current_email ?: $row->user_email,
+                'username' => $row->current_username ?: $row->user_name,
+                'value' => (string) $row->amount,
+                'notes' => trim((string) $row->out_trade_no),
+                'event_at' => $row->completed_at,
+                'created_at' => $row->created_at,
             ])
             ->all();
+    }
 
+    private function redeemEvents(string $type, CarbonImmutable $startUtc, CarbonImmutable $endUtc, string $source): array
+    {
+        [$start, $end] = $this->remoteBounds($startUtc, $endUtc);
+
+        return $this->db()
+            ->table('redeem_codes as rc')
+            ->leftJoin('users as u', 'u.id', '=', 'rc.used_by')
+            ->select([
+                'rc.id',
+                'rc.used_by',
+                'rc.value',
+                'rc.notes',
+                'rc.used_at',
+                'rc.created_at',
+                'u.email',
+                'u.username',
+            ])
+            ->whereRaw('LOWER(rc.type) = ?', [$type])
+            ->whereRaw('LOWER(rc.status) = ?', ['used'])
+            ->whereNotNull('rc.used_by')
+            ->whereNotNull('rc.used_at')
+            ->where('rc.used_at', '>=', $start)
+            ->where('rc.used_at', '<', $end)
+            ->get()
+            ->map(fn ($row): array => [
+                'source' => $source,
+                'remote_event_id' => (int) $row->id,
+                'sub2api_user_id' => (int) $row->used_by,
+                'user_email' => $row->email,
+                'username' => $row->username,
+                'value' => (string) $row->value,
+                'notes' => $row->notes,
+                'event_at' => $row->used_at,
+                'created_at' => $row->created_at,
+            ])
+            ->all();
+    }
+
+    private function redeemRow(object $row): array
+    {
         return [
-            'payment_orders_completed' => $payments,
-            'redeem_codes_used' => $redeems,
+            'id' => (int) $row->id,
+            'used_by' => (int) $row->used_by,
+            'value' => (string) $row->value,
+            'notes' => $row->notes,
+            'used_at' => $row->used_at,
+            'created_at' => $row->created_at,
         ];
     }
 
-    private function usageQuery(CarbonImmutable $from, CarbonImmutable $to, array $filters)
+    private function remoteBounds(CarbonImmutable $startUtc, CarbonImmutable $endUtc): array
     {
-        $query = $this->db()
-            ->table('usage_logs as ul')
-            ->leftJoin('users as u', 'u.id', '=', 'ul.user_id')
-            ->where('ul.created_at', '>=', $from->toDateTimeString())
-            ->where('ul.created_at', '<', $to->toDateTimeString());
-
-        $model = trim((string) ($filters['model'] ?? ''));
-        if ($model !== '') {
-            $query->where('ul.model', $model);
+        if ($this->db()->getDriverName() === 'sqlite') {
+            return [
+                $startUtc->utc()->format(ChinaTime::FORMAT),
+                $endUtc->utc()->format(ChinaTime::FORMAT),
+            ];
         }
 
-        $userId = (int) ($filters['user_id'] ?? 0);
-        if ($userId > 0) {
-            $query->where('ul.user_id', $userId);
-        }
-
-        $kw = trim((string) ($filters['user_keyword'] ?? ''));
-        if ($kw !== '') {
-            $query->where(function ($sub) use ($kw): void {
-                if (ctype_digit($kw)) {
-                    $sub->where('ul.user_id', (int) $kw);
-                }
-
-                $sub->orWhere('u.email', 'like', "%{$kw}%")
-                    ->orWhere('u.username', 'like', "%{$kw}%");
-            });
-        }
-
-        return $query;
-    }
-
-    private function tokenExpr(string $alias = ''): string
-    {
-        static $baseExpr = null;
-
-        if ($baseExpr === null) {
-            $cols = $this->db()->getSchemaBuilder()->getColumnListing('usage_logs');
-
-            foreach (['total_tokens', 'token_total', 'tokens'] as $col) {
-                if (in_array($col, $cols, true)) {
-                    $baseExpr = "coalesce(ul.{$col}, 0)";
-                    break;
-                }
-            }
-
-            if ($baseExpr === null) {
-                $parts = array_values(array_filter([
-                    in_array('input_tokens', $cols, true) ? 'coalesce(ul.input_tokens, 0)' : null,
-                    in_array('output_tokens', $cols, true) ? 'coalesce(ul.output_tokens, 0)' : null,
-                    in_array('prompt_tokens', $cols, true) ? 'coalesce(ul.prompt_tokens, 0)' : null,
-                    in_array('completion_tokens', $cols, true) ? 'coalesce(ul.completion_tokens, 0)' : null,
-                    in_array('cache_creation_tokens', $cols, true) ? 'coalesce(ul.cache_creation_tokens, 0)' : null,
-                    in_array('cache_read_tokens', $cols, true) ? 'coalesce(ul.cache_read_tokens, 0)' : null,
-                    in_array('cached_tokens', $cols, true) ? 'coalesce(ul.cached_tokens, 0)' : null,
-                ]));
-
-                $baseExpr = count($parts) > 0 ? implode(' + ', $parts) : '0';
-            }
-        }
-
-        if ($alias === '' || $alias === 'ul') {
-            return $baseExpr;
-        }
-
-        return str_replace('ul.', $alias.'.', $baseExpr);
+        return [ChinaTime::utcText($startUtc), ChinaTime::utcText($endUtc)];
     }
 
     private function userRow(object $row): array
     {
         $item = (array) $row;
-        $item['balance'] = number_format((float) $item['balance'], 2, '.', '');
-        $item['total_recharged'] = number_format((float) $item['total_recharged'], 2, '.', '');
-        $item['created_at'] = ChinaTime::fmt($item['created_at'] ?? null);
-        $item['updated_at'] = ChinaTime::fmt($item['updated_at'] ?? null);
+        $item['balance'] = $this->decimal($item['balance'], 8);
+        $item['total_recharged'] = $this->decimal($item['total_recharged'], 8);
+        $item['created_at'] = ChinaTime::fmtUtc($item['created_at'] ?? null);
+        $item['updated_at'] = ChinaTime::fmtUtc($item['updated_at'] ?? null);
 
         return $item;
+    }
+
+    private function decimal(mixed $value, int $scale): string
+    {
+        $text = number_format((float) $value, $scale, '.', '');
+
+        return rtrim(rtrim($text, '0'), '.') ?: '0';
     }
 }

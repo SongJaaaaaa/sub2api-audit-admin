@@ -85,4 +85,33 @@ class AdminAuthTest extends TestCase
             ->getJson('/api/v1/auth/me')
             ->assertUnauthorized();
     }
+    public function test_admin_can_get_active_admin_options(): void
+    {
+        $admin = Admin::query()->create([
+            'name' => '当前管理员',
+            'email' => 'current@example.com',
+            'password' => 'secret123',
+            'status' => Admin::STATUS_ACTIVE,
+        ]);
+        Admin::query()->create([
+            'name' => '其他管理员',
+            'email' => 'other@example.com',
+            'password' => 'secret123',
+            'status' => Admin::STATUS_ACTIVE,
+        ]);
+        Admin::query()->create([
+            'name' => '停用管理员',
+            'email' => 'disabled@example.com',
+            'password' => 'secret123',
+            'status' => Admin::STATUS_DISABLED,
+        ]);
+
+        $this->actingAs($admin)
+            ->getJson('/api/v1/auth/admin-options')
+            ->assertOk()
+            ->assertJsonCount(2, 'items')
+            ->assertJsonMissing(['email' => 'disabled@example.com'])
+            ->assertJsonStructure(['items' => [['id', 'name', 'email', 'status']]]);
+    }
+
 }

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class LedgerAdjustment extends Model
 {
@@ -22,6 +23,7 @@ class LedgerAdjustment extends Model
         'ledger_no',
         'idempotency_key',
         'sub2api_user_id',
+        'sub2api_source_id',
         'sub2api_user_email',
         'operation',
         'amount',
@@ -41,6 +43,11 @@ class LedgerAdjustment extends Model
         'called_at',
         'confirmed_at',
     ];
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(Admin::class, 'created_by');
+    }
 
     protected function casts(): array
     {

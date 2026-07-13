@@ -35,6 +35,19 @@ class AuthController extends Controller
         ]);
     }
 
+    public function options(): JsonResponse
+    {
+        $items = Admin::query()
+            ->where('status', 'active')
+            ->orderBy('name')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (Admin $admin): array => $this->adminData($admin))
+            ->all();
+
+        return response()->json(['items' => $items]);
+    }
+
     public function logout(Request $req, AdminAuthService $svc): JsonResponse
     {
         /** @var Admin $admin */

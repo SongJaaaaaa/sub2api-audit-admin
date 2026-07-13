@@ -1,93 +1,111 @@
 # 12 前端业务页面
 
-状态: 已完成
+状态：已完成
 
 ## 1. 目标
 
-实现管理端核心业务页面。
+完成审计系统桌面端与 H5 业务页面，接入真实后端 API，并按金额、Token、请求数和状态分别展示，不让失败数据伪装为 0。
 
-## 2. 范围
+## 2. 页面范围
 
-- 首页统计看板、ECharts 图表和模型消费排行。
-- Sub2API 用户数据源。
-- Sub2API 模型消耗统计。
-- 用户与额度。
-- 调额表单。
-- 额度调整记录。
-- 赠送额度记录。
-- 经营账。
-- 对账中心。
-- 异常中心。
-- 操作审计。
-- 表格列配置。
-- H5 手机端页面适配。
+| 页面 | 状态 | 核心内容 |
+|---|---|---|
+| 首页 | 已完成 | 三张 KPI、财务趋势、消费/Token 趋势、四类排行、最近调额和告警入口 |
+| Sub2API 用户 | 已完成 | 用户搜索、当前余额和发起调额 |
+| 模型统计 | 已完成 | requested 模型 Token 榜、指定模型下用户 Token 排行 |
+| 调额记录 | 已完成 | 成功、失败、异常、作废记录和详情 |
+| 用户与额度 | 已完成 | 当前用户余额、调额表单和业务确认 |
+| 赠送额度 | 已完成 | 赠送额度账本列表 |
+| 经营账 | 已完成 | 平台经营支出列表和录入 |
+| 历史账 | 已完成 | 三类远端余额事件、筛选、分页、关联状态和 CSV 导出 |
+| 对账中心 | 已完成 | 批次汇总、`ok/warning/error`、七类差异和手动补跑 |
+| 异常中心 | 已完成 | 失败、异常和作废记录 |
+| 操作审计 | 已完成 | 管理操作及新旧对账状态翻译 |
 
-## 3. 依赖
+## 3. 首页展示规则
 
-- 11 前端基础完成。
-- 后端对应 API 完成。
+顶部 KPI：
 
-从 04 开始，业务页面不再集中等到最后开发。每个后端模块完成时，都要同步补齐对应前端页面或入口。
+1. **实收入账**：主值为未软删除 Sub2API 用户的 `total_recharged` 累计合计，明确标注当前快照且不随日期变化。
+2. **实际消费**：主值 `actual_cost`，次值 Token 和请求数。
+3. **普通启用用户当前余额**：主值余额，次值用户数，明确标注当前快照且不随日期变化。
 
-## 4. 交付物
+四类排行必须独立：
 
-- `frontend/src/views/UsersQuotaView.vue`
+- 本地现金入账用户榜。
+- 用户实际消费榜。
+- 用户 Token 榜。
+- 请求模型 Token 榜。
+
+金额使用金额格式，Token 使用整数缩写和千分位，请求数使用计数格式。不得复用统一金额格式。
+
+## 4. 官方统计失败状态
+
+当首页或模型统计收到：
+
+```text
+HTTP 502
+code=SUB2API_STATS_UNAVAILABLE
+```
+
+页面必须：
+
+- 显示“Sub2API 官方统计暂不可用”。
+- 清空旧官方统计数据。
+- 销毁旧 ECharts 实例，避免恢复请求时复用已卸载 DOM。
+- 不显示假 0，也不以本地 SQL 数据替代官方统计。
+
+本地财务、余额或其他独立模块仍可按接口实际状态展示，不能把官方失败误写成整页成功。
+
+## 5. 历史账页面
+
+- 默认 `period=history`，展示切账前 30 天。
+- 支持日期、用户/关键词、来源、方向、关联状态和 period 筛选。
+- 来源：后台余额调额、余额兑换码、已完成且实际改变余额的支付订单。
+- 状态：`linked`、`audit_orphan`、`external`。
+- 页面只读，无认领、补录、修改和删除入口。
+- CSV 复用列表筛选，忽略分页，由后端流式导出 UTF-8 BOM 文件。
+
+## 6. 对账页面
+
+- 展示业务日期、实际起止时间、本地与远端笔数和净额、外部事件、审计孤儿及问题数。
+- 状态使用 `ok`、`warning`、`error`。
+- 操作审计兼容展示旧快照中的 `balanced`、`diff`，但新业务不再生成旧状态。
+- 同日手动补跑会替换原批次明细，不提示旧版“重复对账 409”。
+
+## 7. 交付物
+
+- `frontend/src/views/DashboardView.vue`
 - `frontend/src/views/Sub2ApiUsersView.vue`
 - `frontend/src/views/Sub2ApiModelStatsView.vue`
+- `frontend/src/views/UsersQuotaView.vue`
 - `frontend/src/views/LedgerAdjustmentListView.vue`
 - `frontend/src/views/GiftQuotaListView.vue`
 - `frontend/src/views/OperationExpenseView.vue`
+- `frontend/src/views/BalanceEventsView.vue`
 - `frontend/src/views/ReconcileView.vue`
 - `frontend/src/views/ExceptionCenterView.vue`
 - `frontend/src/views/AuditLogView.vue`
-- `frontend/src/components/table/ColumnSettings.vue`
-- `frontend/src/components/ledger/AdjustmentForm.vue`
+- `frontend/src/api/*.ts`
+- `frontend/src/router/index.ts`
+- `frontend/src/config/menu.ts`
 
-## 5. 进度
+## 8. 验收标准
 
-| 项 | 状态 | 备注 |
-|---|---|---|
-| 首页 | 已完成 | 已接 `/dashboard` 专用统计 API，包含充值榜、额度使用榜、模型消费榜、调额动态 |
-| Sub2API 用户数据源 | 已完成 | 04 回补，接真实 `/api/v1/sub2api/users` |
-| Sub2API 模型消耗统计 | 已完成 | 04 回补，接真实 `/api/v1/sub2api/model-stats` |
-| 用户与额度 | 已完成 | 可搜索用户并打开调额弹窗 |
-| 调额表单 | 已完成 | `components/ledger/AdjustmentForm.vue`，提交前强确认文案已完成 |
-| 记录表格 | 已完成 | 成功记录和异常记录已接 API，额度调整记录支持列配置 |
-| 对账页面 | 已完成 | `ReconcileView.vue` 接真实 API |
-| 审计页面 | 已完成 | `AuditLogView.vue` 接真实 API |
-| 表格列配置 | 已完成 | `components/table/ColumnSettings.vue` |
-| 桌面端验收 | 已完成 | Playwright desktop 冒烟通过 |
-| H5 手机端验收 | 已完成 | Playwright h5 冒烟通过 |
-| 前后端联通验收 | 已完成 | `pnpm e2e` 覆盖登录和核心业务页面 |
-| 异常路径验收 | 已完成 | 页面失败提示、调额未确认不显示成功、后端异常测试通过 |
+- 页面均接真实 API，不保留会误导验收的 mock 数字。
+- 桌面端筛选、表格、趋势、抽屉和弹窗不拥挤。
+- H5 筛选和主要操作不被遮挡；宽表允许横向滚动。
+- 官方统计错误不会保留旧图表或显示假 0。
+- 历史账只读、中文正常、CSV 可用。
+- 首页四类排行名称、排序字段和展示单位一致。
+- Node `22.22.0` 下生产构建通过。
 
-## 6. 验收标准
-
-- 表格支持列选择。
-- 调额表单提交前有确认文案。
-- 不显示“Sub2API 未确认成功”的成功状态。
-- 页面在常见桌面宽度下不拥挤。
-- 每个业务页面都要接真实 API 或明确标记为 mock，不能让假数据误导验收。
-- 每个业务页面都要按手机端 H5 检查，筛选区、表格、抽屉、弹窗不能遮挡主要操作。
-- 表格在手机端允许横向滚动，但默认展示字段必须克制。
-
-## 7. 测试命令
+## 9. 测试命令
 
 ```bash
+source ~/.nvm/nvm.sh
+nvm use 22.22.0
 cd /Users/macbook/Desktop/sub2api审计/sub2api-audit-admin/frontend
-pnpm typecheck
-pnpm build
+corepack pnpm build
+corepack pnpm e2e
 ```
-
-## 8. 风险
-
-- 账本字段多，默认列必须克制，扩展字段放列配置。
-
-## 9. 完成记录
-
-| 日期 | 内容 |
-|---|---|
-| 2026-07-05 | 按 soybean 管理后台风格重做首页看板，新增 ECharts 模型消费榜、请求占比和周期对比，完成桌面/H5布局验收 |
-| 2026-07-05 | 回补首页工作台，接入 Sub2API 用户、模型统计、成功调额和异常中心真实 API |
-| 2026-07-05 | 回补 04 对应业务页面，完成 Sub2API 用户数据源和模型消耗统计页面，均接真实后端 API |
-| 2026-07-06 | 完成 04-10 全部业务页面、列配置组件和调额表单组件；新增 Playwright 桌面/H5 冒烟，`pnpm typecheck`、`pnpm build`、`pnpm e2e` 已通过 |

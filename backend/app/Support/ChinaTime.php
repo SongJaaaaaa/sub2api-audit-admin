@@ -9,12 +9,14 @@ class ChinaTime
 {
     public const FORMAT = 'Y-m-d H:i:s';
 
-    public static function dayRange(string $date): array
+    public static function range(string $startDate, string $endDate): ChinaDateRange
     {
-        $tz = config('ledger.timezone', 'Asia/Shanghai');
-        $day = CarbonImmutable::parse($date, $tz);
+        return ChinaDateRange::make($startDate, $endDate);
+    }
 
-        return [$day->startOfDay()->utc(), $day->endOfDay()->utc()];
+    public static function dayRange(string $date): ChinaDateRange
+    {
+        return ChinaDateRange::day($date);
     }
 
     public static function fmt(mixed $val): ?string
@@ -29,6 +31,21 @@ class ChinaTime
             : CarbonImmutable::parse((string) $val);
 
         return $time->setTimezone($tz)->format(self::FORMAT);
+    }
+
+    public static function fmtUtc(mixed $val): ?string
+    {
+        if ($val === null || $val === '') {
+            return null;
+        }
+
+        $time = $val instanceof DateTimeInterface
+            ? CarbonImmutable::instance($val)
+            : CarbonImmutable::parse((string) $val, 'UTC');
+
+        return $time
+            ->setTimezone(config('ledger.timezone', 'Asia/Shanghai'))
+            ->format(self::FORMAT);
     }
 
     public static function utcText(CarbonImmutable $time): string

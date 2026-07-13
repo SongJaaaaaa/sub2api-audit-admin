@@ -15,7 +15,14 @@ class ReconcileController extends Controller
         $page = max((int) $req->query('page', 1), 1);
         $pageSize = min(max((int) $req->query('page_size', 20), 1), 100);
 
-        return response()->json($service->list($page, $pageSize));
+        return response()->json($service->list([
+            'start_date' => $req->query('start_date', ''),
+            'end_date' => $req->query('end_date', ''),
+            'status' => $req->query('status', ''),
+            'has_external' => $req->query('has_external', ''),
+            'has_orphan' => $req->query('has_orphan', ''),
+            'created_by' => $req->query('created_by', 0),
+        ], $page, $pageSize));
     }
 
     public function store(Request $req, ReconcileService $service): JsonResponse

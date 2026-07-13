@@ -1,21 +1,28 @@
 <script setup lang="ts">
-import { AuditOutlined, CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, FileTextOutlined, PaperClipOutlined, SettingOutlined } from '@ant-design/icons-vue'
+import { AuditOutlined, CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, FileTextOutlined, PaperClipOutlined, SettingOutlined, UserAddOutlined } from '@ant-design/icons-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
+import type { Dayjs } from 'dayjs'
 import { onMounted, reactive, ref } from 'vue'
-import { getAuditLogs, type AuditLog } from '../api/audit'
+import { getAuditLogs, type AuditLog, type AuditSummary } from '../api/audit'
 
+import ColumnSettings from '../components/table/ColumnSettings.vue'
+import { useAdminOptions } from '../composables/useAdminOptions'
+import { useTableColumns } from '../composables/useTableColumns'
 // ── 中文映射 ──────────────────────────────────────────────────────────
 const actionLabels: Record<string, string> = {
+  'admin.create':                '新增管理员',
   'ledger_adjustment.succeeded': '调额成功',
   'ledger_adjustment.exception': '调额异常',
   'ledger_adjustment.voided':    '调额作废',
   'operation_expense.create':    '新增经营支出',
   'reconcile.create':            '生成对账批次',
+  'reconcile.run':               '运行 / 重跑对账',
   'attachment.upload':           '上传附件',
 }
 
 const targetTypeLabels: Record<string, string> = {
+  admin:                '管理员账号',
   ledger_adjustment:    '调额记录',
   operation_expense:    '经营支出',
   reconciliation_batch: '对账批次',
@@ -23,16 +30,25 @@ const targetTypeLabels: Record<string, string> = {
 }
 
 const actionTagProps: Record<string, { color: string; icon: any }> = {
+  'admin.create':                { color: 'red',       icon: UserAddOutlined },
   'ledger_adjustment.succeeded': { color: 'success',  icon: CheckCircleOutlined },
   'ledger_adjustment.exception': { color: 'warning',  icon: ExclamationCircleOutlined },
   'ledger_adjustment.voided':    { color: 'error',    icon: CloseCircleOutlined },
   'operation_expense.create':    { color: 'blue',     icon: FileTextOutlined },
   'reconcile.create':            { color: 'purple',   icon: AuditOutlined },
+  'reconcile.run':               { color: 'purple',   icon: AuditOutlined },
   'attachment.upload':           { color: 'cyan',     icon: PaperClipOutlined },
 }
 
 // ── 字段中文名 ────────────────────────────────────────────────────────
 const fieldLabels: Record<string, Record<string, string>> = {
+  admin: {
+    id:         '管理员ID',
+    name:       '管理员姓名',
+    email:      '登录邮箱',
+    status:     '状态',
+    created_at: '创建时间',
+  },
   ledger_adjustment: {
     id:                 '调额ID',
     ledger_no:          '账本号',
@@ -89,7 +105,7 @@ const fieldLabels: Record<string, Record<string, string>> = {
 // 字段值翻译
 const valueTranslations: Record<string, Record<string, string>> = {
   operation: { increment: '充值(+)', decrement: '扣减(-)' },
-  status:    { succeeded: '成功', exception: '异常', voided: '作废', balanced: '已对平', diff: '有差异' },
+  status:    { succeeded: '成功', exception: '异常', voided: '作废', ok: '正常', warning: '告警', error: '异常', balanced: '已对平', diff: '有差异' },
   attachable_type: { ledger_adjustment: '调额记录', operation_expense: '经营支出', reconciliation_batch: '对账批次' },
 }
 
@@ -122,14 +138,16 @@ function targetLabel(type: string) {
 }
 
 // ── 组件逻辑 ──────────────────────────────────────────────────────────
+const adminOptions = useAdminOptions()
 const loading = ref(false)
 const drawerOpen = ref(false)
 const items = ref<AuditLog[]>([])
 const selected = ref<AuditLog | null>(null)
-const filters = reactive({ action: '', admin_id: '' })
+const filters = reactive({ action: '', admin_id: undefined as number | undefined, target_type: '', target_id: '', ip: '', keyword: '', risk: '' as '' | 'high', dates: null as [Dayjs, Dayjs] | null })
+const summary = reactive<AuditSummary>({ record_count: 0, operator_count: 0, action_count: 0, target_count: 0, high_risk_count: 0, actions: [] })
 const page = reactive({ current: 1, pageSize: 20, total: 0 })
 
-const columns = [
+const allColumns = [
   { title: '操作', dataIndex: 'action', width: 200 },
   { title: '管理员', dataIndex: 'admin_name', width: 120 },
   { title: '对象', dataIndex: 'target_type', width: 130 },
@@ -138,6 +156,7 @@ const columns = [
   { title: '时间', dataIndex: 'created_at', width: 180 },
   { title: '详情', dataIndex: 'detail', fixed: 'right', width: 80 },
 ] as const
+const { columns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('audit-log-columns', allColumns, 1050)
 
 async function loadItems() {
   loading.value = true
@@ -147,9 +166,17 @@ async function loadItems() {
       page_size: page.pageSize,
       action: filters.action,
       admin_id: filters.admin_id,
+      target_type: filters.target_type,
+      target_id: filters.target_id,
+      ip: filters.ip,
+      keyword: filters.keyword,
+      risk: filters.risk,
+      from: filters.dates?.[0].format('YYYY-MM-DD'),
+      to: filters.dates?.[1].format('YYYY-MM-DD'),
     })
     items.value = res.items
     page.total = res.total
+    if (res.summary) Object.assign(summary, res.summary)
   } catch {
     message.error('读取操作审计失败')
   } finally {
@@ -161,6 +188,8 @@ function search() {
   page.current = 1
   loadItems()
 }
+
+function resetFilters() { Object.assign(filters, { action: '', admin_id: undefined, target_type: '', target_id: '', ip: '', keyword: '', risk: '', dates: null }); search() }
 
 function change(pager: TablePaginationConfig) {
   page.current = pager.current || 1
@@ -186,29 +215,37 @@ onMounted(loadItems)
         <h1>操作审计</h1>
         <p>危险操作留痕，以后端登录管理员为准记录</p>
       </div>
-      <div class="headActions">
-        <a-select
-          v-model:value="filters.action"
-          class="filterInput"
-          placeholder="操作类型"
-          allow-clear
-          @change="search"
-        >
-          <a-select-option value="">全部操作</a-select-option>
-          <a-select-option v-for="(label, key) in actionLabels" :key="key" :value="key">{{ label }}</a-select-option>
-        </a-select>
-        <a-input v-model:value="filters.admin_id" class="filterInput" placeholder="管理员ID" allow-clear @press-enter="search" />
-        <a-button type="primary" @click="search">查询</a-button>
-      </div>
+      <a-button @click="loadItems">刷新</a-button>
     </div>
 
+    <div class="filterBar">
+      <a-select v-model:value="filters.action" placeholder="操作类型" allow-clear><a-select-option value="">全部操作</a-select-option><a-select-option v-for="(label, key) in actionLabels" :key="key" :value="key">{{ label }}</a-select-option></a-select>
+      <a-select v-model:value="filters.admin_id" placeholder="操作人" allow-clear><a-select-option v-for="row in adminOptions" :key="row.id" :value="row.id">{{ row.name }}（{{ row.email }}）</a-select-option></a-select>
+      <a-select v-model:value="filters.target_type" placeholder="对象类型" allow-clear><a-select-option value="">全部对象</a-select-option><a-select-option v-for="(label, key) in targetTypeLabels" :key="key" :value="key">{{ label }}</a-select-option></a-select>
+      <a-input v-model:value="filters.target_id" placeholder="对象 ID" allow-clear />
+      <a-input v-model:value="filters.ip" placeholder="IP" allow-clear @press-enter="search" />
+      <a-range-picker v-model:value="filters.dates" />
+      <a-input v-model:value="filters.keyword" placeholder="关键字" allow-clear @press-enter="search" />
+      <a-select v-model:value="filters.risk" placeholder="风险级别"><a-select-option value="">全部风险</a-select-option><a-select-option value="high">高风险操作</a-select-option></a-select>
+      <a-button type="primary" @click="search">查询</a-button><a-button @click="resetFilters">重置</a-button>
+    </div>
+    <div class="summaryGrid">
+      <section><span>操作总数</span><strong>{{ summary.record_count }}</strong></section>
+      <section><span>操作人数</span><strong>{{ summary.operator_count }}</strong></section>
+      <section><span>涉及对象数</span><strong>{{ summary.target_count }}</strong></section>
+      <section><span>高风险操作数</span><strong class="risk">{{ summary.high_risk_count }}</strong></section>
+    </div>
+
+    <div class="tableTools">
+      <ColumnSettings v-model:value="visibleCols" v-model:width="tableWidth" :options="colOptions" @reset="resetColumns" />
+    </div>
     <a-table
       row-key="id"
       :columns="columns"
       :data-source="items"
       :loading="loading"
       :pagination="page"
-      :scroll="{ x: 1050 }"
+      :scroll="{ x: tableWidth }"
       :locale="{ emptyText: '暂无审计日志' }"
       @change="change"
     >
@@ -295,3 +332,13 @@ onMounted(loadItems)
     </a-drawer>
   </section>
 </template>
+
+<style scoped>
+.filterBar { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.summaryGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.summaryGrid section { padding: 14px 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); }
+.summaryGrid span { display: block; color: var(--text-secondary, #7a8395); font-size: 12px; margin-bottom: 6px; }
+.summaryGrid strong { font-size: 21px; } .risk { color: #cf1322; }
+@media (max-width: 760px) { .filterBar { grid-template-columns: minmax(0, 1fr); } .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .summaryGrid { grid-template-columns: 1fr; } }
+</style>

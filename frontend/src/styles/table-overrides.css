@@ -1,0 +1,22 @@
+.tableViewport { width: 100%; min-width: 0; overflow: hidden; }
+.tableTools { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+.columnWidth { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-color, #eee); }
+.columnWidth .ant-input-number { width: 116px; }
+@media (max-width: 640px) {
+  .page { min-width: 0; padding-left: 10px; padding-right: 10px; }
+  .pageHead, .sectionHead { align-items: stretch; flex-direction: column; }
+  .headActions, .modelFilters { width: 100%; }
+  .headActions > *, .modelFilters > *, .modelInput { width: 100% !important; }
+  .tableTools { justify-content: flex-start; }
+  .columnPanel { max-width: calc(100vw - 24px); max-height: 70vh; overflow: auto; }
+}
+@media (max-width: 760px) {
+  .page .filterBar,
+  .page .expenseFilterBar { width: 100%; min-width: 0; }
+  .page .filterBar > *,
+  .page .expenseFilterBar > * { width: 100% !important; min-width: 0 !important; max-width: 100%; }
+}
+.page .ant-table-wrapper { width: 100%; min-width: 0; max-width: 100%; overflow: hidden; }
+.page .ant-table-container { width: 100%; }
+.page .ant-table-content { overflow-x: auto !important; }
+.page .ant-table-body { overflow-x: auto !important; }

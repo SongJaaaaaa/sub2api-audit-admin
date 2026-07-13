@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class GiftQuotaEntry extends Model
 {
@@ -22,5 +23,10 @@ class GiftQuotaEntry extends Model
         return [
             'quota_amount' => 'decimal:2',
         ];
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(Admin::class, 'created_by');
     }
 }

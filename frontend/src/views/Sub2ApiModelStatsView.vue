@@ -1,396 +1,301 @@
 <script setup lang="ts">
-import { ApiOutlined, BarChartOutlined, TeamOutlined, ThunderboltOutlined } from '@ant-design/icons-vue'
+import { ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import { BarChart } from 'echarts/charts'
-import {
-  GraphicComponent,
-  GridComponent,
-  LegendComponent,
-  TooltipComponent,
-} from 'echarts/components'
+import { DataZoomComponent, GridComponent, TooltipComponent } from 'echarts/components'
 import { init, use, type ECharts } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { message } from 'ant-design-vue'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { getModelStats, type ModelRank, type ModelStatsRes, type UserModelRank } from '../api/sub2api'
-import { useThemeStore } from '../stores/theme'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import ColumnSettings from '../components/table/ColumnSettings.vue'
+import { useTableColumns } from '../composables/useTableColumns'
+import {
+  getModelStats,
+  type ModelStat,
+  type ModelStatsRes,
+  type ModelUserRank,
+} from '../api/sub2api'
 
-use([BarChart, GraphicComponent, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
+use([BarChart, DataZoomComponent, GridComponent, TooltipComponent, CanvasRenderer])
 
-const themeStore = useThemeStore()
 const loading = ref(false)
 const stats = ref<ModelStatsRes | null>(null)
-const range = ref<[Dayjs, Dayjs]>([dayjs().subtract(7, 'day').startOf('day'), dayjs().endOf('day')])
-const userFilter = ref('')
+const statsError = ref('')
+const range = ref<[Dayjs, Dayjs]>([dayjs().subtract(6, 'day'), dayjs()])
+const model = ref('')
+const limit = ref(20)
+const modelOptions = ref<{ label: string; value: string }[]>([])
+const userChartEl = ref<HTMLDivElement | null>(null)
+let userChart: ECharts | null = null
 
-const barChartEl = ref<HTMLDivElement | null>(null)
-const userModelChartEl = ref<HTMLDivElement | null>(null)
-let barChart: ECharts | null = null
-let userModelChart: ECharts | null = null
+const selectedModel = computed(() => stats.value?.selected_model || '')
+const modelRows = computed<ModelStat[]>(() => [...(stats.value?.models || [])].sort((a, b) => b.total_tokens - a.total_tokens))
+const userRows = computed<ModelUserRank[]>(() => [...(stats.value?.users || [])].sort((a, b) => b.total_tokens - a.total_tokens))
 
-const topModels = computed<ModelRank[]>(() => (stats.value?.models || []).slice(0, 12))
-const userModels = computed<UserModelRank[]>(() => stats.value?.user_models || [])
-const topUserModels = computed<UserModelRank[]>(() => userModels.value.slice(0, 30))
+const modelColumns = [
+  { title: '排名', dataIndex: 'rank', width: 72, align: 'center' },
+  { title: '请求模型（requested）', dataIndex: 'model', minWidth: 240 },
+  { title: '请求数', dataIndex: 'request_count', width: 120, align: 'right' },
+  { title: '输入 Token', dataIndex: 'input_tokens', width: 145, align: 'right' },
+  { title: '输出 Token', dataIndex: 'output_tokens', width: 145, align: 'right' },
+  { title: '缓存创建', dataIndex: 'cache_creation_tokens', width: 145, align: 'right' },
+  { title: '缓存读取', dataIndex: 'cache_read_tokens', width: 145, align: 'right' },
+  { title: '总 Token', dataIndex: 'total_tokens', width: 160, align: 'right' },
+  { title: '标准消费', dataIndex: 'standard_cost', width: 135, align: 'right' },
+  { title: '实际消费', dataIndex: 'actual_cost', width: 135, align: 'right' },
+] as const
 
-const metricCards = computed(() => [
-  {
-    label: '总请求数',
-    value: (stats.value?.summary.request_count || 0).toLocaleString('zh-CN'),
-    icon: ApiOutlined,
-    color: '#4f46e5',
-    bg: 'linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%)',
-  },
-  {
-    label: '活跃用户',
-    value: (stats.value?.summary.user_count || 0).toLocaleString('zh-CN'),
-    icon: TeamOutlined,
-    color: '#0891b2',
-    bg: 'linear-gradient(135deg,#0891b2 0%,#0e7490 100%)',
-  },
-  {
-    label: '模型数量',
-    value: (stats.value?.summary.model_count || 0).toString(),
-    icon: BarChartOutlined,
-    color: '#059669',
-    bg: 'linear-gradient(135deg,#059669 0%,#047857 100%)',
-  },
-  {
-    label: 'Total Cost',
-    value: Number(stats.value?.summary.total_cost || 0).toFixed(4),
-    icon: ThunderboltOutlined,
-    color: '#d97706',
-    bg: 'linear-gradient(135deg,#d97706 0%,#b45309 100%)',
-  },
-])
-
-function modelTag(model: string) {
-  if (/gpt|chatgpt|o[1-9]|openai/i.test(model)) return { color: '#10b981', label: 'GPT' }
-  if (/claude|anthropic|droid/i.test(model)) return { color: '#8b5cf6', label: 'Claude' }
-  if (/gemini|google/i.test(model)) return { color: '#3b82f6', label: 'Gemini' }
-  return { color: '#6b7280', label: '其他' }
-}
-
-const isDark = computed(() => themeStore.themeName === 'dark')
-const axisColor = computed(() => isDark.value ? '#666' : '#ccc')
-const labelColor = computed(() => isDark.value ? '#bbb' : '#555')
-
-function drawBarChart() {
-  if (!barChartEl.value) return
-  if (!barChart) barChart = init(barChartEl.value, isDark.value ? 'dark' : undefined)
-  if (!topModels.value.length) {
-    barChart.setOption(emptyChart('暂无模型消费数据'), true)
-    return
-  }
-
-  const models = [...topModels.value].reverse()
-  barChart.setOption({
-    backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', formatter: (p: any) => `${p[0].name}<br/>Total Cost: <b>${Number(p[0].value).toFixed(6)}</b>` },
-    grid: { left: 16, right: 80, top: 12, bottom: 12, containLabel: true },
-    xAxis: { type: 'value', axisLine: { lineStyle: { color: axisColor.value } }, axisLabel: { color: labelColor.value, formatter: (v: number) => v.toFixed(4) } },
-    yAxis: {
-      type: 'category',
-      data: models.map(m => m.model),
-      axisLabel: {
-        color: labelColor.value,
-        width: 160,
-        overflow: 'truncate',
-        formatter: (v: string) => v.length > 22 ? v.slice(0, 22) + '…' : v,
-      },
-      axisLine: { lineStyle: { color: axisColor.value } },
-    },
-    series: [{
-      type: 'bar',
-      data: models.map(m => Number(m.total_cost)),
-      itemStyle: {
-        borderRadius: [0, 6, 6, 0],
-        color: (p: any) => {
-          const colors = ['#4f46e5', '#7c3aed', '#0891b2', '#059669', '#d97706', '#dc2626']
-          return colors[p.dataIndex % colors.length]
-        },
-      },
-      label: {
-        show: true,
-        position: 'right',
-        color: labelColor.value,
-        formatter: (p: any) => Number(p.value).toFixed(4),
-        fontSize: 12,
-      },
-    }],
-  })
-}
-
-function drawUserModelChart() {
-  if (!userModelChartEl.value) return
-  if (!userModelChart) userModelChart = init(userModelChartEl.value, isDark.value ? 'dark' : undefined)
-  if (!topUserModels.value.length) {
-    userModelChart.setOption(emptyChart('暂无用户模型消费数据'), true)
-    return
-  }
-
-  const rows = [...topUserModels.value].reverse()
-
-  userModelChart.setOption({
-    backgroundColor: 'transparent',
-    tooltip: {
-      trigger: 'axis',
-      formatter: (p: any) => {
-        const row = rows[p[0].dataIndex]
-
-        return `${userLabel(row)}<br/>${row.model}<br/>消费：<b>${Number(row.total_cost || 0).toFixed(6)}</b><br/>请求：${row.request_count.toLocaleString('zh-CN')} 次<br/>Token：${tokenText(row.token_total)}`
-      },
-    },
-    grid: { left: 150, right: 78, top: 12, bottom: 12, containLabel: true },
-    xAxis: {
-      type: 'value',
-      axisLabel: { color: labelColor.value, formatter: (v: number) => v.toFixed(4) },
-      axisLine: { lineStyle: { color: axisColor.value } },
-      splitLine: { lineStyle: { color: axisColor.value } },
-    },
-    yAxis: {
-      type: 'category',
-      data: rows.map(row => `${shortUser(userLabel(row))}\n${shortModel(row.model)}`),
-      axisLabel: { color: labelColor.value, width: 140, overflow: 'truncate', lineHeight: 15 },
-      axisTick: { show: false },
-      axisLine: { lineStyle: { color: axisColor.value } },
-    },
-    series: [{
-      type: 'bar',
-      data: rows.map(row => Number(row.total_cost || 0)),
-      barWidth: 10,
-      itemStyle: { borderRadius: [0, 6, 6, 0], color: '#2563eb' },
-      label: {
-        show: true,
-        position: 'right',
-        color: labelColor.value,
-        formatter: (p: any) => Number(p.value).toFixed(4),
-        fontSize: 11,
-      },
-    }],
-  })
-}
+const { columns: visibleModelColumns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('sub2api-model-columns', modelColumns, 1460)
 
 async function loadStats() {
+  const [start, end] = range.value
   loading.value = true
+  statsError.value = ''
+
   try {
-    const [from, to] = range.value
-    stats.value = await getModelStats({
-      from: from.format('YYYY-MM-DD HH:mm:ss'),
-      to: to.format('YYYY-MM-DD HH:mm:ss'),
-      limit: 30,
-      user_id: userFilter.value,
-      user_keyword: userFilter.value,
+    const res = await getModelStats({
+      start_date: start.format('YYYY-MM-DD'),
+      end_date: end.format('YYYY-MM-DD'),
+      model: model.value.trim() || undefined,
+      limit: limit.value,
     })
-    await nextTick()
-    drawBarChart()
-    drawUserModelChart()
-  } catch {
-    message.error('读取模型消耗统计失败')
+    stats.value = res
+
+    if (res.models.length) {
+      modelOptions.value = res.models.map((row) => ({ label: row.model, value: row.model }))
+    }
+  } catch (err) {
+    stats.value = null
+    const data = (err as { response?: { data?: { code?: string; message?: string } } }).response?.data
+    statsError.value = data?.code === 'SUB2API_STATS_UNAVAILABLE'
+      ? 'Sub2API 官方统计暂不可用，页面不会使用自定义 SQL 或假 0 代替。'
+      : (data?.message || '读取模型统计失败。')
+    message.error(statsError.value)
   } finally {
     loading.value = false
+    renderUserChart()
   }
 }
 
-function changeRange(val: [Dayjs, Dayjs] | null) {
-  if (!val) return
-  range.value = val
+function renderUserChart() {
+  nextTick(() => {
+    if (!userChartEl.value || !selectedModel.value) return
+    userChart ||= init(userChartEl.value)
+    const rows = userRows.value
+    userChart.setOption({
+      grid: { left: 18, right: 22, top: 30, bottom: 105, containLabel: true },
+      tooltip: {
+        trigger: 'item',
+        backgroundColor: 'rgba(17, 24, 39, .94)',
+        borderWidth: 0,
+        textStyle: { color: '#fff' },
+        extraCssText: 'border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.2);padding:12px 14px;',
+        formatter: ({ dataIndex }: { dataIndex: number }) => {
+          const row = rows[dataIndex]
+          if (!row) return ''
+          return [
+            `<strong>${row.email || `用户 #${row.user_id}`}</strong>`,
+            `用户 ID：${row.user_id}`,
+            `请求次数：${formatCount(row.request_count)}`,
+            `输入 Token：${formatCount(row.input_tokens)}`,
+            `输出 Token：${formatCount(row.output_tokens)}`,
+            `缓存 Token：${formatCount(row.cache_tokens)}`,
+            `总 Token：${formatCount(row.total_tokens)}`,
+            `标准消费：${formatCost(row.standard_cost)}`,
+            `实际消费：${formatCost(row.actual_cost)}`,
+          ].join('<br>')
+        },
+      },
+      xAxis: { type: 'category', data: rows.map(row => row.email || `用户 #${row.user_id}`), axisLabel: { rotate: -28, interval: 0, width: 120, overflow: 'truncate', color: '#7a8395' }, axisTick: { show: false }, axisLine: { lineStyle: { color: '#d9dce3' } } },
+      yAxis: { type: 'value', name: '总 Token', axisLabel: { formatter: compactCount, color: '#7a8395' }, splitLine: { lineStyle: { color: '#eef0f4' } } },
+      dataZoom: rows.length > 10 ? [{ type: 'slider', xAxisIndex: 0, bottom: 5, height: 18, startValue: 0, endValue: 9 }, { type: 'inside', xAxisIndex: 0 }] : [],
+      series: [{ type: 'bar', data: rows.map(row => row.total_tokens), barMaxWidth: 42, showBackground: true, backgroundStyle: { color: 'rgba(22,119,255,.06)', borderRadius: [7, 7, 0, 0] }, itemStyle: { color: { type: 'linear', x: 0, y: 1, x2: 0, y2: 0, colorStops: [{ offset: 0, color: '#1677ff' }, { offset: 1, color: '#69b1ff' }] }, borderRadius: [7, 7, 0, 0] }, emphasis: { itemStyle: { shadowBlur: 14, shadowColor: 'rgba(22,119,255,.35)' } } }],
+    }, true)
+  })
+}
+
+function compactCount(val: number) {
+  return Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(val)
+}
+
+function resizeChart() { userChart?.resize() }
+
+function clearModel() {
+  userChart?.dispose()
+  userChart = null
+  model.value = ''
   loadStats()
 }
 
-watch(() => themeStore.themeName, async () => {
-  barChart?.dispose()
-  userModelChart?.dispose()
-  barChart = null
-  userModelChart = null
-  await nextTick()
-  drawBarChart()
-  drawUserModelChart()
-})
-
-onMounted(loadStats)
-onBeforeUnmount(() => {
-  barChart?.dispose()
-  userModelChart?.dispose()
-})
-
-function userLabel(row: UserModelRank) {
-  return row.user_email || `用户 #${row.user_id}`
+function selectModel(name: string) {
+  model.value = name
+  loadStats()
 }
 
-function userModelKey(row: UserModelRank) {
-  return `${row.user_id}-${row.model}`
+function formatCount(val: number | string | null | undefined) {
+  return Number(val || 0).toLocaleString('zh-CN', { maximumFractionDigits: 0 })
 }
 
-function shortModel(model: string) {
-  return model.length > 26 ? model.slice(0, 26) + '...' : model
+function formatCost(val: number | string | null | undefined) {
+  return Number(val || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 8 })
 }
 
-function shortUser(user: string) {
-  return user.length > 22 ? user.slice(0, 22) + '...' : user
-}
-
-function tokenText(val: number | string | undefined) {
-  const num = Number(val || 0)
-  if (num >= 100000000) return `${(num / 100000000).toFixed(2)}亿`
-  if (num >= 10000) return `${(num / 10000).toFixed(2)}万`
-  return num.toLocaleString('zh-CN')
-}
-
-function emptyChart(text: string) {
-  return {
-    graphic: {
-      type: 'text',
-      left: 'center',
-      top: 'middle',
-      style: { text, fill: labelColor.value, fontSize: 13 },
-    },
-    xAxis: { show: false },
-    yAxis: { show: false },
-    series: [],
-  }
-}
+onMounted(() => { window.addEventListener('resize', resizeChart); loadStats() })
+onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userChart?.dispose() })
 </script>
 
 <template>
-  <section class="page">
+  <section class="page modelStatsPage">
     <div class="pageHead">
       <div>
         <h1>模型消耗统计</h1>
-        <p>usage_logs 聚合 · 实时展示各模型 API 调用量与费用分布</p>
+        <p>完全沿用 Sub2API 官方统计；模型维度固定为 requested，并按总 Token 排序</p>
       </div>
-      <div class="headActions">
-        <a-input
-          v-model:value="userFilter"
-          placeholder="用户ID或邮箱"
-          allow-clear
-          style="width:160px;"
-          @press-enter="loadStats"
-        />
+      <div class="headActions modelFilters">
         <a-range-picker
-          :value="range"
-          show-time
-          class="range"
-          format="YYYY-MM-DD HH:mm:ss"
-          @change="changeRange"
+          v-model:value="range"
+          :allow-clear="false"
         />
-        <a-button type="primary" @click="loadStats">查询</a-button>
+        <a-auto-complete
+          v-model:value="model"
+          :options="modelOptions"
+          allow-clear
+          placeholder="留空查看模型榜，输入模型查看用户榜"
+          class="modelInput"
+          @select="selectModel"
+          @clear="clearModel"
+        />
+        <a-select v-model:value="limit" class="limitSelect">
+          <a-select-option :value="10">Top 10</a-select-option>
+          <a-select-option :value="20">Top 20</a-select-option>
+          <a-select-option :value="50">Top 50</a-select-option>
+          <a-select-option :value="100">Top 100</a-select-option>
+        </a-select>
+        <a-button type="primary" :loading="loading" @click="loadStats">
+          <template #icon><SearchOutlined /></template>
+          查询
+        </a-button>
+        <a-button :disabled="loading" @click="loadStats">
+          <template #icon><ReloadOutlined /></template>
+        </a-button>
       </div>
     </div>
 
+    <a-alert
+      v-if="statsError"
+      type="error"
+      show-icon
+      :message="statsError"
+      :description="stats ? '当前保留的是上一次成功查询结果。' : undefined"
+      class="statsAlert"
+    />
+
+    <div v-if="stats" class="summaryGrid">
+      <section><span>模型数</span><strong>{{ stats.summary.model_count }}</strong></section>
+      <section><span>请求总数</span><strong>{{ formatCount(stats.summary.request_count) }}</strong></section>
+      <section><span>Token 总数</span><strong>{{ formatCount(stats.summary.total_tokens) }}</strong></section>
+      <section><span>缓存 Token</span><strong>{{ formatCount(stats.summary.cache_tokens) }}</strong></section>
+      <section><span>缓存占比</span><strong>{{ stats.summary.cache_rate.toFixed(2) }}%</strong></section>
+      <section><span>标准消费</span><strong class="money">{{ formatCost(stats.summary.standard_cost) }}</strong></section>
+      <section><span>实际消费</span><strong class="money">{{ formatCost(stats.summary.actual_cost) }}</strong></section>
+      <section><span>Top 3 Token 占比</span><strong>{{ stats.summary.top3_token_rate.toFixed(2) }}%</strong></section>
+    </div>
+
+    <div v-if="stats" class="rangeMeta">
+      <span>统计范围：{{ stats.range.start_date }} 至 {{ stats.range.end_date }}</span>
+      <span>时区：{{ stats.range.timezone }}</span>
+      <a-tag color="blue">模型语义：requested</a-tag>
+    </div>
+
     <a-spin :spinning="loading">
-      <!-- 指标卡 -->
-      <div class="modelMetricGrid">
-        <div v-for="card in metricCards" :key="card.label" class="modelMetricCard">
-          <div class="modelMetricIcon" :style="{ background: card.bg }">
-            <component :is="card.icon" />
+      <section v-if="stats && !selectedModel" class="panel">
+        <div class="sectionHead">
+          <div>
+            <h2>请求模型 Token 排行</h2>
+            <p>Token = 输入 + 输出 + 缓存创建 + 缓存读取；点击模型可查看该模型下的用户 Token 排行</p>
           </div>
-          <div class="modelMetricInfo">
-            <span>{{ card.label }}</span>
-            <strong>{{ card.value }}</strong>
-          </div>
+          <span>返回 {{ modelRows.length }} 个模型</span>
         </div>
-      </div>
 
-      <!-- 图表区 -->
-      <div v-if="topModels.length > 0" class="modelChartGrid">
-        <div class="modelChartCard">
-          <div class="modelChartTitle">模型消费排行（Top 12）</div>
-          <div ref="barChartEl" class="modelBarChart" />
-        </div>
-        <div class="modelChartCard">
-          <div class="modelChartTitle">用户-模型消费排行（Top 30）</div>
-          <div ref="userModelChartEl" class="modelUserChart" />
-        </div>
-      </div>
-
-      <div class="modelTableCard">
-        <div class="modelTableTitle">用户模型消费明细</div>
-        <a-table
-          :row-key="userModelKey"
-          :data-source="userModels"
-          :locale="{ emptyText: '暂无用户模型消费数据' }"
-          :pagination="{ pageSize: 12 }"
-          :scroll="{ x: 980 }"
-          size="small"
-        >
-          <a-table-column key="user" title="用户" :width="220">
-            <template #default="{ record }">
-              <div class="modelNameCell">
-                <span>{{ userLabel(record) }}</span>
-              </div>
-            </template>
-          </a-table-column>
-          <a-table-column key="model" title="模型" data-index="model" />
-          <a-table-column key="request_count" title="请求数" data-index="request_count" :width="110" align="right">
-            <template #default="{ record }">
-              {{ record.request_count.toLocaleString('zh-CN') }}
-            </template>
-          </a-table-column>
-          <a-table-column key="token_total" title="Token" data-index="token_total" :width="130" align="right">
-            <template #default="{ record }">
-              {{ tokenText(record.token_total) }}
-            </template>
-          </a-table-column>
-          <a-table-column key="total_cost" title="Total Cost" data-index="total_cost" :width="150" align="right">
-            <template #default="{ record }">
-              <span class="money">{{ Number(record.total_cost).toFixed(6) }}</span>
-            </template>
-          </a-table-column>
-          <a-table-column key="actual_cost" title="Actual Cost" data-index="actual_cost" :width="150" align="right">
-            <template #default="{ record }">
-              <span class="money">{{ Number(record.actual_cost).toFixed(6) }}</span>
-            </template>
-          </a-table-column>
-        </a-table>
-      </div>
-
-      <!-- 明细表格 -->
-      <div class="modelTableCard">
-        <div class="modelTableTitle">全量模型明细</div>
+        <div class="tableTools"><ColumnSettings v-model:value="visibleCols" v-model:width="tableWidth" :options="colOptions" @reset="resetColumns" /></div>
         <a-table
           row-key="model"
-          :data-source="stats?.models || []"
-          :locale="{ emptyText: '暂无模型消耗数据' }"
-          :pagination="{ pageSize: 15 }"
-          :scroll="{ x: 800 }"
-          size="small"
+          :columns="visibleModelColumns"
+          :data-source="modelRows"
+          :pagination="false"
+          :scroll="{ x: tableWidth }"
+          :locale="{ emptyText: '所选日期内暂无官方模型统计' }"
+          size="middle"
         >
-          <a-table-column key="model" title="模型" data-index="model">
-            <template #default="{ record }">
-              <div class="modelNameCell">
-                <a-tag :color="modelTag(record.model).color" style="margin-right:6px;">{{ modelTag(record.model).label }}</a-tag>
-                <span>{{ record.model }}</span>
-              </div>
+          <template #bodyCell="{ column, record, index }">
+            <template v-if="column.dataIndex === 'rank'">
+              <span class="rankNo">{{ index + 1 }}</span>
             </template>
-          </a-table-column>
-          <a-table-column key="request_count" title="请求数" data-index="request_count" :width="110" align="right">
-            <template #default="{ record }">
-              {{ record.request_count.toLocaleString('zh-CN') }}
+            <template v-else-if="column.dataIndex === 'model'">
+              <a-button type="link" class="modelLink" @click="selectModel(record.model)">
+                {{ record.model }}
+              </a-button>
             </template>
-          </a-table-column>
-          <a-table-column key="user_count" title="用户数" data-index="user_count" :width="100" align="right" />
-          <a-table-column key="total_cost" title="Total Cost" data-index="total_cost" :width="150" align="right">
-            <template #default="{ record }">
-              <span class="money">{{ Number(record.total_cost).toFixed(6) }}</span>
+            <template v-else-if="column.dataIndex === 'request_count'">
+              {{ formatCount(record.request_count) }}
             </template>
-          </a-table-column>
-          <a-table-column key="actual_cost" title="Actual Cost" data-index="actual_cost" :width="150" align="right">
-            <template #default="{ record }">
-              <span class="money">{{ Number(record.actual_cost).toFixed(6) }}</span>
+            <template v-else-if="String(column.dataIndex).includes('tokens')">
+              <span class="token">{{ formatCount(record[column.dataIndex]) }}</span>
             </template>
-          </a-table-column>
+            <template v-else-if="column.dataIndex === 'standard_cost' || column.dataIndex === 'actual_cost'">
+              <span class="money">{{ formatCost(record[column.dataIndex]) }}</span>
+            </template>
+          </template>
         </a-table>
-      </div>
+      </section>
 
-      <!-- 充值来源摘要 -->
-      <div v-if="stats?.sources" class="modelSourceRow">
-        <span class="modelSourceLabel">充值来源：</span>
-        <a-tag color="blue">支付订单 {{ stats.sources.payment_orders_completed }} 笔</a-tag>
-        <a-tag v-for="s in stats.sources.redeem_codes_used" :key="s.type" color="purple">
-          {{ s.type }} 兑换码 {{ s.count }} 个
-        </a-tag>
-      </div>
+      <section v-else-if="stats" class="panel">
+        <div class="sectionHead">
+          <div>
+            <h2>{{ selectedModel }} · 用户 Token 排行</h2>
+            <p>官方 user-breakdown，model_source=requested，sort_by=total_tokens</p>
+          </div>
+          <a-button @click="clearModel">返回模型榜</a-button>
+        </div>
+
+        <a-empty v-if="userRows.length === 0" description="该请求模型在所选日期内暂无用户用量" />
+        <div v-else ref="userChartEl" class="userRankChart"></div>
+      </section>
+
+      <a-empty v-else-if="!loading" description="暂无可展示的官方统计数据" />
     </a-spin>
   </section>
 </template>
+
+<style scoped>
+.summaryGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.summaryGrid section { padding: 14px 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); }
+.summaryGrid span { display: block; color: var(--text-secondary, #7a8395); font-size: 12px; margin-bottom: 6px; }
+.summaryGrid strong { font-size: 21px; }
+@media (max-width: 760px) { .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .summaryGrid { grid-template-columns: 1fr; } }
+.modelStatsPage { display: grid; gap: 16px; }
+.modelFilters { flex-wrap: wrap; }
+.modelInput { width: min(360px, 42vw); }
+.limitSelect { width: 104px; }
+.statsAlert { margin-bottom: 0; }
+.rangeMeta { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 20px; padding: 11px 14px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 10px; color: var(--text-secondary, #70798c); font-size: 13px; }
+.panel { min-width: 0; padding: 18px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 14px; background: var(--card-bg, #fff); box-shadow: 0 8px 24px rgba(30, 42, 70, .05); }
+.sectionHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 15px; }
+.sectionHead h2 { margin: 0; font-size: 18px; }
+.sectionHead p { margin: 6px 0 0; color: var(--text-secondary, #7a8395); font-size: 12px; }
+.sectionHead > span { color: var(--text-secondary, #7a8395); font-size: 13px; }
+.userRankChart { width: 100%; height: 520px; border-radius: 12px; background: linear-gradient(180deg, rgba(22,119,255,.035), transparent 45%); }
+@media (max-width: 640px) { .userRankChart { height: 430px; } }
+.modelLink { height: auto; padding: 0; text-align: left; white-space: normal; }
+.rankNo { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: rgba(22, 119, 255, .1); color: #1677ff; font-weight: 700; }
+.token, .money { font-variant-numeric: tabular-nums; font-weight: 600; }
+.token { color: #08979c; }
+.money { color: #d46b08; }
+small { display: block; margin-top: 3px; color: var(--text-secondary, #7a8395); }
+@media (max-width: 900px) {
+  .modelFilters, .modelFilters :deep(.ant-picker), .modelInput, .limitSelect { width: 100%; }
+  .sectionHead { flex-direction: column; }
+}
+</style>

@@ -80,6 +80,88 @@ class LedgerAdjustmentTest extends TestCase
             ->assertJsonPath('total', 0);
     }
 
+    public function test_list_filters_email_operator_and_date_and_returns_summary(): void
+    {
+        $admin = $this->admin();
+        $other = Admin::query()->create([
+            'name' => '其他管理员',
+            'email' => 'other@example.com',
+            'password' => 'secret123',
+            'status' => Admin::STATUS_ACTIVE,
+        ]);
+
+        foreach ([
+            [$admin, 1001, 'alpha@example.com', '10.00', '2026-07-10 12:00:00'],
+            [$admin, 1002, 'beta@example.com', '20.00', '2026-07-11 12:00:00'],
+            [$other, 1003, 'alpha-other@example.com', '30.00', '2026-07-10 12:00:00'],
+        ] as [$creator, $userId, $email, $amount, $time]) {
+            LedgerAdjustment::query()->create([
+                'ledger_no' => 'ADJ-'.$userId,
+                'idempotency_key' => 'key-'.$userId,
+                'sub2api_user_id' => $userId,
+                'sub2api_user_email' => $email,
+                'operation' => LedgerAdjustment::OP_INCREMENT,
+                'amount' => $amount,
+                'cash_amount' => $amount,
+                'gift_quota_amount' => '0.00',
+                'status' => LedgerAdjustment::STATUS_SUCCEEDED,
+                'adjust_reason' => '充值',
+                'created_by' => $creator->id,
+                'confirmed_at' => $time,
+            ]);
+        }
+
+        $this->withToken($admin->createToken('admin-token')->plainTextToken)
+            ->getJson('/api/v1/ledger-adjustments?sub2api_user_email=alpha&created_by='.$admin->id.'&start_date=2026-07-10&end_date=2026-07-10')
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('summary.record_count', 1)
+            ->assertJsonPath('summary.user_count', 1)
+            ->assertJsonPath('summary.amount_total', '10.00')
+            ->assertJsonPath('summary.increment_total', '10.00')
+            ->assertJsonPath('summary.decrement_total', '0.00')
+            ->assertJsonPath('summary.net_total', '10.00')
+            ->assertJsonPath('summary.cash_total', '10.00')
+            ->assertJsonPath('summary.gift_total', '0.00')
+            ->assertJsonPath('items.0.operator_name', '管理员')
+            ->assertJsonPath('items.0.operator_email', 'admin@example.com');
+    }
+
+    public function test_summary_uses_all_filtered_rows_when_page_is_limited(): void
+    {
+        $admin = $this->admin();
+        foreach ([
+            [1001, LedgerAdjustment::OP_INCREMENT, '100.00', '80.00', '20.00'],
+            [1002, LedgerAdjustment::OP_DECREMENT, '80.00', '0.00', '0.00'],
+        ] as [$userId, $operation, $amount, $cash, $gift]) {
+            LedgerAdjustment::query()->create([
+                'ledger_no' => 'ADJ-'.$userId,
+                'idempotency_key' => 'key-'.$userId,
+                'sub2api_user_id' => $userId,
+                'operation' => $operation,
+                'amount' => $amount,
+                'cash_amount' => $cash,
+                'gift_quota_amount' => $gift,
+                'status' => LedgerAdjustment::STATUS_SUCCEEDED,
+                'adjust_reason' => '测试',
+                'created_by' => $admin->id,
+                'confirmed_at' => '2026-07-10 12:00:00',
+            ]);
+        }
+
+        $this->withToken($admin->createToken('admin-token')->plainTextToken)
+            ->getJson('/api/v1/ledger-adjustments?page_size=1')
+            ->assertOk()
+            ->assertJsonPath('total', 2)
+            ->assertJsonCount(1, 'items')
+            ->assertJsonPath('summary.record_count', 2)
+            ->assertJsonPath('summary.increment_total', '100.00')
+            ->assertJsonPath('summary.decrement_total', '80.00')
+            ->assertJsonPath('summary.net_total', '20.00')
+            ->assertJsonPath('summary.cash_total', '80.00')
+            ->assertJsonPath('summary.gift_total', '20.00');
+    }
+
     public function test_confirm_failure_marks_exception(): void
     {
         $admin = $this->admin();

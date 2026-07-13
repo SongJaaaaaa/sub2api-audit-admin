@@ -21,6 +21,12 @@ class LedgerAdjustmentController extends Controller
         return response()->json($service->list([
             'status' => $req->query('status', LedgerAdjustment::STATUS_SUCCEEDED),
             'sub2api_user_id' => $req->query('sub2api_user_id', 0),
+            'sub2api_user_email' => $req->query('sub2api_user_email', ''),
+            'created_by' => $req->query('created_by', 0),
+            'start_date' => $req->query('start_date', ''),
+            'end_date' => $req->query('end_date', ''),
+            'min_amount' => $req->query('min_amount', ''),
+            'max_amount' => $req->query('max_amount', ''),
         ], $page, $pageSize));
     }
 

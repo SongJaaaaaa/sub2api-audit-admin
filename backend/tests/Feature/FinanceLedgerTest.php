@@ -33,8 +33,22 @@ class FinanceLedgerTest extends TestCase
         $this->assertDatabaseHas('cash_entries', ['sub2api_user_id' => 1001, 'cash_amount' => '100.00']);
         $this->assertDatabaseHas('gift_quota_entries', ['sub2api_user_id' => 1001, 'quota_amount' => '20.00']);
 
-        $this->withToken($token)->getJson('/api/v1/finance/cash')->assertOk()->assertJsonPath('items.0.cash_amount', '100.00');
-        $this->withToken($token)->getJson('/api/v1/finance/gifts')->assertOk()->assertJsonPath('items.0.quota_amount', '20.00');
+        $this->withToken($token)->getJson('/api/v1/finance/cash?page_size=1')
+            ->assertOk()
+            ->assertJsonPath('items.0.cash_amount', '100.00')
+            ->assertJsonPath('summary.record_count', 1)
+            ->assertJsonPath('summary.user_count', 1)
+            ->assertJsonPath('summary.amount_total', '100.00')
+            ->assertJsonPath('summary.linked_count', 1)
+            ->assertJsonPath('summary.unlinked_count', 0);
+        $this->withToken($token)->getJson('/api/v1/finance/gifts?page_size=1')
+            ->assertOk()
+            ->assertJsonPath('items.0.quota_amount', '20.00')
+            ->assertJsonPath('items.0.has_related_cash', true)
+            ->assertJsonPath('summary.record_count', 1)
+            ->assertJsonPath('summary.amount_total', '20.00')
+            ->assertJsonPath('summary.related_cash_count', 1)
+            ->assertJsonPath('summary.missing_cash_count', 0);
     }
 
     public function test_operation_expense_filters_rich_text(): void
@@ -53,6 +67,29 @@ class FinanceLedgerTest extends TestCase
 
         $this->withToken($token)->getJson('/api/v1/finance/expenses')->assertOk()
             ->assertJsonPath('items.0.content_html', '<p>账单</p>');
+
+        $this->withToken($token)->postJson('/api/v1/finance/expenses', [
+            'category' => '办公',
+            'amount' => '20.00',
+            'paid_at' => '2026-07-07',
+            'remark' => '文具',
+        ])->assertCreated();
+
+        $this->withToken($token)
+            ->getJson('/api/v1/finance/expenses?from=2026-07-06&to=2026-07-07&min_amount=20&max_amount=30')
+            ->assertOk()
+            ->assertJsonPath('summary.record_count', 2)
+            ->assertJsonPath('summary.category_count', 2)
+            ->assertJsonPath('summary.amount_total', '50.00')
+            ->assertJsonPath('summary.max_amount', '30.00')
+            ->assertJsonPath('summary.daily_average', '25.00')
+            ->assertJsonPath('categories.0.category', '服务器')
+            ->assertJsonPath('categories.0.amount_total', '30.00');
+
+        $this->withToken($token)->getJson('/api/v1/finance/expenses?keyword=文具')
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('items.0.category', '办公');
     }
 
     public function test_correction_adjustment_does_not_write_finance_ledgers(): void
