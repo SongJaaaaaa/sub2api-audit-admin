@@ -11,6 +11,10 @@
   gap: 16px;
 }
 
+.pageHeadActionsOnly {
+  justify-content: flex-end;
+}
+
 .pageHead h1 {
   margin: 0 0 6px;
   color: var(--heading);

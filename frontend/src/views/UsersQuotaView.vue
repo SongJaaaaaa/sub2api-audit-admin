@@ -166,11 +166,7 @@ onMounted(loadUsers)
 
 <template>
   <section class="page quotaPage">
-    <div class="quotaHero">
-      <div>
-        <h1>Sub2API 充值管理</h1>
-        <p>查询用户充值数据，并为用户提交充值入账。</p>
-      </div>
+    <div class="quotaHero quotaHeroActionsOnly">
       <a-button :loading="loading" @click="loadUsers">刷新用户</a-button>
     </div>
 
@@ -178,7 +174,6 @@ onMounted(loadUsers)
       <section class="panel quotaUserPanel">
         <div class="panelHead">
           <h2>选择用户</h2>
-          <span class="panelMeta">点击后进入充值区</span>
         </div>
       <a-input-search
         v-model:value="keyword"
@@ -222,7 +217,6 @@ onMounted(loadUsers)
         <div v-if="!selected" class="panel quotaEmpty">
           <WalletOutlined />
           <h2>请从左侧选择一个用户</h2>
-          <p>选择后可查看账户信息并提交充值入账。</p>
         </div>
 
         <template v-else>
@@ -243,7 +237,6 @@ onMounted(loadUsers)
           <section class="panel quotaAdjustPanel">
             <div class="panelHead">
               <h2>充值入账</h2>
-              <span class="panelMeta">提交至 Sub2API 二次确认</span>
             </div>
             <AdjustmentForm :key="formKey" v-model:value="form" :current-balance="selected.balance" />
             <div class="quotaFormActions">
@@ -258,7 +251,6 @@ onMounted(loadUsers)
           <section class="panel quotaHistoryPanel">
             <div class="panelHead">
               <h2>充值记录</h2>
-              <span class="panelMeta">同步 Sub2API 最近 8 条</span>
             </div>
             <a-spin :spinning="historyLoading">
               <a-empty v-if="!historyLoading && history.length === 0" description="暂无充值记录" />

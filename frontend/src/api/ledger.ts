@@ -53,6 +53,18 @@ export interface AdjustmentRes {
   message: string
 }
 
+export interface BatchGiftRes {
+  items: Array<{
+    user_id: number
+    status: LedgerAdjustment['status']
+    adjustment: LedgerAdjustment
+    message: string
+  }>
+  success_count: number
+  failed_count: number
+  message: string
+}
+
 export function getLedgerAdjustments(params: {
   page: number
   page_size: number
@@ -78,4 +90,12 @@ export function createLedgerAdjustment(data: {
   admin_notes?: string
 }) {
   return http.post<unknown, AdjustmentRes>('/ledger-adjustments', data)
+}
+
+export function createBatchGift(data: {
+  user_ids: number[]
+  amount: string
+  admin_notes?: string
+}) {
+  return http.post<unknown, BatchGiftRes>('/ledger-adjustments/batch-gift', data, { timeout: 120000 })
 }

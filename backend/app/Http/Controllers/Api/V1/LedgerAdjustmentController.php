@@ -61,4 +61,47 @@ class LedgerAdjustmentController extends Controller
 
         return response()->json($body, $adj->status === LedgerAdjustment::STATUS_SUCCEEDED ? 201 : 409);
     }
+
+    public function batchGift(Request $req, LedgerAdjustmentService $service): JsonResponse
+    {
+        $data = $req->validate([
+            'user_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'user_ids.*' => ['required', 'integer', 'min:1', 'distinct'],
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'admin_notes' => ['nullable', 'string', 'max:1000000'],
+        ]);
+
+        $items = [];
+        $notes = trim((string) ($data['admin_notes'] ?? '')) ?: '管理员赠送';
+        foreach ($data['user_ids'] as $userId) {
+            $adj = $service->adjust($req->user(), [
+                'sub2api_user_id' => (int) $userId,
+                'operation' => LedgerAdjustment::OP_INCREMENT,
+                'amount' => $data['amount'],
+                'cash_amount' => '0',
+                'gift_quota_amount' => $data['amount'],
+                'adjust_reason' => '管理员赠送',
+                'admin_notes' => $notes,
+            ]);
+
+            $items[] = [
+                'user_id' => (int) $userId,
+                'status' => $adj->status,
+                'adjustment' => $service->row($adj),
+                'message' => $adj->status === LedgerAdjustment::STATUS_SUCCEEDED
+                    ? '赠送成功'
+                    : ($adj->exception_reason ?: '赠送未确认成功'),
+            ];
+        }
+
+        $success = collect($items)->where('status', LedgerAdjustment::STATUS_SUCCEEDED)->count();
+        $failed = count($items) - $success;
+
+        return response()->json([
+            'items' => $items,
+            'success_count' => $success,
+            'failed_count' => $failed,
+            'message' => "批量赠送完成：成功 {$success} 个，失败 {$failed} 个",
+        ], $failed > 0 ? 207 : 201);
+    }
 }

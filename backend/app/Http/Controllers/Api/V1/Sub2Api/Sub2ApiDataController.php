@@ -22,9 +22,29 @@ class Sub2ApiDataController extends Controller
     {
         $page = max((int) $req->query('page', 1), 1);
         $pageSize = min(max((int) $req->query('page_size', 20), 1), 100);
+        $start = trim((string) $req->query('last_used_start', ''));
+        $end = trim((string) $req->query('last_used_end', ''));
+
+        if (($start === '') !== ($end === '')) {
+            throw ValidationException::withMessages([
+                'last_used_start' => ['开始时间和结束时间必须同时提供'],
+                'last_used_end' => ['开始时间和结束时间必须同时提供'],
+            ]);
+        }
+
+        $dates = Validator::make([
+            'last_used_start' => $start ?: null,
+            'last_used_end' => $end ?: null,
+        ], [
+            'last_used_start' => ['nullable', 'date_format:Y-m-d'],
+            'last_used_end' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:last_used_start'],
+        ])->validate();
 
         return response()->json($repo->users([
             'keyword' => $req->query('keyword', ''),
+            'user_filter' => $req->query('user_filter', ''),
+            'last_used_start' => $dates['last_used_start'] ?? '',
+            'last_used_end' => $dates['last_used_end'] ?? '',
         ], $page, $pageSize));
     }
 

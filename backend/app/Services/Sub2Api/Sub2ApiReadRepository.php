@@ -2,6 +2,7 @@
 
 namespace App\Services\Sub2Api;
 
+use App\Support\ChinaDateRange;
 use App\Support\ChinaTime;
 use App\Support\Sub2ApiNoteTag;
 use Carbon\CarbonImmutable;
@@ -40,6 +41,28 @@ class Sub2ApiReadRepository
             });
         }
 
+        $userFilter = trim((string) ($filters['user_filter'] ?? ''));
+        if ($userFilter === 'zero_balance') {
+            $query->where('balance', 0);
+        } elseif ($userFilter === 'negative_balance') {
+            $query->where('balance', '<', 0);
+        } elseif ($userFilter === 'disabled') {
+            $query->where('status', '!=', 'active');
+        }
+
+        $lastUsedStart = trim((string) ($filters['last_used_start'] ?? ''));
+        $lastUsedEnd = trim((string) ($filters['last_used_end'] ?? ''));
+        if ($lastUsedStart !== '' && $lastUsedEnd !== '') {
+            $range = ChinaDateRange::make($lastUsedStart, $lastUsedEnd);
+            [$start, $end] = $this->remoteBounds($range->utcStart, $range->utcEndExclusive);
+            $usedUserIds = $this->db()
+                ->table('usage_logs')
+                ->select('user_id')
+                ->groupBy('user_id')
+                ->havingRaw('MAX(created_at) >= ? AND MAX(created_at) < ?', [$start, $end]);
+            $query->whereIn('id', $usedUserIds);
+        }
+
         $total = (clone $query)->count();
         $balanceTotal = (float) (clone $query)->sum('balance');
         $summary = [
@@ -51,11 +74,21 @@ class Sub2ApiReadRepository
             'negative_balance_count' => (clone $query)->where('balance', '<', 0)->count(),
             'zero_balance_count' => (clone $query)->where('balance', 0)->count(),
         ];
-        $items = $query
+        $rows = $query
             ->orderByDesc('id')
             ->forPage($page, $pageSize)
-            ->get()
-            ->map(fn ($row): array => $this->userRow($row))
+            ->get();
+        $ids = $rows->pluck('id')->all();
+        $lastUsed = $ids === []
+            ? collect()
+            : $this->db()
+                ->table('usage_logs')
+                ->whereIn('user_id', $ids)
+                ->selectRaw('user_id, MAX(created_at) as last_used_at')
+                ->groupBy('user_id')
+                ->pluck('last_used_at', 'user_id');
+        $items = $rows
+            ->map(fn ($row): array => $this->userRow($row, $lastUsed->get($row->id)))
             ->all();
 
         return [
@@ -234,11 +267,12 @@ class Sub2ApiReadRepository
         return [ChinaTime::utcText($startUtc), ChinaTime::utcText($endUtc)];
     }
 
-    private function userRow(object $row): array
+    private function userRow(object $row, mixed $lastUsedAt = null): array
     {
         $item = (array) $row;
         $item['balance'] = $this->decimal($item['balance'], 8);
         $item['total_recharged'] = $this->decimal($item['total_recharged'], 8);
+        $item['last_used_at'] = ChinaTime::fmtUtc($lastUsedAt);
         $item['created_at'] = ChinaTime::fmtUtc($item['created_at'] ?? null);
         $item['updated_at'] = ChinaTime::fmtUtc($item['updated_at'] ?? null);
 

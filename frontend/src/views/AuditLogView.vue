@@ -210,11 +210,7 @@ onMounted(loadItems)
 
 <template>
   <section class="page">
-    <div class="pageHead">
-      <div>
-        <h1>操作审计</h1>
-        <p>危险操作留痕，以后端登录管理员为准记录</p>
-      </div>
+    <div class="pageHead pageHeadActionsOnly">
       <a-button @click="loadItems">刷新</a-button>
     </div>
 

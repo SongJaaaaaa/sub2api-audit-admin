@@ -71,7 +71,7 @@ SUB2API_DB_SCHEMA=public
 SUB2API_DB_SSLMODE=prefer
 ```
 
-该账号必须只有读取所需表的权限。本系统不得直接更新 Sub2API 用户余额、兑换码、支付订单或其他远端业务表。
+该账号必须只有读取所需表的权限，至少需要读取 `users`、`usage_logs`、`redeem_codes` 和 `payment_orders`。本系统不得直接更新 Sub2API 用户余额、兑换码、支付订单或其他远端业务表。
 
 ### 3.3 Sub2API 官方 Admin API
 

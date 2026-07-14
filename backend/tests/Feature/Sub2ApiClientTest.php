@@ -71,12 +71,34 @@ class Sub2ApiClientTest extends TestCase
             'status',
             'created_at',
             'updated_at',
+            'last_used_at',
         ], array_keys($res['items'][0]));
         $this->assertSame(1001, $res['items'][0]['id']);
         $this->assertSame('alpha@example.com', $res['items'][0]['email']);
         $this->assertSame('12.34', $res['items'][0]['balance']);
         $this->assertSame('100', $res['items'][0]['total_recharged']);
         $this->assertSame('alpha@example.com', $detail['email']);
+    }
+
+    public function test_user_search_filters_by_latest_usage_time(): void
+    {
+        $this->insertSub2ApiUser(['id' => 1001]);
+        $this->insertSub2ApiUser(['id' => 1002, 'email' => 'beta@example.com', 'username' => 'beta']);
+        $this->insertSub2ApiUser(['id' => 1003, 'email' => 'unused@example.com', 'username' => 'unused']);
+        DB::connection('sub2api')->table('usage_logs')->insert([
+            ['user_id' => 1001, 'created_at' => '2026-07-13 15:59:59'],
+            ['user_id' => 1001, 'created_at' => '2026-07-14 02:00:00'],
+            ['user_id' => 1002, 'created_at' => '2026-07-13 15:00:00'],
+        ]);
+
+        $res = app(Sub2ApiReadRepository::class)->users([
+            'last_used_start' => '2026-07-14',
+            'last_used_end' => '2026-07-14',
+        ], 1, 20);
+
+        $this->assertSame(1, $res['total']);
+        $this->assertSame(1001, $res['items'][0]['id']);
+        $this->assertSame('2026-07-14 10:00:00', $res['items'][0]['last_used_at']);
     }
 
     public function test_active_balance_snapshot_excludes_admin_disabled_and_deleted_users(): void

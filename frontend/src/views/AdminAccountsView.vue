@@ -98,11 +98,7 @@ onMounted(loadItems)
 
 <template>
   <section class="page adminAccountsPage">
-    <div class="pageHead">
-      <div>
-        <h1>管理员账号</h1>
-        <p>管理审计后台的登录账号</p>
-      </div>
+    <div class="pageHead pageHeadActionsOnly">
       <a-button type="primary" @click="openCreate">
         <template #icon><UserAddOutlined /></template>
         新增管理员

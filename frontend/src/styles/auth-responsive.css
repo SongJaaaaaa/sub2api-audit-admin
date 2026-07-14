@@ -191,6 +191,10 @@
     display: grid;
   }
 
+  .quotaHeroActionsOnly {
+    justify-items: end;
+  }
+
   .quotaHero h1 {
     font-size: 22px;
   }

@@ -358,11 +358,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="page dashboardV2">
-    <div class="pageHead dashboardHead">
-      <div>
-        <h1>首页看板</h1>
-        <p>实收入账使用本地审计账本，Sub2API 累计充值字段和余额使用当前快照，用量使用官方统计</p>
-      </div>
+    <div class="pageHead dashboardHead pageHeadActionsOnly">
       <div class="headActions">
         <a-segmented v-model:value="rangeKey" :options="rangeOptions" />
         <a-range-picker
@@ -390,11 +386,6 @@ onBeforeUnmount(() => {
 
     <a-spin :spinning="loading">
       <template v-if="stats">
-        <div class="rangeMeta">
-          <span>统计范围：{{ stats.range.start_date }} 至 {{ stats.range.end_date }}（{{ stats.range.timezone }}）</span>
-          <span>切账时间：{{ stats.cutover_at || '未设置' }}</span>
-        </div>
-
         <div class="kpiGrid">
           <a-card class="kpiCard cashKpi" :bordered="false">
             <div class="kpiIcon"><DollarOutlined /></div>
@@ -434,7 +425,6 @@ onBeforeUnmount(() => {
           <div class="sectionHead">
             <div>
               <h2><AlertOutlined /> 对账告警</h2>
-              <p>同一调整按本地调整 ID 去重；外部调额与审计孤儿单独计数</p>
             </div>
             <a-badge :count="alertTotal" :overflow-count="9999" />
           </div>
@@ -450,13 +440,13 @@ onBeforeUnmount(() => {
         <div class="chartGrid">
           <section class="panel financePanel">
             <div class="sectionHead">
-              <div><h2>财务趋势</h2><p>本地现金、赠送、调增与调减均来自切账后的成功单</p></div>
+              <div><h2>财务趋势</h2></div>
             </div>
             <div ref="financeEl" class="chart chartWide"></div>
           </section>
           <section class="panel usagePanel">
             <div class="sectionHead">
-              <div><h2>实际消费趋势</h2><p>使用 Sub2API 官方 actual_cost 数据</p></div>
+              <div><h2>实际消费趋势</h2></div>
             </div>
             <div ref="costEl" class="chart chartSmall"></div>
           </section>
@@ -478,7 +468,7 @@ onBeforeUnmount(() => {
 
         <section class="panel recentPanel">
           <div class="sectionHead">
-            <div><h2>最近调额记录</h2><p>所选日期内最近 10 条调额记录，展示成功、异常和作废状态</p></div>
+            <div><h2>最近调额记录</h2></div>
             <RouterLink to="/ledger">全部记录</RouterLink>
           </div>
           <div class="tableTools"><ColumnSettings v-model:value="visibleCols" v-model:width="tableWidth" :options="colOptions" @reset="resetColumns" /></div>
@@ -503,7 +493,6 @@ onBeforeUnmount(() => {
 .dashboardV2 { display: grid; gap: 18px; }
 .dashboardHead { gap: 18px; }
 .statsAlert { margin-bottom: 2px; }
-.rangeMeta { display: flex; justify-content: space-between; gap: 16px; padding: 10px 14px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 10px; color: var(--text-secondary, #70798c); font-size: 13px; }
 .kpiGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
 .kpiCard :deep(.ant-card-body) { display: flex; align-items: center; gap: 16px; min-height: 138px; }
 .kpiCard { overflow: hidden; box-shadow: 0 10px 28px rgba(30, 42, 70, .08); }
@@ -520,7 +509,6 @@ onBeforeUnmount(() => {
 .alertPanel { margin-top: 16px; }
 .sectionHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .sectionHead h2 { margin: 0; font-size: 17px; }
-.sectionHead p { margin: 5px 0 0; color: var(--text-secondary, #7a8395); font-size: 12px; }
 .alertGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .alertItem { display: flex; align-items: center; justify-content: space-between; min-height: 70px; padding: 14px; border-radius: 10px; color: inherit; background: #f6f8fb; }
 .alertItem strong { font-size: 25px; }
@@ -551,7 +539,6 @@ onBeforeUnmount(() => {
 }
 @media (max-width: 820px) {
   .kpiGrid, .alertGrid, .rankingGrid, .usageCharts { grid-template-columns: 1fr; }
-  .rangeMeta { flex-direction: column; }
   .headActions { align-items: stretch; }
 }
 
@@ -562,7 +549,6 @@ onBeforeUnmount(() => {
   .dashboardHead :deep(.ant-segmented) { width: 100%; overflow-x: auto; }
   .dashboardHead :deep(.ant-segmented-group) { min-width: max-content; }
   .dashboardHead :deep(.ant-picker), .dashboardHead :deep(.ant-btn) { width: 100%; }
-  .rangeMeta { gap: 6px; padding: 10px 12px; font-size: 12px; }
   .kpiGrid, .alertGrid, .chartGrid, .rankingGrid { grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: 10px; }
   .kpiCard :deep(.ant-card-body) { min-height: 104px; padding: 14px; }
   .kpiIcon { flex-basis: 42px; width: 42px; height: 42px; border-radius: 12px; }

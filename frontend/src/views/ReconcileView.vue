@@ -155,11 +155,7 @@ onMounted(loadItems)
 
 <template>
   <section class="page reconcilePage">
-    <div class="pageHead">
-      <div>
-        <h1>对账中心</h1>
-        <p>仅比较本地成功调额与远端后台余额调额；外部事件和审计孤儿只告警、不自动认领</p>
-      </div>
+    <div class="pageHead pageHeadActionsOnly">
       <div class="headActions">
         <a-date-picker v-model:value="bizDate" value-format="YYYY-MM-DD" :allow-clear="false" />
         <a-button type="primary" :loading="creating" @click="createBatch">运行 / 重跑该日对账</a-button>
@@ -168,13 +164,6 @@ onMounted(loadItems)
         </a-button>
       </div>
     </div>
-
-    <a-alert
-      type="info"
-      show-icon
-      message="同一中国业务日期只保留一个批次"
-      description="手动重跑会在事务内重新计算并替换差异明细，不会重复累加；切账日按切账精确时间开始对账。"
-    />
 
     <div class="filterBar">
       <a-range-picker v-model:value="filters.dates" />
@@ -254,7 +243,6 @@ onMounted(loadItems)
         <div class="sectionHead">
           <div>
             <h3>差异明细</h3>
-            <p>外部事件与审计孤儿是 warning；本地缺失或字段不一致是 error</p>
           </div>
         </div>
             <div class="tableTools"><ColumnSettings v-model:value="diffTable.visibleCols.value" v-model:width="diffTable.tableWidth.value" :options="diffTable.colOptions.value" @reset="diffTable.resetColumns" /></div>
@@ -303,7 +291,6 @@ onMounted(loadItems)
 .error { color: #cf1322; }
 .drawerBlock { margin-top: 22px; }
 .sectionHead h3 { margin: 0; }
-.sectionHead p { margin: 5px 0 12px; color: var(--text-secondary, #7a8395); font-size: 12px; }
 @media (max-width: 760px) {
   .filterBar { grid-template-columns: minmax(0, 1fr); } .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .headActions, .headActions :deep(.ant-picker) { width: 100%; }

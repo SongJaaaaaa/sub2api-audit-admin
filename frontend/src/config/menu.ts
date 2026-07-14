@@ -26,7 +26,7 @@ export const menuItems: MenuItem[] = [
   { key: 'sub2-users', label: 'Sub2API 用户', path: '/sub2api/users', icon: DatabaseOutlined },
   { key: 'sub2-models', label: '模型消耗统计', path: '/sub2api/models', icon: BarChartOutlined },
   { key: 'users-quota', label: '用户充值', path: '/users-quota', icon: UserOutlined },
-  { key: 'ledger', label: '额度调整记录', path: '/ledger', icon: FileDoneOutlined },
+  { key: 'ledger', label: '入账记录', path: '/ledger', icon: FileDoneOutlined },
   { key: 'balance-events', label: '历史账', path: '/balance-events', icon: HistoryOutlined },
   { key: 'gift', label: '赠送额度', path: '/gift-quota', icon: GiftOutlined },
   { key: 'expense', label: '经营账', path: '/operation-expense', icon: DollarOutlined },

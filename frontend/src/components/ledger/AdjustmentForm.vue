@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { MinusCircleOutlined, PlusCircleOutlined, QuestionCircleOutlined } from '@ant-design/icons-vue'
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import SafeRichTextEditor from '../richtext/SafeRichTextEditor.vue'
 
 export interface AdjustmentFormState {
@@ -22,6 +22,7 @@ const emit = defineEmits<{
 }>()
 
 const form = reactive<AdjustmentFormState>({ ...props.value })
+const cashEdited = ref(false)
 const isCorrection = computed(() => form.adjust_reason === '异常修正')
 const isRecharge = computed(() => form.operation === 'increment' && form.adjust_reason === '充值')
 const isReissue = computed(() => form.operation === 'increment' && form.adjust_reason === '补发')
@@ -56,21 +57,28 @@ watch(
   () => [form.amount, form.cash_amount, form.adjust_reason, form.operation],
   () => {
     if (isCorrection.value || form.operation === 'decrement') {
+      cashEdited.value = false
       form.cash_amount = ''
       form.gift_quota_amount = ''
       return
     }
 
     if (isReissue.value) {
+      cashEdited.value = false
       form.cash_amount = ''
       form.gift_quota_amount = Number(form.amount || 0).toFixed(2)
       return
     }
 
     if (!isRecharge.value) {
+      cashEdited.value = false
       form.cash_amount = ''
       form.gift_quota_amount = ''
       return
+    }
+
+    if (!cashEdited.value) {
+      form.cash_amount = form.amount
     }
 
     // 充值：赠送额度 = 调整金额 - 入账金额
@@ -81,6 +89,7 @@ watch(
 )
 
 function setOperation(op: 'increment' | 'decrement') {
+  cashEdited.value = false
   form.operation = op
   if (op === 'decrement' && form.adjust_reason !== '异常修正') {
     form.adjust_reason = '人工扣减'
@@ -88,6 +97,10 @@ function setOperation(op: 'increment' | 'decrement') {
   if (op === 'increment' && form.adjust_reason === '人工扣减') {
     form.adjust_reason = '充值'
   }
+}
+
+function markCashEdited() {
+  cashEdited.value = true
 }
 </script>
 
@@ -140,7 +153,7 @@ function setOperation(op: 'increment' | 'decrement') {
 
     <div v-if="showFinance" class="quotaFormGrid">
       <a-form-item v-if="isRecharge" label="入账金额（现金）">
-        <a-input v-model:value="form.cash_amount" placeholder="0.00" />
+        <a-input v-model:value="form.cash_amount" placeholder="0.00" @input="markCashEdited" />
         <div class="quotaAfterBalance" style="font-size:12px;color:var(--text2);">实收现金金额，剩余计入赠送</div>
       </a-form-item>
       <a-form-item label="赠送额度">

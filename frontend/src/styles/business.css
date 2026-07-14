@@ -247,6 +247,10 @@
   gap: 16px;
 }
 
+.quotaHeroActionsOnly {
+  justify-content: flex-end;
+}
+
 .quotaHero h1 {
   margin: 0 0 8px;
   color: var(--heading);

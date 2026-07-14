@@ -42,11 +42,9 @@ const modelColumns = [
   { title: '缓存创建', dataIndex: 'cache_creation_tokens', width: 145, align: 'right' },
   { title: '缓存读取', dataIndex: 'cache_read_tokens', width: 145, align: 'right' },
   { title: '总 Token', dataIndex: 'total_tokens', width: 160, align: 'right' },
-  { title: '标准消费', dataIndex: 'standard_cost', width: 135, align: 'right' },
-  { title: '实际消费', dataIndex: 'actual_cost', width: 135, align: 'right' },
 ] as const
 
-const { columns: visibleModelColumns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('sub2api-model-columns', modelColumns, 1460)
+const { columns: visibleModelColumns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('sub2api-model-columns', modelColumns, 1190)
 
 async function loadStats() {
   const [start, end] = range.value
@@ -98,25 +96,19 @@ function renderUserChart() {
             `<strong>${row.email || `用户 #${row.user_id}`}</strong>`,
             `用户 ID：${row.user_id}`,
             `请求次数：${formatCount(row.request_count)}`,
-            `输入 Token：${formatCount(row.input_tokens)}`,
-            `输出 Token：${formatCount(row.output_tokens)}`,
-            `缓存 Token：${formatCount(row.cache_tokens)}`,
-            `总 Token：${formatCount(row.total_tokens)}`,
-            `标准消费：${formatCost(row.standard_cost)}`,
-            `实际消费：${formatCost(row.actual_cost)}`,
+            `输入 Token：${formatToken(row.input_tokens)}`,
+            `输出 Token：${formatToken(row.output_tokens)}`,
+            `缓存 Token：${formatToken(row.cache_tokens)}`,
+            `总 Token：${formatToken(row.total_tokens)}`,
           ].join('<br>')
         },
       },
       xAxis: { type: 'category', data: rows.map(row => row.email || `用户 #${row.user_id}`), axisLabel: { rotate: -28, interval: 0, width: 120, overflow: 'truncate', color: '#7a8395' }, axisTick: { show: false }, axisLine: { lineStyle: { color: '#d9dce3' } } },
-      yAxis: { type: 'value', name: '总 Token', axisLabel: { formatter: compactCount, color: '#7a8395' }, splitLine: { lineStyle: { color: '#eef0f4' } } },
+      yAxis: { type: 'value', name: '总 Token', axisLabel: { formatter: formatToken, color: '#7a8395' }, splitLine: { lineStyle: { color: '#eef0f4' } } },
       dataZoom: rows.length > 10 ? [{ type: 'slider', xAxisIndex: 0, bottom: 5, height: 18, startValue: 0, endValue: 9 }, { type: 'inside', xAxisIndex: 0 }] : [],
       series: [{ type: 'bar', data: rows.map(row => row.total_tokens), barMaxWidth: 42, showBackground: true, backgroundStyle: { color: 'rgba(22,119,255,.06)', borderRadius: [7, 7, 0, 0] }, itemStyle: { color: { type: 'linear', x: 0, y: 1, x2: 0, y2: 0, colorStops: [{ offset: 0, color: '#1677ff' }, { offset: 1, color: '#69b1ff' }] }, borderRadius: [7, 7, 0, 0] }, emphasis: { itemStyle: { shadowBlur: 14, shadowColor: 'rgba(22,119,255,.35)' } } }],
     }, true)
   })
-}
-
-function compactCount(val: number) {
-  return Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(val)
 }
 
 function resizeChart() { userChart?.resize() }
@@ -137,8 +129,11 @@ function formatCount(val: number | string | null | undefined) {
   return Number(val || 0).toLocaleString('zh-CN', { maximumFractionDigits: 0 })
 }
 
-function formatCost(val: number | string | null | undefined) {
-  return Number(val || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 8 })
+function formatToken(val: number | string | null | undefined) {
+  const num = Number(val || 0)
+  const unit = Math.abs(num) >= 1_000_000_000 ? 'B' : 'M'
+  const base = unit === 'B' ? 1_000_000_000 : 1_000_000
+  return `${(num / base).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}${unit}`
 }
 
 onMounted(() => { window.addEventListener('resize', resizeChart); loadStats() })
@@ -147,15 +142,13 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userC
 
 <template>
   <section class="page modelStatsPage">
-    <div class="pageHead">
-      <div>
-        <h1>模型消耗统计</h1>
-        <p>完全沿用 Sub2API 官方统计；模型维度固定为 requested，并按总 Token 排序</p>
-      </div>
+    <div class="pageHead pageHeadActionsOnly">
       <div class="headActions modelFilters">
         <a-range-picker
           v-model:value="range"
           :allow-clear="false"
+          :disabled="loading"
+          @change="loadStats"
         />
         <a-auto-complete
           v-model:value="model"
@@ -192,20 +185,10 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userC
     />
 
     <div v-if="stats" class="summaryGrid">
-      <section><span>模型数</span><strong>{{ stats.summary.model_count }}</strong></section>
       <section><span>请求总数</span><strong>{{ formatCount(stats.summary.request_count) }}</strong></section>
-      <section><span>Token 总数</span><strong>{{ formatCount(stats.summary.total_tokens) }}</strong></section>
-      <section><span>缓存 Token</span><strong>{{ formatCount(stats.summary.cache_tokens) }}</strong></section>
+      <section><span>Token 总数</span><strong>{{ formatToken(stats.summary.total_tokens) }}</strong></section>
+      <section><span>缓存 Token</span><strong>{{ formatToken(stats.summary.cache_tokens) }}</strong></section>
       <section><span>缓存占比</span><strong>{{ stats.summary.cache_rate.toFixed(2) }}%</strong></section>
-      <section><span>标准消费</span><strong class="money">{{ formatCost(stats.summary.standard_cost) }}</strong></section>
-      <section><span>实际消费</span><strong class="money">{{ formatCost(stats.summary.actual_cost) }}</strong></section>
-      <section><span>Top 3 Token 占比</span><strong>{{ stats.summary.top3_token_rate.toFixed(2) }}%</strong></section>
-    </div>
-
-    <div v-if="stats" class="rangeMeta">
-      <span>统计范围：{{ stats.range.start_date }} 至 {{ stats.range.end_date }}</span>
-      <span>时区：{{ stats.range.timezone }}</span>
-      <a-tag color="blue">模型语义：requested</a-tag>
     </div>
 
     <a-spin :spinning="loading">
@@ -213,7 +196,6 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userC
         <div class="sectionHead">
           <div>
             <h2>请求模型 Token 排行</h2>
-            <p>Token = 输入 + 输出 + 缓存创建 + 缓存读取；点击模型可查看该模型下的用户 Token 排行</p>
           </div>
           <span>返回 {{ modelRows.length }} 个模型</span>
         </div>
@@ -241,10 +223,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userC
               {{ formatCount(record.request_count) }}
             </template>
             <template v-else-if="String(column.dataIndex).includes('tokens')">
-              <span class="token">{{ formatCount(record[column.dataIndex]) }}</span>
-            </template>
-            <template v-else-if="column.dataIndex === 'standard_cost' || column.dataIndex === 'actual_cost'">
-              <span class="money">{{ formatCost(record[column.dataIndex]) }}</span>
+              <span class="token">{{ formatToken(record[column.dataIndex]) }}</span>
             </template>
           </template>
         </a-table>
@@ -254,7 +233,6 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userC
         <div class="sectionHead">
           <div>
             <h2>{{ selectedModel }} · 用户 Token 排行</h2>
-            <p>官方 user-breakdown，model_source=requested，sort_by=total_tokens</p>
           </div>
           <a-button @click="clearModel">返回模型榜</a-button>
         </div>
@@ -280,11 +258,9 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userC
 .modelInput { width: min(360px, 42vw); }
 .limitSelect { width: 104px; }
 .statsAlert { margin-bottom: 0; }
-.rangeMeta { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 20px; padding: 11px 14px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 10px; color: var(--text-secondary, #70798c); font-size: 13px; }
 .panel { min-width: 0; padding: 18px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 14px; background: var(--card-bg, #fff); box-shadow: 0 8px 24px rgba(30, 42, 70, .05); }
 .sectionHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 15px; }
 .sectionHead h2 { margin: 0; font-size: 18px; }
-.sectionHead p { margin: 6px 0 0; color: var(--text-secondary, #7a8395); font-size: 12px; }
 .sectionHead > span { color: var(--text-secondary, #7a8395); font-size: 13px; }
 .userRankChart { width: 100%; height: 520px; border-radius: 12px; background: linear-gradient(180deg, rgba(22,119,255,.035), transparent 45%); }
 @media (max-width: 640px) { .userRankChart { height: 430px; } }

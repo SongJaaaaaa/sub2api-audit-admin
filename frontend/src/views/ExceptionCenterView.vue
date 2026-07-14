@@ -70,7 +70,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resize); chart?.dis
 
 <template>
   <section class="page">
-    <div class="pageHead"><div><h1>异常中心</h1><p>作废单与异常单；当前数据表未设置处理状态，不展示虚假的待处理统计</p></div><a-button @click="loadItems">刷新</a-button></div>
+    <div class="pageHead pageHeadActionsOnly"><a-button @click="loadItems">刷新</a-button></div>
     <div class="filterBar">
       <a-input v-model:value="filters.userId" placeholder="用户 ID" allow-clear />
       <a-input v-model:value="filters.email" placeholder="用户邮箱" allow-clear />

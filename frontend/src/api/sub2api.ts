@@ -8,6 +8,7 @@ export interface Sub2User {
   balance: string
   total_recharged: string
   status: string | null
+  last_used_at: string | null
   created_at: string | null
   updated_at: string | null
 }
@@ -111,6 +112,9 @@ export function getSub2Users(params: {
   page: number
   page_size: number
   keyword?: string
+  user_filter?: 'zero_balance' | 'negative_balance' | 'disabled' | ''
+  last_used_start?: string
+  last_used_end?: string
 }) {
   return http.get<unknown, UserListRes>('/sub2api/users', { params })
 }

@@ -145,8 +145,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); chart
 
 <template>
   <section class="page">
-    <div class="pageHead">
-      <div><h1>经营账</h1><p>平台经营支出，不包含赠送额度</p></div>
+    <div class="pageHead pageHeadActionsOnly">
       <a-button type="primary" @click="openCreate">新增经营账</a-button>
     </div>
 

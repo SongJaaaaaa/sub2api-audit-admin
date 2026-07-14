@@ -12,9 +12,7 @@ import {
   type BalanceEventDirection,
   type BalanceEventLinkStatus,
   type BalanceEventParams,
-  type BalanceEventPeriod,
   type BalanceEventSource,
-  type BalanceEventSummary,
 } from '../api/balanceEvents'
 
 import ColumnSettings from '../components/table/ColumnSettings.vue'
@@ -23,31 +21,28 @@ const loading = ref(false)
 const exporting = ref(false)
 const items = ref<BalanceEvent[]>([])
 const dateRange = ref<[Dayjs, Dayjs] | null>(null)
-const cutoverAt = ref<string | null>(null)
-const summary = reactive<BalanceEventSummary>({ record_count: 0, user_count: 0, increment_total: '0.00', decrement_total: '0.00', net_total: '0.00', linked_count: 0, external_count: 0, audit_orphan_count: 0, linked_rate: 0 })
+const detailOpen = ref(false)
+const detail = ref<BalanceEvent | null>(null)
 const userId = ref('')
 const keyword = ref('')
 const source = ref<BalanceEventSource | undefined>()
 const direction = ref<BalanceEventDirection | undefined>()
 const linkStatus = ref<BalanceEventLinkStatus | undefined>()
-const period = ref<BalanceEventPeriod>('history')
 const page = reactive({ current: 1, pageSize: 20, total: 0, showSizeChanger: true })
 
 const allColumns = [
-  { title: '事件时间（中国）', dataIndex: 'event_at', width: 175, fixed: 'left' },
-  { title: '来源', dataIndex: 'source', width: 130 },
+  { title: '来源', dataIndex: 'source', width: 130, fixed: 'left' },
   { title: '远端事件 ID', dataIndex: 'remote_event_id', width: 125 },
   { title: '用户', dataIndex: 'user', minWidth: 230 },
   { title: '方向', dataIndex: 'direction', width: 90 },
   { title: '金额', dataIndex: 'amount', width: 135, align: 'right' },
   { title: '关联状态', dataIndex: 'link_status', width: 120 },
   { title: '本地单号', dataIndex: 'ledger_no', width: 210 },
-  { title: '备注', dataIndex: 'notes', minWidth: 300 },
 ] as const
-const { columns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('balance-events-columns', allColumns, 1650)
+const { columns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('balance-events-columns', allColumns, 1150)
 
 function params(withPage = true): BalanceEventParams {
-  const val: BalanceEventParams = { period: period.value }
+  const val: BalanceEventParams = { period: 'history' }
 
   if (dateRange.value) {
     val.start_date = dateRange.value[0].format('YYYY-MM-DD')
@@ -76,8 +71,6 @@ async function loadItems(reset = false) {
     page.total = res.total
     page.current = res.page
     page.pageSize = res.page_size
-    cutoverAt.value = res.cutover_at
-    Object.assign(summary, res.summary)
     dateRange.value = [dayjs(res.range.start_date), dayjs(res.range.end_date)]
   } catch (err) {
     message.error(apiMessage(err, '读取历史账失败'))
@@ -107,12 +100,6 @@ async function downloadCsv() {
   }
 }
 
-function changePeriod(val: BalanceEventPeriod) {
-  period.value = val
-  dateRange.value = null
-  loadItems(true)
-}
-
 function resetFilters() {
   dateRange.value = null
   userId.value = ''
@@ -120,7 +107,6 @@ function resetFilters() {
   source.value = undefined
   direction.value = undefined
   linkStatus.value = undefined
-  period.value = 'history'
   loadItems(true)
 }
 
@@ -132,6 +118,16 @@ function changePage(pager: TablePaginationConfig) {
 
 function rowKey(row: BalanceEvent) {
   return `${row.source}-${row.remote_event_id}`
+}
+
+function rowProps(row: BalanceEvent) {
+  return {
+    class: 'clickableRow',
+    onClick: () => {
+      detail.value = row
+      detailOpen.value = true
+    },
+  }
 }
 
 function sourceText(val: BalanceEventSource) {
@@ -164,14 +160,6 @@ function linkMeta(val: BalanceEventLinkStatus) {
   }[val]
 }
 
-function periodText(val: BalanceEventPeriod) {
-  return {
-    history: '切账前历史账',
-    current: '切账后当前期',
-    all: '全部期间',
-  }[val]
-}
-
 function formatMoney(val: string | number | null | undefined) {
   return Number(val || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 8 })
 }
@@ -185,11 +173,7 @@ onMounted(() => loadItems())
 
 <template>
   <section class="page balanceEventsPage">
-    <div class="pageHead">
-      <div>
-        <h1>历史账</h1>
-        <p>只读查看 Sub2API 后台调额、余额兑换码和已实际改变余额的支付订单</p>
-      </div>
+    <div class="pageHead pageHeadActionsOnly">
       <div class="headActions">
         <a-button :loading="exporting" @click="downloadCsv">
           <template #icon><DownloadOutlined /></template>
@@ -201,25 +185,10 @@ onMounted(() => loadItems())
       </div>
     </div>
 
-    <a-alert
-      type="warning"
-      show-icon
-      message="历史账模块只读"
-      description="这里不支持补录、认领、修改或删除，也不会反向影响首页实收入账；affiliate_balance 返利流水暂不纳入。"
-    />
-
     <section class="filterPanel">
       <div class="filterGrid">
-        <label>
-          <span>期间</span>
-          <a-select :value="period" @change="changePeriod">
-            <a-select-option value="history">切账前历史账</a-select-option>
-            <a-select-option value="current">切账后当前期</a-select-option>
-            <a-select-option value="all">全部期间</a-select-option>
-          </a-select>
-        </label>
         <label class="dateFilter">
-          <span>中国自然日（包含首尾）</span>
+          <span>时间</span>
           <a-range-picker v-model:value="dateRange" />
         </label>
         <label>
@@ -261,30 +230,15 @@ onMounted(() => loadItems())
           <a-button @click="resetFilters">重置</a-button>
         </div>
       </div>
-      <div class="filterMeta">
-        <span>当前期间：{{ periodText(period) }}</span>
-        <span>切账时间：{{ cutoverAt || '尚未设置' }}</span>
-        <span>共 {{ page.total.toLocaleString('zh-CN') }} 条</span>
-      </div>
+      <div class="filterMeta">共 {{ page.total.toLocaleString('zh-CN') }} 条</div>
     </section>
-
-    <div class="summaryGrid">
-      <section><span>事件数</span><strong>{{ summary.record_count }}</strong></section>
-      <section><span>用户数</span><strong>{{ summary.user_count }}</strong></section>
-      <section><span>调增金额</span><strong class="increment">{{ formatMoney(summary.increment_total) }}</strong></section>
-      <section><span>调减金额</span><strong class="decrement">{{ formatMoney(summary.decrement_total) }}</strong></section>
-      <section><span>净变动</span><strong :class="Number(summary.net_total) >= 0 ? 'increment' : 'decrement'">{{ formatMoney(summary.net_total) }}</strong></section>
-      <section><span>已关联数</span><strong>{{ summary.linked_count }}</strong></section>
-      <section><span>外部事件数</span><strong>{{ summary.external_count }}</strong></section>
-      <section><span>审计孤儿数</span><strong>{{ summary.audit_orphan_count }}</strong></section>
-      <section><span>已关联率</span><strong>{{ summary.linked_rate.toFixed(2) }}%</strong></section>
-    </div>
 
     <div class="tableTools">
       <ColumnSettings v-model:value="visibleCols" v-model:width="tableWidth" :options="colOptions" @reset="resetColumns" />
     </div>
     <a-table
       :row-key="rowKey"
+      :custom-row="rowProps"
       :columns="columns"
       :data-source="items"
       :loading="loading"
@@ -313,16 +267,37 @@ onMounted(() => loadItems())
         <template v-else-if="column.dataIndex === 'ledger_no'">
           {{ record.ledger_no || '-' }}
         </template>
-        <template v-else-if="column.dataIndex === 'notes'">
-          <span class="notes">{{ record.notes || '-' }}</span>
-        </template>
       </template>
     </a-table>
+
+    <a-drawer v-model:open="detailOpen" title="历史账详情" width="560">
+      <a-descriptions v-if="detail" :column="1" bordered size="small">
+        <a-descriptions-item label="时间">{{ detail.event_at || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="来源">
+          <a-tag :color="sourceColor(detail.source)">{{ sourceText(detail.source) }}</a-tag>
+        </a-descriptions-item>
+        <a-descriptions-item label="远端事件 ID">{{ detail.remote_event_id }}</a-descriptions-item>
+        <a-descriptions-item label="用户">{{ detail.user_email || detail.username || `用户 #${detail.sub2api_user_id}` }}</a-descriptions-item>
+        <a-descriptions-item label="方向">
+          <a-tag :color="directionMeta(detail.direction).color">{{ directionMeta(detail.direction).text }}</a-tag>
+        </a-descriptions-item>
+        <a-descriptions-item label="金额">
+          <strong class="money" :class="detail.direction">{{ detail.direction === 'decrement' ? '-' : '+' }}{{ formatMoney(detail.amount) }}</strong>
+        </a-descriptions-item>
+        <a-descriptions-item label="关联状态">
+          <a-tag :color="linkMeta(detail.link_status).color">{{ linkMeta(detail.link_status).text }}</a-tag>
+        </a-descriptions-item>
+        <a-descriptions-item label="本地单号">{{ detail.ledger_no || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="备注">{{ detail.notes || '-' }}</a-descriptions-item>
+      </a-descriptions>
+    </a-drawer>
   </section>
 </template>
 
 <style scoped>
 .balanceEventsPage { display: grid; gap: 16px; }
+:deep(.clickableRow) { cursor: pointer; }
+:deep(.clickableRow:hover) > td { background: rgba(22, 119, 255, .06) !important; }
 .summaryGrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
 .summaryGrid section { padding: 14px 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); }
 .summaryGrid span { display: block; color: var(--text-secondary, #70798c); font-size: 12px; margin-bottom: 6px; }
@@ -332,7 +307,6 @@ onMounted(() => loadItems())
 .filterGrid { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 14px; align-items: end; }
 .filterGrid label { display: grid; gap: 6px; min-width: 0; }
 .filterGrid label > span { color: var(--text-secondary, #70798c); font-size: 12px; }
-.dateFilter { grid-column: span 2; }
 .filterActions { display: flex; gap: 9px; }
 .filterMeta { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border-color, #e8eaf0); color: var(--text-secondary, #70798c); font-size: 12px; }
 .money { font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -346,7 +320,6 @@ small { display: block; margin-top: 3px; color: var(--text-secondary, #7a8395); 
 @media (max-width: 760px) { .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) {
   .filterGrid { grid-template-columns: 1fr; }
-  .dateFilter { grid-column: auto; }
   .filterActions, .filterActions button { flex: 1; }
 }
 @media (max-width: 420px) { .summaryGrid { grid-template-columns: 1fr; } }

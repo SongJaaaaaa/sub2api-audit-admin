@@ -11,6 +11,8 @@ import { useTableColumns } from '../composables/useTableColumns'
 const adminOptions = useAdminOptions()
 const loading = ref(false)
 const items = ref<LedgerAdjustment[]>([])
+const detailOpen = ref(false)
+const detail = ref<LedgerAdjustment | null>(null)
 const email = ref('')
 const operator = ref<number | undefined>()
 const dates = ref<[Dayjs, Dayjs] | undefined>()
@@ -74,16 +76,22 @@ function change(pager: TablePaginationConfig) {
   loadItems()
 }
 
+function rowProps(row: LedgerAdjustment) {
+  return {
+    class: 'clickableRow',
+    onClick: () => {
+      detail.value = row
+      detailOpen.value = true
+    },
+  }
+}
+
 onMounted(loadItems)
 </script>
 
 <template>
   <section class="page">
-    <div class="pageHead ledgerHead">
-      <div>
-        <h1>额度调整记录</h1>
-        <p>已二次确认成功</p>
-      </div>
+    <div class="pageHead ledgerHead pageHeadActionsOnly">
       <ColumnSettings v-model:value="visibleCols" v-model:width="tableWidth" :options="colOptions" @reset="resetColumns" />
     </div>
 
@@ -102,9 +110,6 @@ onMounted(loadItems)
     </div>
 
     <div class="summaryGrid">
-      <section><span>记录数</span><strong>{{ summary.record_count.toLocaleString('zh-CN') }}</strong></section>
-      <section><span>用户数</span><strong>{{ summary.user_count.toLocaleString('zh-CN') }}</strong></section>
-      <section><span>调增金额</span><strong class="positive">{{ summary.increment_total }}</strong></section>
       <section><span>调减金额</span><strong class="negative">{{ summary.decrement_total }}</strong></section>
       <section><span>净调整金额</span><strong :class="Number(summary.net_total) > 0 ? 'positive' : Number(summary.net_total) < 0 ? 'negative' : ''">{{ summary.net_total }}</strong></section>
       <section><span>现金入账</span><strong class="money">{{ summary.cash_total }}</strong></section>
@@ -113,6 +118,7 @@ onMounted(loadItems)
 
     <a-table
       row-key="id"
+      :custom-row="rowProps"
       :columns="columns"
       :data-source="items"
       :loading="loading"
@@ -135,11 +141,35 @@ onMounted(loadItems)
         </template>
       </template>
     </a-table>
+
+    <a-drawer v-model:open="detailOpen" title="入账详情" width="640">
+      <a-descriptions v-if="detail" :column="1" bordered size="small">
+        <a-descriptions-item label="业务单号">{{ detail.ledger_no }}</a-descriptions-item>
+        <a-descriptions-item label="用户">{{ detail.sub2api_user_email || `用户 #${detail.sub2api_user_id}` }}</a-descriptions-item>
+        <a-descriptions-item label="操作人">{{ detail.operator_name || detail.operator_email || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="方向">
+          <a-tag :color="detail.operation === 'increment' ? 'green' : 'orange'">
+            {{ detail.operation === 'increment' ? '增加' : '扣减' }}
+          </a-tag>
+        </a-descriptions-item>
+        <a-descriptions-item label="额度"><strong class="money">{{ detail.amount }}</strong></a-descriptions-item>
+        <a-descriptions-item label="现金">{{ detail.cash_amount || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="赠送">{{ detail.gift_quota_amount || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="调前">{{ detail.before_balance || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="调后">{{ detail.after_balance || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="原因">{{ detail.adjust_reason || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="管理员备注">{{ detail.admin_notes || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="Sub2API 备注">{{ detail.sub2api_notes || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="确认时间">{{ detail.confirmed_at || '-' }}</a-descriptions-item>
+      </a-descriptions>
+    </a-drawer>
   </section>
 </template>
 
 <style scoped>
 .ledgerHead { align-items: flex-start; }
+:deep(.clickableRow) { cursor: pointer; }
+:deep(.clickableRow:hover) > td { background: rgba(22, 119, 255, .06) !important; }
 .filterBar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
 .filterItem { width: 220px; }
 .dateFilter { width: 260px; }
