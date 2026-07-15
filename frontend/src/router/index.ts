@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { rebateAdminRoutes, rebateAffiliateRoutes } from '../features/rebate/router'
 import AdminLayout from '../layouts/AdminLayout.vue'
 
 export const router = createRouter({
@@ -8,11 +9,13 @@ export const router = createRouter({
       path: '/login',
       name: 'login',
       component: () => import('../views/LoginView.vue'),
+      meta: { guest: 'admin' },
     },
+    ...rebateAffiliateRoutes,
     {
       path: '/',
       component: AdminLayout,
-      meta: { auth: true },
+      meta: { auth: 'admin' },
       children: [
         { path: '', name: 'dashboard', component: () => import('../views/DashboardView.vue') },
         { path: 'sub2api/users', name: 'sub2-users', component: () => import('../views/Sub2ApiUsersView.vue') },
@@ -27,18 +30,27 @@ export const router = createRouter({
         { path: 'exceptions', name: 'exception', component: () => import('../views/ExceptionCenterView.vue') },
         { path: 'audit-log', name: 'audit', component: () => import('../views/AuditLogView.vue') },
         { path: 'admins', name: 'admins', component: () => import('../views/AdminAccountsView.vue') },
+        ...rebateAdminRoutes,
       ],
     },
   ],
 })
 
 router.beforeEach((to) => {
-  const token = localStorage.getItem('adminToken')
-  if (to.meta.auth && !token) {
+  const adminToken = localStorage.getItem('adminToken')
+  const affiliateToken = localStorage.getItem('affiliateToken')
+
+  if (to.meta.auth === 'admin' && !adminToken) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  if (to.name === 'login' && token) {
+  if (to.meta.auth === 'affiliate' && !affiliateToken) {
+    return { name: 'affiliate-login', query: { redirect: to.fullPath } }
+  }
+  if (to.name === 'login' && adminToken) {
     return { name: 'dashboard' }
+  }
+  if (to.name === 'affiliate-login' && affiliateToken) {
+    return { name: 'affiliate-dashboard' }
   }
 
   return true
