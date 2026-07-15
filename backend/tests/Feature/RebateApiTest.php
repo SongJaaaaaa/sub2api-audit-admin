@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Admin;
 use App\Models\Rebate\RebateEvent;
+use App\Models\Rebate\RebateRecord;
 use App\Models\Rebate\RebateReferral;
 use App\Models\Rebate\RebateUser;
 use App\Models\Rebate\RebateWithdrawal;
@@ -11,6 +12,7 @@ use App\Services\Rebate\BalanceService;
 use App\Services\Rebate\DirectRebateService;
 use App\Services\Rebate\EventIngestService;
 use App\Services\Rebate\WithdrawalService;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -80,6 +82,8 @@ class RebateApiTest extends TestCase
         $this->withToken($token)->getJson('/api/v1/affiliate/promotion')
             ->assertOk()
             ->assertJsonPath('invite_url', 'https://sub2api.test/register?aff=PARENT')
+            ->assertJsonPath('balance.available_amount', '15.00')
+            ->assertJsonPath('balance.total_rebate_amount', '15.00')
             ->assertJsonPath('conversion_rate', '100.00');
         $this->withToken($token)->getJson('/api/v1/affiliate/rebate-records')
             ->assertOk()
@@ -99,6 +103,60 @@ class RebateApiTest extends TestCase
             'available_amount' => '5.00',
             'frozen_amount' => '10.00',
         ]);
+    }
+
+    public function test_dashboards_return_complete_seven_day_rebate_trends_in_china_time(): void
+    {
+        $now = CarbonImmutable::parse('2026-07-16 12:00:00', 'Asia/Shanghai');
+        CarbonImmutable::setTestNow($now);
+
+        try {
+            $today = $now->startOfDay();
+            $start = $today->subDays(6);
+            $first = RebateRecord::query()->firstOrFail();
+            $first->timestamps = false;
+            $first->created_at = $start->addMinutes(5);
+            $first->save();
+
+            $otherParent = $this->user(1003, 'other-parent@example.com', 'OTHER-PARENT');
+            $otherChild = $this->user(1004, 'other-child@example.com', 'OTHER-CHILD');
+            RebateReferral::query()->create(['user_id' => $otherParent->id, 'parent_user_id' => null]);
+            RebateReferral::query()->create(['user_id' => $otherChild->id, 'parent_user_id' => $otherParent->id]);
+
+            $this->createRecord($this->parent, $this->child, '2.35', $today->subDay()->endOfDay(), 'trend-yesterday');
+            $this->createRecord($this->parent, $this->child, '0.10', $today->subDay()->addHour(), 'trend-decimal-a');
+            $this->createRecord($this->parent, $this->child, '0.20', $today->subDay()->addHours(2), 'trend-decimal-b');
+            $this->createRecord($otherParent, $otherChild, '4.10', $today->addSecond(), 'trend-other');
+            $this->createRecord($this->parent, $this->child, '9.00', $start->subSecond(), 'trend-before-range');
+
+            $affiliateToken = $this->parent->createToken('affiliate-trend')->plainTextToken;
+            $this->withToken($affiliateToken)->getJson('/api/v1/affiliate/dashboard')
+                ->assertOk()
+                ->assertJsonCount(7, 'rebate_trend')
+                ->assertJsonPath('rebate_trend.0.date', '2026-07-10')
+                ->assertJsonPath('rebate_trend.0.amount', '15.00')
+                ->assertJsonPath('rebate_trend.1.amount', '0.00')
+                ->assertJsonPath('rebate_trend.5.amount', '2.65')
+                ->assertJsonPath('rebate_trend.6.date', '2026-07-16')
+                ->assertJsonPath('rebate_trend.6.amount', '0.00');
+
+            $admin = Admin::query()->create([
+                'name' => '管理员',
+                'email' => 'trend-admin@example.com',
+                'password' => 'secret123',
+                'status' => Admin::STATUS_ACTIVE,
+            ]);
+            $adminToken = $admin->createToken('admin-trend')->plainTextToken;
+            $this->app['auth']->forgetGuards();
+            $this->withToken($adminToken)->getJson('/api/v1/rebate/admin/dashboard')
+                ->assertOk()
+                ->assertJsonCount(7, 'rebate_trend')
+                ->assertJsonPath('rebate_trend.0.amount', '15.00')
+                ->assertJsonPath('rebate_trend.5.amount', '2.65')
+                ->assertJsonPath('rebate_trend.6.amount', '4.10');
+        } finally {
+            CarbonImmutable::setTestNow();
+        }
     }
 
     public function test_admin_relationship_config_and_withdrawal_actions_return_expected_statuses(): void
@@ -193,5 +251,38 @@ class RebateApiTest extends TestCase
             'status' => RebateUser::STATUS_ACTIVE,
             'aff_code' => $affCode,
         ]);
+    }
+
+    private function createRecord(
+        RebateUser $receiver,
+        RebateUser $payer,
+        string $amount,
+        CarbonImmutable $time,
+        string $sourceId,
+    ): void {
+        $event = RebateEvent::query()->create([
+            'source_type' => EventIngestService::SOURCE_NATIVE_RECHARGE,
+            'source_id' => $sourceId,
+            'user_id' => $payer->id,
+            'amount' => '100.00',
+            'happened_at' => $time,
+            'status' => RebateEvent::STATUS_SUCCEEDED,
+        ]);
+        $record = RebateRecord::query()->create([
+            'event_id' => $event->id,
+            'receiver_user_id' => $receiver->id,
+            'payer_user_id' => $payer->id,
+            'level' => 1,
+            'type' => RebateRecord::TYPE_MILESTONE,
+            'source_amount' => '100.00',
+            'rebate_amount' => $amount,
+            'trigger_count' => 1,
+            'status' => RebateRecord::STATUS_CONFIRMED,
+            'config_snapshot' => [],
+        ]);
+        $record->timestamps = false;
+        $record->created_at = $time;
+        $record->updated_at = $time;
+        $record->save();
     }
 }

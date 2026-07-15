@@ -9,6 +9,7 @@ use App\Models\Rebate\RebateReferral;
 use App\Models\Rebate\RebateUser;
 use App\Models\Rebate\RebateWithdrawal;
 use App\Services\Rebate\ConfigService;
+use App\Services\Rebate\RebateTrendService;
 use App\Services\Rebate\WithdrawalService;
 use App\Support\ChinaTime;
 use App\Support\RebatePresenter;
@@ -18,7 +19,7 @@ use Illuminate\Validation\Rule;
 
 class AffiliateController extends Controller
 {
-    public function dashboard(Request $request): JsonResponse
+    public function dashboard(Request $request, RebateTrendService $trends): JsonResponse
     {
         $user = $this->user($request);
         $stats = $this->teamStats($user->id);
@@ -44,6 +45,7 @@ class AffiliateController extends Controller
             'balance' => RebatePresenter::balance($user->balance()->first()),
             ...$stats,
             'pending_withdrawal_amount' => $this->amount($pending),
+            'rebate_trend' => $trends->lastSevenDays($user->id),
             'recent_rebates' => $records,
         ]);
     }
@@ -68,6 +70,7 @@ class AffiliateController extends Controller
         return response()->json([
             'invite_code' => (string) ($user->aff_code ?? ''),
             'invite_url' => str_replace('{code}', rawurlencode((string) ($user->aff_code ?? '')), $template),
+            'balance' => RebatePresenter::balance($user->balance()->first()),
             ...$stats,
             'conversion_rate' => $rate,
             'items' => $this->teamPage($user->id, 1, 10)['items'],

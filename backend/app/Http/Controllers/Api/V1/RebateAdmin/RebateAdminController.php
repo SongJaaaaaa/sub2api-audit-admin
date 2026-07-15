@@ -11,6 +11,7 @@ use App\Models\Rebate\RebateReferral;
 use App\Models\Rebate\RebateUser;
 use App\Models\Rebate\RebateWithdrawal;
 use App\Services\Rebate\ConfigService;
+use App\Services\Rebate\RebateTrendService;
 use App\Services\Rebate\UserSyncService;
 use App\Services\Rebate\WithdrawalService;
 use App\Services\Sub2Api\Sub2ApiReadRepository;
@@ -23,7 +24,7 @@ use Illuminate\Validation\Rule;
 
 class RebateAdminController extends Controller
 {
-    public function dashboard(): JsonResponse
+    public function dashboard(RebateTrendService $trends): JsonResponse
     {
         $today = now(config('ledger.timezone', 'Asia/Shanghai'))->startOfDay();
         $month = $today->copy()->startOfMonth();
@@ -41,6 +42,7 @@ class RebateAdminController extends Controller
             'month_rebate_amount' => $this->amount((clone $records)->where('created_at', '>=', $month)->sum('rebate_amount')),
             'pending_withdrawal_count' => (clone $pending)->count(),
             'pending_withdrawal_amount' => $this->amount((clone $pending)->sum('amount')),
+            'rebate_trend' => $trends->lastSevenDays(),
             'recent_rebates' => RebateRecord::query()
                 ->with(['payer:id,email', 'receiver:id,email'])
                 ->orderByDesc('id')->limit(8)->get()

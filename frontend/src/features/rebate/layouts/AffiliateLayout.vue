@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import {
-  DashboardOutlined,
-  GiftOutlined,
-  LogoutOutlined,
-  MenuFoldOutlined,
-  ShareAltOutlined,
-  TeamOutlined,
+  BellOutlined,
+  HomeOutlined,
+  LinkOutlined,
+  MenuOutlined,
+  PoweroffOutlined,
+  ProfileOutlined,
+  SendOutlined,
   WalletOutlined,
 } from '@ant-design/icons-vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -20,15 +21,16 @@ const media = window.matchMedia('(max-width: 760px)')
 const isMobile = ref(media.matches)
 
 const nav = [
-  { path: '/affiliate/dashboard', label: '仪表盘', icon: DashboardOutlined },
-  { path: '/affiliate/team', label: '我的团队', icon: TeamOutlined },
-  { path: '/affiliate/promotion', label: '推广中心', icon: ShareAltOutlined },
-  { path: '/affiliate/rebates', label: '返利明细', icon: GiftOutlined },
+  { path: '/affiliate/dashboard', label: '仪表盘', icon: HomeOutlined },
+  { path: '/affiliate/promotion', label: '推广中心', icon: SendOutlined },
+  { path: '/affiliate/team', label: '我的团队', icon: LinkOutlined },
+  { path: '/affiliate/rebates', label: '返利明细', icon: ProfileOutlined },
   { path: '/affiliate/withdrawals', label: '提现管理', icon: WalletOutlined },
 ]
 
 const selected = computed(() => nav.find((item) => route.path.startsWith(item.path))?.path || '/affiliate/dashboard')
 const title = computed(() => nav.find((item) => item.path === selected.value)?.label || '推广中心')
+const displayName = computed(() => auth.user?.username || auth.user?.email || '未登录')
 
 function updateMobile(event: MediaQueryListEvent) {
   isMobile.value = event.matches
@@ -62,7 +64,6 @@ onBeforeUnmount(() => media.removeEventListener('change', updateMobile))
   <div class="affiliateApp">
     <aside v-if="!isMobile" class="affiliateSider">
       <div class="affiliateBrand">
-        <span class="affiliateBrandMark">S</span>
         <div class="affiliateBrandCopy">
           <strong>Sub2Rebate</strong>
           <span>返利推广中心</span>
@@ -82,28 +83,33 @@ onBeforeUnmount(() => media.removeEventListener('change', updateMobile))
       </nav>
       <div class="affiliateSidebarFooter">
         <a-button class="affiliateWithdrawCta" type="primary" block @click="go('/affiliate/withdrawals')">
-          <template #icon><WalletOutlined /></template>
           申请提现
         </a-button>
-        <div class="affiliateAccount">
-          <span>{{ auth.user?.username || auth.user?.email || '推广用户' }}</span>
-          <a-button type="text" size="small" @click="logout">
-            <template #icon><LogoutOutlined /></template>
-            退出
-          </a-button>
-        </div>
       </div>
     </aside>
 
     <div class="affiliateMain">
       <header class="affiliateHeader">
-        <a-button v-if="isMobile" type="text" shape="circle" aria-label="打开导航" @click="drawerOpen = true">
-          <template #icon><MenuFoldOutlined /></template>
-        </a-button>
-        <strong>{{ title }}</strong>
-        <div class="affiliateHeaderIdentity">
-          <span class="affiliateHeaderUser">{{ auth.user?.email || '' }}</span>
-          <small>推广用户</small>
+        <div class="affiliateHeaderStart">
+          <a-button v-if="isMobile" class="affiliateMenuButton" type="text" shape="circle" aria-label="打开导航" @click="drawerOpen = true">
+            <template #icon><MenuOutlined /></template>
+          </a-button>
+          <strong class="affiliateMobileBrand">Sub2Rebate</strong>
+          <strong class="affiliateRouteTitle">{{ title }}</strong>
+        </div>
+        <div class="affiliateHeaderEnd">
+          <a-button shape="circle" size="small" aria-label="通知">
+            <template #icon><BellOutlined /></template>
+          </a-button>
+          <span class="affiliateHeaderDivider" aria-hidden="true"></span>
+          <div class="affiliateHeaderIdentity">
+            <span class="affiliateHeaderUser">{{ displayName }}</span>
+            <small>推广员</small>
+          </div>
+          <a-button size="small" @click="logout">
+            <template #icon><PoweroffOutlined /></template>
+            退出
+          </a-button>
         </div>
       </header>
       <main class="affiliateContent">
@@ -111,9 +117,8 @@ onBeforeUnmount(() => media.removeEventListener('change', updateMobile))
       </main>
     </div>
 
-    <a-drawer v-model:open="drawerOpen" root-class-name="affiliateDrawer" placement="left" :width="280" :closable="false">
+    <a-drawer v-model:open="drawerOpen" root-class-name="affiliateDrawer" placement="left" width="calc(100vw - 16px)" :closable="false">
       <div class="affiliateBrand affiliateDrawerBrand">
-        <span class="affiliateBrandMark">S</span>
         <div class="affiliateBrandCopy">
           <strong>Sub2Rebate</strong>
           <span>返利推广中心</span>
@@ -133,12 +138,7 @@ onBeforeUnmount(() => media.removeEventListener('change', updateMobile))
       </nav>
       <template #footer>
         <a-button class="affiliateWithdrawCta" type="primary" block @click="go('/affiliate/withdrawals')">
-          <template #icon><WalletOutlined /></template>
           申请提现
-        </a-button>
-        <a-button class="affiliateDrawerLogout" block @click="logout">
-          <template #icon><LogoutOutlined /></template>
-          退出登录
         </a-button>
       </template>
     </a-drawer>

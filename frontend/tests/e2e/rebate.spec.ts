@@ -35,6 +35,16 @@ const rebateRecord = {
   created_at: '2026-07-15 10:10:00',
 }
 
+const rebateTrend = [
+  { date: '2026-07-09', amount: '0.00' },
+  { date: '2026-07-10', amount: '0.00' },
+  { date: '2026-07-11', amount: '0.00' },
+  { date: '2026-07-12', amount: '0.00' },
+  { date: '2026-07-13', amount: '0.00' },
+  { date: '2026-07-14', amount: '0.00' },
+  { date: '2026-07-15', amount: '15.00' },
+]
+
 const teamMember = {
   user_id: 9002,
   email: longEmail,
@@ -44,6 +54,16 @@ const teamMember = {
   milestone_times: 2,
   joined_at: '2026-07-15 09:30:00',
 }
+
+const teamMembers = [
+  teamMember,
+  {
+    ...teamMember,
+    user_id: 9003,
+    email: 'second.direct.member.with.a.long.email@example-company-domain.test',
+    username: 'second_direct_member_9003',
+  },
+]
 
 async function loginAdmin(page: Page) {
   await page.route('**/api/v1/dashboard**', (route) => route.abort('failed'))
@@ -66,6 +86,7 @@ async function mockAdminRebateApi(page: Page) {
     month_rebate_amount: '0.00',
     pending_withdrawal_count: 0,
     pending_withdrawal_amount: '0.00',
+    rebate_trend: rebateTrend,
     recent_rebates: [],
     recent_withdrawals: [],
   }))
@@ -154,16 +175,23 @@ async function mockAffiliateApi(page: Page) {
         converted_count: 1,
         total_direct_recharge_amount: '300.00',
         pending_withdrawal_amount: '25.00',
+        rebate_trend: rebateTrend,
         recent_rebates: [rebateRecord],
       })
     }
     if (path.endsWith('/affiliate/team')) {
-      return json(route, { items: [], total: 0, page: 1, page_size: 20 })
+      return json(route, { items: teamMembers, total: teamMembers.length, page: 1, page_size: 20 })
     }
     if (path.endsWith('/affiliate/promotion')) {
       return json(route, {
         invite_code: affiliateUser.invite_code,
         invite_url: longInviteUrl,
+        balance: {
+          available_amount: '1245.50',
+          frozen_amount: '25.00',
+          withdrawn_amount: '180.00',
+          total_rebate_amount: '1450.50',
+        },
         direct_count: 1,
         converted_count: 1,
         conversion_rate: '100.00',
@@ -190,7 +218,7 @@ async function mockAffiliateApi(page: Page) {
           min_amount: '2.00',
           daily_limit: 10,
           daily_amount_limit: '0.00',
-          to_api_quota_rate: '1.0000',
+          to_api_quota_rate: '0.3333',
         },
         today_count: 0,
         today_amount: '0.00',
@@ -208,8 +236,8 @@ test('admin rebate pages render without viewport overflow', async ({ page }) => 
   const pages = [
     { path: '/rebate/dashboard', title: '数据看板', breadcrumb: '数据看板' },
     { path: '/rebate/relationships', title: '推荐关系', breadcrumb: '推荐关系', state: '选择账号后查看推荐关系' },
-    { path: '/rebate/withdrawals', title: '提现审核', breadcrumb: '提现审核', state: '暂无数据' },
-    { path: '/rebate/config', title: '返利配置', breadcrumb: '返利配置', state: '初始累充门槛' },
+    { path: '/rebate/withdrawals', title: '提现审核', breadcrumb: '提现审核', state: '暂无提现申请' },
+    { path: '/rebate/config', title: '配置中心', breadcrumb: '返利配置', state: '下级累充门槛' },
   ]
 
   for (const item of pages) {
@@ -227,7 +255,7 @@ test('affiliate rebate pages handle long content and empty states without viewpo
 
   const pages = [
     { path: '/affiliate/dashboard', title: `欢迎回来，${affiliateUser.username}`, text: longEmail },
-    { path: '/affiliate/team', title: '我的推荐关系', text: '暂无直接下级' },
+    { path: '/affiliate/team', title: '我的推荐关系', text: longEmail },
     { path: '/affiliate/promotion', title: '推广中心', text: longEmail },
     { path: '/affiliate/rebates', title: '返利明细', text: longEmail },
     { path: '/affiliate/withdrawals', title: '提现管理', text: '暂无提现记录' },
@@ -242,6 +270,17 @@ test('affiliate rebate pages handle long content and empty states without viewpo
       await expect(page.getByText(longInviteUrl, { exact: true })).toBeVisible()
       await expect(page.getByRole('button', { name: '复制邀请链接' })).toBeVisible()
     }
+    if (item.path === '/affiliate/withdrawals') {
+      await page.getByPlaceholder('请输入金额，如 100.00').fill('1.23')
+      await expect(page.locator('.withdrawApplyCard input[readonly]')).toHaveValue('¥0.40')
+    }
+    if (item.path === '/affiliate/team') {
+      const canvasBox = await page.locator('.teamCanvas').boundingBox()
+      const rootBox = await page.locator('.teamRootNode').boundingBox()
+      if (!canvasBox || !rootBox) throw new Error('团队画布未完成渲染')
+      expect(rootBox.x).toBeGreaterThanOrEqual(canvasBox.x)
+      expect(rootBox.x + rootBox.width).toBeLessThanOrEqual(canvasBox.x + canvasBox.width)
+    }
     await expectNoViewportOverflow(page)
   }
 })
@@ -254,6 +293,8 @@ test('h5 affiliate navigation opens and closes through the drawer', async ({ pag
   await page.getByRole('button', { name: '打开导航' }).click()
   const drawer = page.locator('.ant-drawer-content')
   await expect(drawer).toBeVisible()
+  const drawerBox = await drawer.boundingBox()
+  expect(Math.round(drawerBox?.width || 0)).toBe((page.viewportSize()?.width || 0) - 16)
   await drawer.getByRole('button', { name: '我的团队' }).click()
 
   await expect(page).toHaveURL(/\/affiliate\/team$/)

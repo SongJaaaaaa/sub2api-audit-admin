@@ -9,6 +9,7 @@ const info = computed(() => ({
   succeeded: { text: '已到账', color: 'green' },
   rejected: { text: '已拒绝', color: 'red' },
   exception: { text: '异常', color: 'red' },
+  confirmed: { text: '已确认', color: 'green' },
   processed: { text: '已发放', color: 'green' },
   active: { text: '正常', color: 'green' },
   disabled: { text: '停用', color: 'default' },

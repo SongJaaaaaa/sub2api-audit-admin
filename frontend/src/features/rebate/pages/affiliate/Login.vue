@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { LockOutlined, UserOutlined } from '@ant-design/icons-vue'
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAffiliateAuthStore } from '../../stores/affiliateAuth'
@@ -37,25 +36,16 @@ async function submit() {
 <template>
   <main class="affiliateLogin">
     <section class="affiliateLoginPanel">
-      <div class="affiliateLoginBrand">
-        <span class="affiliateBrandMark">S</span>
-        <div>
-          <strong>Sub2Rebate</strong>
-          <span>返利推广中心</span>
-        </div>
-      </div>
-      <h1>推广用户登录</h1>
-      <p>Sub2API 账户</p>
+      <h1>Sub2Rebate</h1>
+      <p>登录分销返利用户中心</p>
       <a-alert v-if="error" class="affiliateLoginError" type="error" show-icon :message="error" />
       <a-form layout="vertical" :model="form" @finish="submit">
-        <a-form-item name="account" label="Sub2API 账号" :rules="[{ required: true, message: '请输入账号' }]">
-          <a-input v-model:value="form.account" size="large" autocomplete="username" placeholder="Sub2API 邮箱">
-            <template #prefix><UserOutlined /></template>
+        <a-form-item name="account" label="账号" :rules="[{ required: true, message: '请输入账号' }]">
+          <a-input v-model:value="form.account" autocomplete="username" placeholder="用户名或邮箱">
           </a-input>
         </a-form-item>
         <a-form-item name="password" label="密码" :rules="[{ required: true, message: '请输入密码' }]">
-          <a-input-password v-model:value="form.password" size="large" autocomplete="current-password" placeholder="密码">
-            <template #prefix><LockOutlined /></template>
+          <a-input-password v-model:value="form.password" autocomplete="current-password" placeholder="请输入密码">
           </a-input-password>
         </a-form-item>
         <a-button block type="primary" html-type="submit" size="large" :loading="loading">登录</a-button>

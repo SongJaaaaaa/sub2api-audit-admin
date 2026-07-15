@@ -23,6 +23,11 @@ export interface RebateBalance {
   total_rebate_amount: Money
 }
 
+export interface RebateTrendPoint {
+  date: string
+  amount: Money
+}
+
 export interface RebateRecord {
   id: number
   event_id: number | null
@@ -93,6 +98,7 @@ export interface AdminDashboard {
   month_rebate_amount: Money
   pending_withdrawal_count: number
   pending_withdrawal_amount: Money
+  rebate_trend: RebateTrendPoint[]
   recent_rebates: RebateRecord[]
   recent_withdrawals: RebateWithdrawal[]
 }
@@ -104,12 +110,14 @@ export interface AffiliateDashboard {
   converted_count: number
   total_direct_recharge_amount: Money
   pending_withdrawal_amount: Money
+  rebate_trend: RebateTrendPoint[]
   recent_rebates: RebateRecord[]
 }
 
 export interface PromotionRes {
   invite_code: string
   invite_url: string
+  balance: RebateBalance
   direct_count: number
   converted_count: number
   conversion_rate: string

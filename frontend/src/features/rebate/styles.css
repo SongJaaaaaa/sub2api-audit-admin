@@ -1,18 +1,37 @@
 .rebatePage {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
   min-width: 0;
-  max-width: 1480px;
+  max-width: 1440px;
   margin: 0 auto;
+  color: #0f172a;
+  --rebate-bg: #f7f9fb;
+  --rebate-card: #fff;
+  --rebate-low: #f2f4f6;
+  --rebate-border: #e2e8f0;
+  --rebate-text: #0f172a;
+  --rebate-accent: #4648d4;
+  --rebate-muted: #64748b;
+  --rebate-success: #10b981;
+  --rebate-danger: #ef4444;
+  --rebate-warning: #f59e0b;
+  --bg: var(--rebate-bg);
+  --surface: var(--rebate-card);
+  --surface2: var(--rebate-low);
+  --text: var(--rebate-text);
+  --heading: var(--rebate-text);
+  --muted: var(--rebate-muted);
+  --border: var(--rebate-border);
+  --money: var(--rebate-success);
 }
 
 .rebatePageHeader {
   display: flex;
-  min-height: 48px;
-  align-items: flex-start;
+  min-height: 56px;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
 }
 
 .rebatePageTitle {
@@ -21,22 +40,49 @@
 
 .rebatePageHeader h1 {
   margin: 0;
-  color: var(--heading);
-  font-size: 26px;
-  line-height: 34px;
+  color: var(--rebate-text);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 38px;
   letter-spacing: 0;
 }
 
 .rebatePageHeader p {
-  margin: 4px 0 0;
-  color: var(--muted);
+  margin: 8px 0 0;
+  color: var(--rebate-muted);
   font-size: 14px;
   line-height: 22px;
 }
 
-.rebatePageActions,
-.rebateActions,
-.rebateFilters {
+.rebatePage .ant-btn-primary:not(:disabled) {
+  border-color: var(--rebate-accent);
+  background: var(--rebate-accent);
+  box-shadow: none;
+}
+
+.rebatePage .ant-btn-primary:not(:disabled):hover {
+  border-color: #3f41c0;
+  background: #3f41c0;
+}
+
+.rebatePage .ant-switch.ant-switch-checked {
+  background: var(--rebate-accent);
+}
+
+.rebatePage .ant-tabs .ant-tabs-tab-active .ant-tabs-tab-btn,
+.rebatePage .ant-pagination .ant-pagination-item-active a {
+  color: var(--rebate-accent);
+}
+
+.rebatePage .ant-tabs .ant-tabs-ink-bar {
+  background: var(--rebate-accent);
+}
+
+.rebatePage .ant-pagination .ant-pagination-item-active {
+  border-color: var(--rebate-accent);
+}
+
+.rebatePageActions {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -44,76 +90,67 @@
   flex-wrap: wrap;
 }
 
-.rebateFilters {
-  justify-content: space-between;
-}
-
 .rebateMetrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: 16px;
 }
 
 .rebateMetric {
   min-width: 0;
-  min-height: 124px;
-  padding: 20px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  min-height: 130px;
+  padding: 24px;
+  overflow: hidden;
+  border: 1px solid var(--rebate-border);
+  border-radius: 16px;
+  background: var(--rebate-card);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 8%), 0 1px 2px -1px rgb(15 23 42 / 8%);
+  transition: box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .rebateMetric span {
-  display: flex;
   overflow: hidden;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 20px;
+  color: var(--rebate-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.rebateMetric span::before {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 8px;
-  border-radius: 2px;
-  background: #4648d4;
-  content: '';
+.rebateMetric:hover {
+  box-shadow: 0 4px 12px rgb(15 23 42 / 8%), 0 2px 4px -2px rgb(15 23 42 / 6%);
 }
-
-.rebateMetric[data-tone='green'] span::before { background: #10b981; }
-.rebateMetric[data-tone='orange'] span::before { background: #f59e0b; }
-.rebateMetric[data-tone='red'] span::before { background: #ef4444; }
 
 .rebateMetric strong {
   display: block;
   margin-top: 12px;
   overflow-wrap: anywhere;
-  color: var(--heading);
-  font-size: 26px;
-  line-height: 32px;
+  color: var(--rebate-text);
+  font-size: 30px;
+  line-height: 34px;
   letter-spacing: 0;
 }
 
 .rebateMetric small {
   display: block;
-  margin-top: 7px;
-  color: var(--muted);
+  margin-top: 12px;
+  color: var(--rebate-success);
   font-size: 12px;
+  font-weight: 600;
   line-height: 18px;
 }
 
-.rebateSection {
+.rebateMetric small[data-type='danger'] { color: var(--rebate-danger); }
+.rebateMetric small[data-type='muted'] { color: var(--rebate-muted); }
+
+.rebateCard {
   min-width: 0;
-  padding: 20px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  padding: 24px;
+  border: 1px solid var(--rebate-border);
+  border-radius: 16px;
+  background: var(--rebate-card);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 8%), 0 1px 2px -1px rgb(15 23 42 / 8%);
 }
 
 .rebateSectionHeader {
@@ -127,7 +164,7 @@
 
 .rebateSectionHeader h2 {
   margin: 0;
-  color: var(--heading);
+  color: var(--rebate-text);
   font-size: 18px;
   line-height: 26px;
   letter-spacing: 0;
@@ -140,13 +177,6 @@
 
 .rebateTable .ant-table-cell {
   white-space: nowrap;
-}
-
-.rebateTable .rebateWrapCell {
-  min-width: 180px;
-  max-width: 320px;
-  overflow-wrap: anywhere;
-  white-space: normal;
 }
 
 .rebateAmount {
@@ -179,41 +209,13 @@
   font-size: 12px;
 }
 
-.rebateFormGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 20px;
-}
-
-.rebateFormGrid .ant-form-item {
-  min-width: 0;
-}
-
-.rebateTwoColumns {
-  display: grid;
-  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
-  gap: 16px;
-}
-
-.rebateInlineValue {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-}
-
-.rebateInlineValue .ant-input,
-.rebateInlineValue .ant-input-affix-wrapper {
-  min-width: 0;
-}
-
 .affiliateApp {
   display: flex;
   width: 100%;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
-  background: var(--bg);
+  background: #f7f9fb;
   --affiliate-accent: #4648d4;
   --affiliate-active: #f2f4f6;
 }
@@ -238,19 +240,19 @@
   flex: 0 0 256px;
   width: 256px;
   min-height: 0;
+  padding: 24px 16px;
   flex-direction: column;
-  border-right: 1px solid var(--border);
-  background: var(--surface);
+  border-right: 1px solid #e2e8f0;
+  background: #fff;
 }
 
 .affiliateBrand {
   display: flex;
-  flex: 0 0 78px;
-  height: 78px;
-  padding: 0 22px;
+  flex: 0 0 60px;
+  height: 60px;
+  padding: 0 8px;
   align-items: center;
-  gap: 12px;
-  color: var(--heading);
+  color: #0f172a;
 }
 
 .affiliateBrandCopy {
@@ -261,39 +263,26 @@
 
 .affiliateBrandCopy strong {
   overflow: hidden;
-  font-size: 20px;
-  line-height: 26px;
+  font-size: 24px;
+  line-height: 30px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .affiliateBrandCopy span {
   overflow: hidden;
-  color: var(--muted);
-  font-size: 11px;
+  color: #64748b;
+  font-size: 12px;
   font-weight: 600;
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.affiliateBrandMark {
-  display: inline-flex;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  background: #111827;
-  color: #fff;
-  font-weight: 700;
-}
-
 .affiliateNav {
   display: flex;
   min-height: 0;
-  padding: 20px 16px;
+  padding: 24px 0 16px;
   flex: 1;
   flex-direction: column;
   gap: 6px;
@@ -306,11 +295,11 @@
   min-height: 46px;
   padding: 0 16px;
   align-items: center;
-  gap: 12px;
+  gap: 9px;
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--muted);
+  color: #64748b;
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
@@ -318,7 +307,8 @@
 }
 
 .affiliateNav button:hover {
-  background: var(--surface2);
+  background: #f2f4f6;
+  color: #0f172a;
 }
 
 .affiliateNav button.active {
@@ -327,39 +317,16 @@
   color: var(--affiliate-accent, #4648d4);
 }
 
-.affiliateAccount {
-  display: flex;
-  min-width: 0;
-  padding-top: 10px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.affiliateAccount > span {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .affiliateSidebarFooter {
-  padding: 16px;
-  border-top: 1px solid var(--border);
+  padding-top: 16px;
 }
 
 .affiliateWithdrawCta.ant-btn-primary {
-  height: 42px;
-  border-color: var(--affiliate-accent, #4648d4);
-  background: var(--affiliate-accent, #4648d4);
+  height: 45px;
+  border-color: #0f172a;
+  background: #0f172a;
   box-shadow: none;
   font-weight: 600;
-}
-
-.affiliateDrawerLogout {
-  margin-top: 8px;
 }
 
 .affiliateMain {
@@ -371,23 +338,41 @@
 }
 
 .affiliateHeader {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
   height: 64px;
   padding: 0 32px;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  border-bottom: 1px solid #e2e8f0;
+  background: rgb(255 255 255 / 90%);
+  backdrop-filter: blur(8px);
 }
 
-.affiliateHeader strong {
+.affiliateHeaderStart,
+.affiliateHeaderEnd {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.affiliateHeaderDivider {
+  width: 1px;
+  height: 36px;
+  background: #e2e8f0;
+}
+
+.affiliateRouteTitle,
+.affiliateMobileBrand {
   overflow: hidden;
-  color: var(--heading);
+  color: #0f172a;
   font-size: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.affiliateMobileBrand { display: none; font-size: 18px; }
 
 .affiliateHeaderIdentity {
   display: flex;
@@ -399,14 +384,14 @@
 .affiliateHeaderUser {
   max-width: 260px;
   overflow: hidden;
-  color: var(--muted);
+  color: #0f172a;
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .affiliateHeaderIdentity small {
-  color: var(--muted);
+  color: #64748b;
   font-size: 11px;
   line-height: 16px;
 }
@@ -414,13 +399,28 @@
 .affiliateContent {
   height: calc(100vh - 64px);
   height: calc(100dvh - 64px);
-  padding: 28px 32px;
+  padding: 24px 32px;
   overflow: auto;
+  background: #f7f9fb;
 }
 
 .affiliateDrawerBrand {
-  margin: -24px -24px 0;
-  border-bottom: 1px solid var(--border);
+  padding: 0 8px;
+  transform: translateY(-6px);
+}
+
+.affiliateDrawer .ant-drawer-body {
+  padding: 24px 16px;
+}
+
+.affiliateDrawer .affiliateNav {
+  width: 223px;
+}
+
+.affiliateDrawer .ant-drawer-footer {
+  width: 255px;
+  padding: 10px 16px 24px;
+  border-top: 0;
 }
 
 .affiliateApp .ant-btn-primary,
@@ -437,304 +437,23 @@
   background: #3f41c0;
 }
 
-.affiliateDashboardGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
-  gap: 16px;
-  align-items: stretch;
+.affiliateApp .affiliateWithdrawCta.ant-btn-primary,
+.affiliateDrawer .affiliateWithdrawCta.ant-btn-primary {
+  border-color: #0f172a;
+  background: #0f172a;
 }
 
-.affiliateInsights dl {
-  display: grid;
-  margin: 0;
-  gap: 0;
-}
-
-.affiliateInsights dl > div {
-  display: flex;
-  min-height: 64px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.affiliateInsights dl > div:last-child {
-  border-bottom: 0;
-}
-
-.affiliateInsights dt {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.affiliateInsights dd {
-  margin: 0;
-  color: var(--heading);
-  font-size: 16px;
-  font-weight: 700;
-  text-align: right;
-}
-
-.promotionOverview {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.8fr);
-  gap: 16px;
-}
-
-.promotionEngine {
-  display: flex;
-  min-height: 286px;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.promotionEngineHead {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.promotionEngineHead h2,
-.promotionLevelCard h2 {
-  margin: 0;
-  color: var(--heading);
-  font-size: 20px;
-  line-height: 28px;
-}
-
-.promotionEngineHead p,
-.promotionLevelCard p {
-  margin: 3px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.promotionEngineIcon {
-  display: inline-flex;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  background: #eef2ff;
-  color: #4648d4;
-  font-size: 20px;
-}
-
-.promotionLinkBox {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  padding: 7px;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface2);
-}
-
-.promotionLinkBox > span {
-  min-width: 0;
-  padding: 0 8px;
-  overflow: hidden;
-  color: var(--text);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 13px;
-  line-height: 22px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.promotionCode {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  width: 100%;
-  min-height: 52px;
-  padding: 0 14px;
-  align-items: center;
-  gap: 12px;
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  text-align: left;
-}
-
-.promotionCode strong {
-  overflow: hidden;
-  color: var(--heading);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 18px;
-  letter-spacing: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.promotionStats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.promotionStats article {
-  display: flex;
-  min-width: 0;
-  min-height: 137px;
-  padding: 18px;
-  flex-direction: column;
-  justify-content: space-between;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
-}
-
-.promotionStats article > .anticon,
-.promotionRateIcon {
-  color: #4648d4;
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.promotionStats article > span:not(.promotionRateIcon) {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.promotionStats article strong {
-  overflow-wrap: anywhere;
-  color: var(--heading);
-  font-size: 22px;
-  line-height: 28px;
-}
-
-.promotionLevelCard {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-
-.promotionLevelCard > div:first-child {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 14px;
-}
-
-.promotionLevelBadge {
-  display: inline-flex;
-  width: 48px;
-  height: 48px;
-  flex: 0 0 48px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  background: #111827;
-  color: #fff;
-  font-weight: 700;
-}
-
-.promotionLevelStats {
-  display: flex;
-  align-items: center;
-  gap: 22px;
-}
-
-.promotionLevelStats span {
-  color: var(--muted);
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.promotionLevelStats strong {
-  margin-left: 6px;
-  color: var(--heading);
-  font-size: 18px;
+.affiliateApp .affiliateWithdrawCta.ant-btn-primary:not(:disabled):hover,
+.affiliateDrawer .affiliateWithdrawCta.ant-btn-primary:not(:disabled):hover {
+  border-color: #1e293b;
+  background: #1e293b;
 }
 
 .withdrawWorkspace {
   display: grid;
-  grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+  gap: 24px;
   align-items: start;
-}
-
-.withdrawSide {
-  display: grid;
-  min-width: 0;
-  gap: 16px;
-}
-
-.withdrawBalancePanel {
-  min-width: 0;
-  padding: 24px;
-  border-radius: 8px;
-  background: #111827;
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16);
-}
-
-.withdrawBalancePanel > span {
-  color: #aeb8ca;
-  font-size: 13px;
-}
-
-.withdrawBalancePanel > strong {
-  display: block;
-  margin-top: 14px;
-  overflow-wrap: anywhere;
-  font-size: 32px;
-  line-height: 40px;
-  letter-spacing: 0;
-}
-
-.withdrawBalancePanel > div {
-  display: flex;
-  margin-top: 22px;
-  padding-top: 16px;
-  justify-content: space-between;
-  gap: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.16);
-  color: #cbd5e1;
-  font-size: 12px;
-}
-
-.withdrawPolicyList {
-  display: grid;
-  margin: 20px 0 0;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
-
-.withdrawPolicyList > div {
-  display: flex;
-  min-height: 38px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.withdrawPolicyList dt {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.withdrawPolicyList dd {
-  margin: 0;
-  color: var(--heading);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.withdrawHistoryPanel {
-  min-height: 100%;
 }
 
 .affiliateLogin {
@@ -749,93 +468,58 @@
 }
 
 .affiliateLoginPanel {
-  width: min(100%, 420px);
+  width: min(100%, 448px);
   padding: 32px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.09);
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 8%), 0 1px 2px -1px rgb(15 23 42 / 8%);
 }
 
 .affiliateLoginPanel h1 {
-  margin: 28px 0 0;
-  color: var(--heading);
-  font-size: 24px;
-  line-height: 32px;
+  margin: 0;
+  color: #0f172a;
+  font-size: 30px;
+  line-height: 38px;
   letter-spacing: 0;
 }
 
 .affiliateLoginPanel > p {
-  margin: 5px 0 24px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.affiliateLoginBrand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.affiliateLoginBrand > div {
-  display: flex;
-  flex-direction: column;
-}
-
-.affiliateLoginBrand strong {
-  color: var(--heading);
-  font-size: 19px;
-  line-height: 25px;
-}
-
-.affiliateLoginBrand div span {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 17px;
+  margin: 8px 0 32px;
+  color: #64748b;
+  font-size: 14px;
 }
 
 @media (max-width: 1000px) {
   .rebateMetrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .rebateTwoColumns { grid-template-columns: 1fr; }
-  .affiliateDashboardGrid,
-  .promotionOverview,
   .withdrawWorkspace { grid-template-columns: 1fr; }
-  .withdrawSide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 760px) {
   .rebatePageHeader,
-  .rebateSectionHeader,
-  .rebateFilters {
+  .rebateSectionHeader {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .rebatePageActions,
-  .rebateActions {
+  .rebatePageActions {
     width: 100%;
   }
 
   .rebateMetrics { grid-template-columns: 1fr; }
-  .rebateMetric { min-height: 92px; padding: 14px; }
-  .rebateMetric strong { margin-top: 6px; font-size: 21px; }
-  .rebateSection { padding: 12px; }
-  .rebateFormGrid { grid-template-columns: 1fr; }
-  .affiliateHeader { padding: 0 12px; }
-  .affiliateHeaderUser { max-width: 130px; }
-  .affiliateHeaderIdentity small { display: none; }
-  .affiliateContent { padding: 16px 12px; }
-  .affiliateApp .rebatePageHeader h1 { font-size: 22px; line-height: 30px; }
-  .affiliateApp .rebatePageActions .ant-btn { flex: 1; }
-  .promotionLinkBox { grid-template-columns: 1fr; }
-  .promotionLinkBox > span { padding: 8px; white-space: normal; overflow-wrap: anywhere; }
-  .promotionStats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .promotionStats article { min-height: 124px; padding: 14px; }
-  .promotionLevelCard { align-items: flex-start; flex-direction: column; }
-  .promotionLevelStats { width: 100%; justify-content: space-between; }
-  .withdrawSide { grid-template-columns: 1fr; }
-  .withdrawBalancePanel { padding: 20px; }
-  .affiliateLogin { padding: 14px; }
-  .affiliateLoginPanel { padding: 20px; }
+  .rebateMetric { min-height: 118px; padding: 16px; }
+  .rebateMetric strong { margin-top: 8px; font-size: 24px; }
+  .rebateMetric small { margin-top: 8px; }
+  .rebateCard { padding: 16px; }
+  .affiliateHeader { padding: 0 16px; }
+  .affiliateMenuButton.ant-btn { width: 24px; min-width: 24px; height: 24px; padding: 0; border: 1px solid #e2e8f0; background: #fff; }
+  .affiliateMobileBrand { display: block; }
+  .affiliateRouteTitle,
+  .affiliateHeaderIdentity { display: none; }
+  .affiliateHeaderEnd { gap: 8px; }
+  .affiliateHeaderDivider { display: none; }
+  .affiliateContent { padding: 24px 16px; }
+  .affiliateApp .rebatePageHeader h1 { font-size: 24px; line-height: 32px; }
+  .affiliateLogin { padding: 16px; }
+  .affiliateLoginPanel { padding: 32px; }
 }
