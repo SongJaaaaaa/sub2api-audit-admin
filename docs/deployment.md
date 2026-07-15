@@ -1,177 +1,132 @@
-# 部署说明
+# 部署与数据切换
 
-## 1. 部署边界
+## 1. 数据边界
 
-本系统有三类数据源，生产部署时必须保持职责分离：
+生产环境使用两套 PostgreSQL 连接：
 
-| 数据源 | 用途 | 写入约束 |
+| 连接 | 用途 | 权限 |
 |---|---|---|
-| 本地审计 SQLite | 调额账本、现金/赠送、经营账、附件索引、审计日志、切账设置、对账批次和差异 | 由本系统正常读写 |
-| Sub2API 官方 Admin API | 调整用户余额、二次确认、请求数、Token、标准消费、实际消费、用户排行和 requested 模型统计 | 仅通过官方 API 调额，不得用 SQL 改余额 |
-| Sub2API PostgreSQL | 当前普通用户余额、远端调额事件关联、历史余额事件和真实对账 | 只读账号，禁止写入远端业务表 |
+| 默认 `pgsql` | 管理员、审计账本、利润、推广关系、返利余额和提现 | 本应用读写 |
+| `sub2api` | Sub2API 用户、邀请归因、充值和兑换事件 | 只读 |
 
-建议与 Sub2API 部署在同一服务器或可信内网。远端 PostgreSQL 不得暴露公网；跨服务器时优先使用内网或 SSH 隧道。
+Sub2API 余额只能通过官方 Admin API 调整，禁止直接更新 Sub2API 数据库。附件目录 `backend/storage/app/private` 独立持久化并备份。
 
-## 2. 目录建议
-
-```text
-/var/www/sub2api-audit-admin
-  backend
-  frontend/dist
-  backend/database/database.sqlite
-  backend/storage/app/private
-```
-
-以下内容必须持久化并纳入备份：
-
-- `backend/database/database.sqlite`
-- `backend/storage/app/private`
-- 生产 `.env` 和外部密钥管理配置
-
-附件使用 Laravel `local` 私有盘，不要把私有附件目录软链到 `public`。
-
-## 3. 后端环境变量
-
-### 3.1 基础配置和本地审计库
+生产 `.env` 至少配置：
 
 ```env
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=https://api.example.com
-APP_KEY=
-APP_LOCALE=zh_CN
-APP_FALLBACK_LOCALE=zh_CN
 APP_TIMEZONE=Asia/Shanghai
 
-DB_CONNECTION=sqlite
-DB_DATABASE=/var/www/sub2api-audit-admin/backend/database/database.sqlite
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=sub2api_audit
+DB_USERNAME=sub2api_audit
+DB_PASSWORD=
+DB_SSLMODE=prefer
 
-FILESYSTEM_DISK=local
-```
-
-`DB_DATABASE` 必须改成生产服务器上的绝对路径。部署前先创建数据库文件并确保 PHP 运行用户可读写：
-
-```bash
-cd /var/www/sub2api-audit-admin/backend
-install -m 660 -o www-data -g www-data /dev/null database/database.sqlite
-```
-
-运行用户不是 `www-data` 时，按实际用户和用户组调整。
-
-### 3.2 Sub2API 只读数据库
-
-```env
 SUB2API_DB_CONNECTION=sub2api
 SUB2API_DB_HOST=127.0.0.1
 SUB2API_DB_PORT=5432
 SUB2API_DB_DATABASE=sub2api
 SUB2API_DB_USERNAME=sub2api_ro
 SUB2API_DB_PASSWORD=
-SUB2API_DB_SCHEMA=public
 SUB2API_DB_SSLMODE=prefer
-```
 
-该账号必须只有读取所需表的权限，至少需要读取 `users`、`usage_logs`、`redeem_codes` 和 `payment_orders`。本系统不得直接更新 Sub2API 用户余额、兑换码、支付订单或其他远端业务表。
-
-### 3.3 Sub2API 官方 Admin API
-
-```env
 SUB2API_ADMIN_API_URL=https://sub2api.example.com
 SUB2API_ADMIN_API_KEY=
-SUB2API_ADMIN_API_TIMEOUT=10
+# 必须先验证同一 Idempotency-Key 的重复调额只生效一次，再改为 true。
+SUB2API_BALANCE_IDEMPOTENCY_VERIFIED=false
+
+QUEUE_CONNECTION=database
+CACHE_STORE=database
+SESSION_DRIVER=database
 ```
 
-变量名必须是 `SUB2API_ADMIN_API_URL`，不要使用旧的 `SUB2API_ADMIN_BASE_URL`。
+数据库密码和 API Key 不得写入仓库、部署日志或命令历史。
 
-密码、数据库口令、API Key 和 Authorization 不得写入仓库、部署文档、命令历史、应用日志或验收截图。
+## 2. 切换前备份
 
-## 4. 前端环境变量与构建版本
+1. 进入维护模式，停止管理端写入、推广端写入、Scheduler 和所有 Queue Worker。
+2. 等待正在处理的余额调整和提现任务结束；旧返利库不能存在冻结余额或未完成提现。
+3. 对两套 SQLite 执行 checkpoint，确认源目录不存在 `-wal`、`-shm`、`-journal` 旁路文件。
+4. 同时备份审计 SQLite、旧返利 SQLite、私有附件和生产 `.env`。
+5. 对两份 SQLite 计算 SHA-256，并把文件大小、哈希和停机时间写入变更单。
 
-```env
-VITE_API_BASE_URL=https://api.example.com/api/v1
-```
-
-生产构建固定使用 Node `22.22.0`：
+示例：
 
 ```bash
-source ~/.nvm/nvm.sh
-nvm use 22.22.0
-cd /var/www/sub2api-audit-admin/frontend
-corepack pnpm install --frozen-lockfile
-corepack pnpm build
+stamp=$(date +%Y%m%d%H%M%S)
+mkdir -p "/backup/sub2api-audit/$stamp"
+sqlite3 backend/database/database.sqlite 'PRAGMA wal_checkpoint(TRUNCATE);'
+sqlite3 /srv/sub2rebate/backend/database/database.sqlite 'PRAGMA wal_checkpoint(TRUNCATE);'
+test -z "$(find backend/database /srv/sub2rebate/backend/database -maxdepth 1 -type f \( -name '*.sqlite-wal' -o -name '*.sqlite-shm' -o -name '*.sqlite-journal' \) -print -quit)"
+cp -a backend/database/database.sqlite "/backup/sub2api-audit/$stamp/audit.sqlite"
+cp -a /srv/sub2rebate/backend/database/database.sqlite "/backup/sub2api-audit/$stamp/rebate.sqlite"
+tar -czf "/backup/sub2api-audit/$stamp/private-files.tar.gz" -C backend/storage/app private
+sha256sum "/backup/sub2api-audit/$stamp/audit.sqlite" "/backup/sub2api-audit/$stamp/rebate.sqlite"
 ```
 
-## 5. 首次上线顺序
+迁移命令会拒绝任何带 `-wal`、`-shm` 或 `-journal` 的源文件，以 SQLite 只读模式打开备份，并在 PostgreSQL 目标事务提交前再次核对 SHA-256。源文件变化会让整个目标事务回滚，可修复备份后重新执行。
 
-首次启用新统计、切账和对账能力时，严格按以下顺序执行。
+## 3. PostgreSQL 迁移顺序
 
-### 5.1 进入维护并备份
-
-1. 记录进入维护模式的**精确中国时间**，格式为 `YYYY-MM-DD HH:mm:ss`。
-2. 停止本审计系统发起新的用户调额，确认没有进行中的调额请求。
-3. 备份本地 SQLite 和私有附件：
-
-```bash
-cd /var/www/sub2api-audit-admin
-cp -a backend/database/database.sqlite \
-  "backend/database/database.sqlite.bak.$(date +%Y%m%d%H%M%S)"
-tar -czf "private-files.$(date +%Y%m%d%H%M%S).tar.gz" \
-  -C backend/storage/app private
-```
-
-### 5.2 部署后端并迁移
+先创建空 PostgreSQL 数据库和最小权限应用账号，再部署代码并安装依赖：
 
 ```bash
 cd /var/www/sub2api-audit-admin/backend
-composer install --no-dev --optimize-autoloader
+composer install --no-dev --optimize-autoloader --no-interaction
 php artisan migrate --force
 ```
 
-不要在生产部署中重复执行 `php artisan key:generate`。已有生产 `APP_KEY` 必须保持不变。
-
-### 5.3 首次锁定切账时间
-
-将第 5.1 节记录的维护开始时间作为中国时间写入：
+先对审计主库执行 dry run，确认表清单、行数和跳过表正确，再提交：
 
 ```bash
-php artisan ledger:cutover --at="YYYY-MM-DD HH:mm:ss"
+php artisan audit:migrate-sqlite-to-postgres \
+  --source=/backup/sub2api-audit/时间戳/audit.sqlite --dry-run
+
+php artisan audit:migrate-sqlite-to-postgres \
+  --source=/backup/sub2api-audit/时间戳/audit.sqlite --commit
 ```
 
-命令会同时显示中国时间和 UTC 时间。必须人工核对两者换算正确后再继续。
+该命令按外键顺序迁移持久业务表，保留主键 ID，校验行数和关键金额，并重置 PostgreSQL 序列。`cache`、`session`、`jobs`、`personal_access_tokens` 和 `migrations` 不迁移，所有管理员需要重新登录。
 
-`ledger_cutover_at` 只允许首次写入，成功后永久锁定。重复执行会拒绝修改并打印当前切账时间；不得直接改 SQLite 或使用 `.env` 绕过锁定。
-
-### 5.4 回填远端调额事件关联
+然后导入旧返利库：
 
 ```bash
-php artisan ledger:link-sources
+php artisan rebate:import-legacy \
+  --source=/backup/sub2api-audit/时间戳/rebate.sqlite --dry-run
+
+php artisan rebate:import-legacy \
+  --source=/backup/sub2api-audit/时间戳/rebate.sqlite --commit
 ```
 
-回填只允许按“Sub2API 用户 ID + 完整幂等键”匹配。禁止按 `ledger_no` 批量关联，也禁止人工猜测远端事件。
+旧返利导入会：
 
-未唯一匹配的本地成功单保持成功状态且 `sub2api_source_id` 为空，后续由首页告警和对账暴露问题。
+- 保留 Sub2API 用户 ID 和直接推荐关系；
+- 把可用余额和已提现金额分别写为 `legacy_opening`、`legacy_withdrawn` 不可变流水；
+- 把历史提现写为 `succeeded + read_only`，不创建调额任务，不允许重放；
+- 在审计日志和历史记录中保存源 SQLite SHA-256；
+- 把导入时间写为 `rebate_cutover_at`，只处理此时间后的新充值事件。
 
-### 5.5 安装 Scheduler
+切换时间统一截断到秒，并以同一秒边界初始化三类复合游标，避免 Sub2API `timestamp(0)` 事件因微秒格式差异漏扫。
 
-Laravel 已配置每天 `00:15 Asia/Shanghai` 自动执行上一中国自然日对账，并启用 `withoutOverlapping`。服务器必须每分钟触发一次 Scheduler：
-
-```cron
-* * * * * cd /var/www/sub2api-audit-admin/backend && /usr/bin/php artisan schedule:run >> /dev/null 2>&1
-```
-
-可从 `deploy/laravel-scheduler.cron.example` 安装，或使用等价的 systemd timer。安装后执行：
+未导入旧返利库时，必须在仍处于维护模式且旧系统已停止写入后显式锁定切换边界：
 
 ```bash
-php artisan schedule:list
+php artisan rebate:cutover
 ```
 
-确认 `ledger:reconcile` 的时区和下一次执行时间正确。
+旧返利导入命令会同时锁定该边界并初始化三类扫描游标，不要再用不同时间重复执行 `rebate:cutover`。
 
-### 5.6 构建前端、清缓存并恢复服务
+当前旧库的 `4` 个用户、`4` 条关系、可用余额 `24`、已提现 `6`、`3` 条成功提现只是迁移前参考。验收必须以停机备份的命令动态统计结果为准。
+
+## 4. 恢复服务
+
+构建前端并刷新 Laravel 缓存：
 
 ```bash
-source ~/.nvm/nvm.sh
-nvm use 22.22.0
 cd /var/www/sub2api-audit-admin/frontend
 corepack pnpm install --frozen-lockfile
 corepack pnpm build
@@ -183,87 +138,52 @@ php artisan route:cache
 php artisan view:cache
 ```
 
-重启 PHP-FPM、反向代理和需要的 Laravel worker 后，再恢复外部访问和本系统调额。
+解除维护模式前，使用测试账号验证 Sub2API 对同一 `Idempotency-Key` 的重复调额只产生一条远端流水且只增加一次余额。该契约未验证时，保持 `SUB2API_BALANCE_IDEMPOTENCY_VERIFIED=false`；返利提现会进入异常状态并保留冻结余额，不会发起远端加额。验证通过后改为 `true` 并重新执行 `php artisan config:cache`。这是上线阻断条件。
 
-## 6. 对账命令和状态
-
-自动处理上一中国自然日：
+先手动执行一次扫描和已提交任务恢复，确认命令成功后再启动常驻服务：
 
 ```bash
-php artisan ledger:reconcile
+php artisan rebate:scan
+php artisan rebate:recover-queue
 ```
 
-手动补跑指定中国业务日期：
+Queue Worker 必须常驻，Scheduler 必须每分钟触发：
+
+```cron
+* * * * * cd /var/www/sub2api-audit-admin/backend && /usr/bin/php artisan schedule:run >> /dev/null 2>&1
+```
+
+启动 Worker 后检查进程、失败任务和应用日志，再解除维护模式。数据库队列至少运行：
 
 ```bash
-php artisan ledger:reconcile --date="YYYY-MM-DD"
+php artisan queue:work --queue=default --tries=3 --timeout=120
 ```
 
-同一业务日期只保留一个批次。手动补跑会在事务内重新计算并替换原批次差异明细，不会按旧逻辑返回重复批次 `409`，也不会重复累加。
+生产环境应由 systemd 或 Supervisor 托管 Worker，不要以前台会话长期运行。
 
-批次状态只有：
+`rebate:recover-queue` 只重新投递 `pending` 事件和 `processing` 提现。确认失败原因已经修复后，失败返利事件必须显式重投，再恢复队列：
 
-```text
-ok | warning | error
+```bash
+php artisan rebate:retry-events 123 124
+# 或按上限批量重投失败事件
+php artisan rebate:retry-events --limit=100
+php artisan rebate:recover-queue
 ```
 
-- `ok`：本地成功调额均正确关联，且没有外部事件或审计孤儿。
-- `warning`：只有 `remote_external` 或 `remote_audit_orphan` 等需人工关注但不应自动认领的问题。
-- `error`：存在本地缺失远端、用户/方向/金额不一致或重复 source link 等账实错误。
+## 5. 上线验收
 
-外部事件和审计孤儿只告警，不自动认领、不自动补录，也不拆分为现金和赠送。
+- 两个迁移命令的源 SHA-256 与备份记录一致，所有行数和金额校验通过。
+- 管理员可重新登录，旧账本、附件索引、审计、利润结算均可查询。
+- 返利配置为里程碑 `100/15/2`、后续台阶 `100/15`、最低提现 `2`、每日 `10` 次、每日总金额不限、换算比例 `1`。
+- 旧余额只有 `legacy_opening`、`legacy_withdrawn` 流水；历史提现为只读成功记录，没有对应待执行任务。
+- 新充值只奖励直接上级；提现申请先冻结，管理员审核通过后只增加一次 Sub2API 额度。
+- `SUB2API_BALANCE_IDEMPOTENCY_VERIFIED=true` 的验证记录已附在变更单，响应丢失后的重试不会重复加额。
+- `/api/v1/health`、Scheduler、Worker 和失败任务监控正常。
 
-## 7. 上线验收
+## 6. 回滚边界
 
-### 7.1 基础检查
+解除维护模式、接受 PostgreSQL 新写入之前，可以停止新服务并切回原应用和两份 SQLite 备份。
 
-- `/api/v1/health` 返回 `status=ok`，时区为 `Asia/Shanghai`。
-- 管理员可登录，附件上传和下载均走私有存储与鉴权。
-- Sub2API 用户列表、当前普通启用用户余额快照可以读取。
-- 首页官方统计失败时返回 `502 / SUB2API_STATS_UNAVAILABLE`，前端显示不可用，不展示假 0。
-- 首页账务只统计切账后本系统成功调额，不把远端外部事件算作充值。
-- 历史账页面只读，CSV 带 UTF-8 BOM，中文和中国时间正常。
+一旦 PostgreSQL 接受了充值事件、返利、提现或管理端写入，只允许在 PostgreSQL 上前向修复。此时不得切回 SQLite、不得执行破坏性 `migrate:rollback`，否则会丢失新资金事实。需要回退应用代码时，先备份 PostgreSQL，并确认旧代码能够读取当前状态字段。
 
-### 7.2 官方用量基准
-
-对已经结束的 `2026-07-01` 至 `2026-07-09` 查询，审计系统必须与 Sub2API 官方 Admin API 完全一致：
-
-```text
-请求数      8,506
-Token       969,369,193
-actual_cost 965.5262577
-```
-
-这些数值仅用于部署验收，不得写入业务代码、数据迁移或自动化测试。
-
-### 7.3 旧账边界
-
-核验已有旧账：
-
-```text
-实收   100
-赠送   100
-总调额 200
-```
-
-这些旧账必须保留在历史记录中，但不得进入切账后的首页当前财务统计、告警或当前对账。不得在代码或文档中硬编码生产远端事件 ID。
-
-### 7.4 小额调增、调减与次日对账
-
-分别使用测试用户执行一笔小额调增和一笔小额调减，逐项确认：
-
-1. 官方调额 API 成功。
-2. 二次余额确认一致。
-3. 本地记录状态为 `succeeded`。
-4. 唯一匹配时写入 `sub2api_source_id`；未关联时出现明确告警。
-5. 首页现金、赠送、调增、调减和净额按定义变化。
-6. 历史账显示远端事件及正确关联状态，但不反向改变实收入账。
-7. 次日 `00:15` 自动对账生成一个批次，手动补跑同日时替换原明细。
-
-## 8. 回滚与安全
-
-- 回滚代码前先再次备份 SQLite 和私有附件。
-- 不要删除已写入的 `ledger_cutover_at`，切账边界是永久审计事实。
-- 涉及数据库结构回滚时，先确认旧版本能识别 `ok/warning/error` 和新增关联字段；不能确认时只回滚应用代码，不贸然执行 `migrate:rollback`。
-- 应用日志只记录安全的接口路径、HTTP 状态、异常类型和响应字段形态，不记录密码、Token、API Key、Authorization 或完整敏感响应。
-- 正式部署前必须由运维确认当前有效的 SSH 登录方式；不得在仓库或文档中保存服务器登录凭据。
+每次部署继续备份 PostgreSQL、私有附件和 `.env`。应用日志不得记录密码、Token、API Key、Authorization 或完整敏感响应。

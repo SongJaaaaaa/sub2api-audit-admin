@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 test('admin can login and open core business pages', async ({ page }) => {
+  await page.route('**/api/v1/dashboard**', (route) => route.abort('failed'))
   await page.goto('/login')
   await page.getByPlaceholder('用户名或管理员邮箱').fill('admin')
   await page.getByPlaceholder('密码').fill('1')

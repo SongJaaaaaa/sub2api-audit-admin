@@ -1,25 +1,28 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const frontendPort = Number(process.env.E2E_FRONTEND_PORT || 5175)
+const backendPort = Number(process.env.E2E_BACKEND_PORT || 8010)
+
 export default defineConfig({
   testDir: './tests/e2e',
+  workers: 1,
   timeout: 30_000,
   expect: { timeout: 8_000 },
   use: {
-    baseURL: 'http://127.0.0.1:5174',
+    baseURL: `http://127.0.0.1:${frontendPort}`,
     trace: 'on-first-retry',
   },
   webServer: [
     {
-      command: 'php artisan migrate --seed && php artisan serve --host=127.0.0.1 --port=8010',
-      cwd: '../backend',
-      url: 'http://127.0.0.1:8010/api/v1/health',
-      reuseExistingServer: true,
+      command: `node scripts/e2e-server.mjs backend ${backendPort}`,
+      url: `http://127.0.0.1:${backendPort}/api/v1/health`,
+      reuseExistingServer: false,
       timeout: 120_000,
     },
     {
-      command: 'VITE_API_PROXY_TARGET=http://127.0.0.1:8010 pnpm dev --host 127.0.0.1 --port 5174',
-      url: 'http://127.0.0.1:5174',
-      reuseExistingServer: true,
+      command: `node scripts/e2e-server.mjs frontend ${frontendPort}`,
+      url: `http://127.0.0.1:${frontendPort}`,
+      reuseExistingServer: false,
       timeout: 120_000,
     },
   ],

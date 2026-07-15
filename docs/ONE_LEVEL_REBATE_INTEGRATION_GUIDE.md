@@ -700,3 +700,21 @@ SESSION_DRIVER=redis
 | 首充本人奖励 | 默认可能启用 | 默认关闭，不属于推广返利 |
 
 这份差异表是改造边界。只隐藏菜单不能达到目标，后端查询、计算和提现状态机必须同步修改。
+
+## 13. 当前仓库落地与旧数据切换
+
+本仓库已采用 Laravel 单体集成，不再按第 0 节的独立 `services/rebate-api` 目录部署。返利代码集中在 `backend/app/Services/Rebate`、`backend/app/Models/Rebate` 和 `frontend/src/features/rebate`；本地业务库统一使用 PostgreSQL，Sub2API 数据库仍为只读连接。
+
+正式切换必须使用停机后的两份 SQLite 备份：
+
+```bash
+php artisan audit:migrate-sqlite-to-postgres --source=/absolute/path/audit.sqlite --dry-run
+php artisan audit:migrate-sqlite-to-postgres --source=/absolute/path/audit.sqlite --commit
+
+php artisan rebate:import-legacy --source=/absolute/path/rebate.sqlite --dry-run
+php artisan rebate:import-legacy --source=/absolute/path/rebate.sqlite --commit
+```
+
+两个命令都要求默认连接为 PostgreSQL，并且 `--dry-run`、`--commit` 必须二选一。审计库迁移明确排除 cache、session、jobs、Token 和 migrations；旧返利导入保留用户 ID、一级关系、余额和历史提现，历史提现固定为只读成功状态，绝不重新调用 Sub2API。
+
+旧返利余额分别写入 `legacy_opening` 和 `legacy_withdrawn` 不可变流水，源 SHA-256 同时写入历史记录与审计日志。只接受无 `-wal/-shm/-journal` 的停机备份，目标事务提交前必须再次核对源 SHA-256。导入时按秒写入 `rebate_cutover_at` 并初始化复合游标，扫描器不得处理切换时间以前的充值事件。完整停机、备份、Worker、Scheduler、验收和回滚边界见 `docs/deployment.md`。
