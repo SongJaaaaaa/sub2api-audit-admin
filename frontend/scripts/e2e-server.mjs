@@ -53,13 +53,21 @@ if (mode === 'backend') {
   })
   if (migrated.status !== 0) process.exit(migrated.status ?? 1)
 
-  const router = resolve(backend, 'vendor', 'laravel', 'framework', 'src', 'Illuminate', 'Foundation', 'resources', 'server.php')
-  child = spawn(php, ['-S', `127.0.0.1:${port}`, router], {
-    cwd: resolve(backend, 'public'),
-    env,
-    stdio: 'inherit',
-    windowsHide: true,
-  })
+  if (process.platform === 'win32') {
+    const router = resolve(backend, 'vendor', 'laravel', 'framework', 'src', 'Illuminate', 'Foundation', 'resources', 'server.php')
+    child = spawn(php, ['-S', `127.0.0.1:${port}`, router], {
+      cwd: resolve(backend, 'public'),
+      env,
+      stdio: 'inherit',
+      windowsHide: true,
+    })
+  } else {
+    child = spawn(php, ['artisan', 'serve', '--host=127.0.0.1', `--port=${port}`], {
+      cwd: backend,
+      env: { ...env, PHP_CLI_SERVER_WORKERS: process.env.PHP_CLI_SERVER_WORKERS || '4' },
+      stdio: 'inherit',
+    })
+  }
 } else {
   const backendPort = process.env.E2E_BACKEND_PORT || '8010'
   child = spawn(process.execPath, [
