@@ -34,6 +34,7 @@ class FinanceLedgerService
                 'cash_amount' => Money::fmt($adj->cash_amount),
                 'source' => 'ledger_adjustment',
                 'remark' => $adj->adjust_reason,
+                'profit_eligible' => true,
                 'created_by' => $admin->id,
             ]);
         }
@@ -195,6 +196,7 @@ class FinanceLedgerService
             'paid_at' => $data['paid_at'],
             'remark' => $data['remark'] ?? null,
             'content_html' => SafeHtml::clean($data['content_html'] ?? null),
+            'profit_eligible' => true,
             'created_by' => $admin->id,
         ]);
 

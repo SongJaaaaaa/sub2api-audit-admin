@@ -21,6 +21,7 @@ const emit = defineEmits<{
 const editor = ref<HTMLElement | null>(null)
 const previewSrc = ref('')
 const previewOpen = ref(false)
+const maxImageSize = 2 * 1024 * 1024
 
 watch(
   () => props.value,
@@ -67,8 +68,8 @@ async function beforeUpload(file: File) {
     message.warning('只支持上传图片')
     return false
   }
-  if (file.size > 512 * 1024) {
-    message.warning('图片不能超过 512KB')
+  if (file.size > maxImageSize) {
+    message.warning('图片不能超过 2MB')
     return false
   }
 

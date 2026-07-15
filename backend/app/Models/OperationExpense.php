@@ -14,6 +14,8 @@ class OperationExpense extends Model
         'paid_at',
         'remark',
         'content_html',
+        'profit_eligible',
+        'profit_settlement_id',
         'created_by',
     ];
 
@@ -21,6 +23,8 @@ class OperationExpense extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'profit_eligible' => 'boolean',
+            'profit_settlement_id' => 'integer',
         ];
     }
 

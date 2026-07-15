@@ -53,12 +53,15 @@ class AdminController extends Controller
 
     public function store(Request $req, AuditLogService $audit): JsonResponse
     {
+        $username = strtolower(trim((string) $req->input('username')));
         $req->merge([
             'name' => trim((string) $req->input('name')),
+            'username' => $username === '' ? null : $username,
             'email' => strtolower(trim((string) $req->input('email'))),
         ]);
         $data = $req->validate([
             'name' => ['required', 'string', 'max:100'],
+            'username' => ['nullable', 'regex:/^[a-z0-9_-]+$/', 'max:50', Rule::unique('admins', 'username')],
             'email' => ['required', 'email', 'max:255', Rule::unique('admins', 'email')],
             'password' => ['required', 'string', 'min:8', 'max:72', 'confirmed'],
             'status' => ['required', Rule::in([Admin::STATUS_ACTIVE, Admin::STATUS_DISABLED])],
@@ -80,6 +83,7 @@ class AdminController extends Controller
         return [
             'id' => $admin->id,
             'name' => $admin->name,
+            'username' => $admin->username,
             'email' => $admin->email,
             'status' => $admin->status,
             'created_at' => ChinaTime::fmt($admin->created_at),

@@ -39,7 +39,7 @@ class LedgerAdjustmentController extends Controller
             'cash_amount' => ['nullable', 'numeric', 'min:0'],
             'gift_quota_amount' => ['nullable', 'numeric', 'min:0'],
             'adjust_reason' => ['required', Rule::in(['充值', '补发', '人工扣减', '异常修正'])],
-            'admin_notes' => ['nullable', 'string', 'max:1000000', 'required_if:adjust_reason,异常修正'],
+            'admin_notes' => ['nullable', 'string', 'max:10000000', 'required_if:adjust_reason,异常修正'],
         ]);
         $cash = number_format((float) ($data['cash_amount'] ?? 0), 2, '.', '');
         $amount = number_format((float) $data['amount'], 2, '.', '');
@@ -68,7 +68,7 @@ class LedgerAdjustmentController extends Controller
             'user_ids' => ['required', 'array', 'min:1', 'max:100'],
             'user_ids.*' => ['required', 'integer', 'min:1', 'distinct'],
             'amount' => ['required', 'numeric', 'gt:0'],
-            'admin_notes' => ['nullable', 'string', 'max:1000000'],
+            'admin_notes' => ['nullable', 'string', 'max:10000000'],
         ]);
 
         $items = [];

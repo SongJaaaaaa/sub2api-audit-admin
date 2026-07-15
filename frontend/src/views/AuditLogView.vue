@@ -18,6 +18,8 @@ const actionLabels: Record<string, string> = {
   'operation_expense.create':    '新增经营支出',
   'reconcile.create':            '生成对账批次',
   'reconcile.run':               '运行 / 重跑对账',
+  'profit_settlement.confirm':   '确认利润分账',
+  'profit_settlement.reverse':   '撤销利润分账',
   'attachment.upload':           '上传附件',
 }
 
@@ -26,6 +28,7 @@ const targetTypeLabels: Record<string, string> = {
   ledger_adjustment:    '调额记录',
   operation_expense:    '经营支出',
   reconciliation_batch: '对账批次',
+  profit_settlement:     '利润分账批次',
   attachment:           '附件',
 }
 
@@ -37,6 +40,8 @@ const actionTagProps: Record<string, { color: string; icon: any }> = {
   'operation_expense.create':    { color: 'blue',     icon: FileTextOutlined },
   'reconcile.create':            { color: 'purple',   icon: AuditOutlined },
   'reconcile.run':               { color: 'purple',   icon: AuditOutlined },
+  'profit_settlement.confirm':   { color: 'green',    icon: CheckCircleOutlined },
+  'profit_settlement.reverse':   { color: 'orange',   icon: CloseCircleOutlined },
   'attachment.upload':           { color: 'cyan',     icon: PaperClipOutlined },
 }
 
@@ -91,6 +96,22 @@ const fieldLabels: Record<string, Record<string, string>> = {
     status:              '状态',
     created_at:          '创建时间',
   },
+  profit_settlement: {
+    id:            '批次ID',
+    batch_no:      '批次号',
+    start_date:    '开始日期',
+    end_date:      '结束日期',
+    income_total:  '收入合计',
+    expense_total: '支出合计',
+    profit_total:  '净利润',
+    income_count:  '收入笔数',
+    expense_count: '支出笔数',
+    status:        '状态',
+    operator_name: '操作人',
+    reverser_name: '撤销人',
+    reversed_at:   '撤销时间',
+    created_at:    '确认时间',
+  },
   attachment: {
     id:              '附件ID',
     attachable_type: '关联类型',
@@ -105,7 +126,7 @@ const fieldLabels: Record<string, Record<string, string>> = {
 // 字段值翻译
 const valueTranslations: Record<string, Record<string, string>> = {
   operation: { increment: '充值(+)', decrement: '扣减(-)' },
-  status:    { succeeded: '成功', exception: '异常', voided: '作废', ok: '正常', warning: '告警', error: '异常', balanced: '已对平', diff: '有差异' },
+  status:    { succeeded: '成功', exception: '异常', voided: '作废', ok: '正常', warning: '告警', error: '异常', balanced: '已对平', diff: '有差异', confirmed: '已确认', reversed: '已撤销' },
   attachable_type: { ledger_adjustment: '调额记录', operation_expense: '经营支出', reconciliation_batch: '对账批次' },
 }
 

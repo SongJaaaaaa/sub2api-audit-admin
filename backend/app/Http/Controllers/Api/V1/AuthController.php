@@ -12,12 +12,15 @@ class AuthController extends Controller
 {
     public function login(Request $req, AdminAuthService $svc): JsonResponse
     {
+        $req->merge([
+            'account' => trim((string) $req->input('account', $req->input('email', ''))),
+        ]);
         $data = $req->validate([
-            'email' => ['required', 'email'],
+            'account' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string'],
         ]);
 
-        $res = $svc->login($data['email'], $data['password']);
+        $res = $svc->login($data['account'], $data['password']);
 
         return response()->json([
             'token' => $res['token'],
@@ -60,13 +63,14 @@ class AuthController extends Controller
     }
 
     /**
-     * @return array{id: int, name: string, email: string, status: string}
+     * @return array{id: int, name: string, username: ?string, email: string, status: string}
      */
     private function adminData(Admin $admin): array
     {
         return [
             'id' => $admin->id,
             'name' => $admin->name,
+            'username' => $admin->username,
             'email' => $admin->email,
             'status' => $admin->status,
         ];

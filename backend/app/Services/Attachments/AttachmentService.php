@@ -12,13 +12,18 @@ use Illuminate\Support\Facades\Storage;
 class AttachmentService
 {
     private const MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+    private const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
 
     public function __construct(private readonly AuditLogService $audit) {}
 
     public function upload(Admin $admin, UploadedFile $file, string $type, int $id): Attachment
     {
-        if (! in_array($file->getMimeType(), self::MIMES, true)) {
+        $mime = (string) $file->getMimeType();
+        if (! in_array($mime, self::MIMES, true)) {
             abort(422, '只允许上传图片或 PDF');
+        }
+        if (str_starts_with($mime, 'image/') && $file->getSize() > self::MAX_IMAGE_SIZE) {
+            abort(422, '图片不能超过 2MB');
         }
 
         $path = $file->store('attachments/'.now('Asia/Shanghai')->format('Ym'), 'local');
@@ -28,7 +33,7 @@ class AttachmentService
             'disk' => 'local',
             'path' => $path,
             'original_name' => $file->getClientOriginalName(),
-            'mime' => (string) $file->getMimeType(),
+            'mime' => $mime,
             'size' => (int) $file->getSize(),
             'created_by' => $admin->id,
         ]);

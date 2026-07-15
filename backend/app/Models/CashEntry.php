@@ -20,6 +20,8 @@ class CashEntry extends Model
         'cash_amount',
         'source',
         'remark',
+        'profit_eligible',
+        'profit_settlement_id',
         'created_by',
     ];
 
@@ -27,6 +29,8 @@ class CashEntry extends Model
     {
         return [
             'cash_amount' => 'decimal:2',
+            'profit_eligible' => 'boolean',
+            'profit_settlement_id' => 'integer',
         ];
     }
 

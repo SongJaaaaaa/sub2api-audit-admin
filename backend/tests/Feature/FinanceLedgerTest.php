@@ -30,7 +30,7 @@ class FinanceLedgerTest extends TestCase
             'adjust_reason' => '充值',
         ])->assertCreated();
 
-        $this->assertDatabaseHas('cash_entries', ['sub2api_user_id' => 1001, 'cash_amount' => '100.00']);
+        $this->assertDatabaseHas('cash_entries', ['sub2api_user_id' => 1001, 'cash_amount' => '100.00', 'profit_eligible' => true]);
         $this->assertDatabaseHas('gift_quota_entries', ['sub2api_user_id' => 1001, 'quota_amount' => '20.00']);
 
         $this->withToken($token)->getJson('/api/v1/finance/cash?page_size=1')
@@ -67,6 +67,7 @@ class FinanceLedgerTest extends TestCase
 
         $this->withToken($token)->getJson('/api/v1/finance/expenses')->assertOk()
             ->assertJsonPath('items.0.content_html', '<p>账单</p>');
+        $this->assertDatabaseHas('operation_expenses', ['category' => '服务器', 'profit_eligible' => true]);
 
         $this->withToken($token)->postJson('/api/v1/finance/expenses', [
             'category' => '办公',
@@ -90,6 +91,22 @@ class FinanceLedgerTest extends TestCase
             ->assertOk()
             ->assertJsonPath('total', 1)
             ->assertJsonPath('items.0.category', '办公');
+    }
+
+    public function test_operation_expense_accepts_editor_image_data_url(): void
+    {
+        $admin = $this->admin();
+        $token = $admin->createToken('admin-token')->plainTextToken;
+        $html = '<p>账单图片</p><img src="data:image/png;base64,'.str_repeat('A', 2_796_000).'">';
+
+        $response = $this->withToken($token)->postJson('/api/v1/finance/expenses', [
+            'category' => '服务器',
+            'amount' => '30.00',
+            'paid_at' => '2026-07-06',
+            'content_html' => $html,
+        ])->assertCreated();
+
+        $this->assertSame($html, $response->json('expense.content_html'));
     }
 
     public function test_correction_adjustment_does_not_write_finance_ledgers(): void

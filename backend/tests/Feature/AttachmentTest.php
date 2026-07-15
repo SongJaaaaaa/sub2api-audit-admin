@@ -57,6 +57,20 @@ class AttachmentTest extends TestCase
             ])->assertStatus(422);
     }
 
+    public function test_image_larger_than_two_megabytes_is_rejected(): void
+    {
+        Storage::fake('local');
+        $admin = $this->admin();
+
+        $this->withToken($admin->createToken('admin-token')->plainTextToken)
+            ->postJson('/api/v1/attachments', [
+                'attachable_type' => 'operation_expense',
+                'attachable_id' => 1,
+                'file' => UploadedFile::fake()->image('large.png')->size(2049),
+            ])->assertStatus(422)
+            ->assertJsonPath('message', '图片不能超过 2MB');
+    }
+
     private function admin(): Admin
     {
         return Admin::query()->create([

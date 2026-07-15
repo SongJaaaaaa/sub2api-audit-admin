@@ -5,6 +5,7 @@ import { http } from '../api/http'
 export interface AdminInfo {
   id: number
   name: string
+  username: string | null
   email: string
   status: string
 }
@@ -28,8 +29,8 @@ export const useAuthStore = defineStore('auth', () => {
   const admin = ref<AdminInfo | null>(savedAdmin())
   const authed = computed(() => token.value !== '')
 
-  async function login(email: string, password: string) {
-    const res = await http.post<unknown, LoginRes>('/auth/login', { email, password })
+  async function login(account: string, password: string) {
+    const res = await http.post<unknown, LoginRes>('/auth/login', { account, password })
     token.value = res.token
     admin.value = res.admin
     localStorage.setItem('adminToken', res.token)

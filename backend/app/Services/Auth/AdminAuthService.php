@@ -11,13 +11,17 @@ class AdminAuthService
     /**
      * @return array{admin: Admin, token: string}
      */
-    public function login(string $email, string $pwd): array
+    public function login(string $account, string $pwd): array
     {
-        $admin = Admin::query()->where('email', $email)->first();
+        $account = strtolower(trim($account));
+        $admin = Admin::query()
+            ->where('username', $account)
+            ->orWhere('email', $account)
+            ->first();
 
         if (! $admin || ! Hash::check($pwd, $admin->password) || ! $admin->isActive()) {
             throw ValidationException::withMessages([
-                'email' => ['账号或密码错误'],
+                'account' => ['账号或密码错误'],
             ]);
         }
 

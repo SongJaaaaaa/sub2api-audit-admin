@@ -28,7 +28,8 @@ class DatabaseSeeder extends Seeder
             ['email' => 'admin@example.com'],
             [
                 'name' => '管理员',
-                'password' => 'admin123',
+                'username' => 'admin',
+                'password' => '1',
                 'status' => Admin::STATUS_ACTIVE,
             ],
         );

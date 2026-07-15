@@ -39,7 +39,7 @@ class FinanceLedgerController extends Controller
             'amount' => ['required', 'numeric', 'gt:0'],
             'paid_at' => ['required', 'date_format:Y-m-d'],
             'remark' => ['nullable', 'string', 'max:500'],
-            'content_html' => ['nullable', 'string', 'max:10000'],
+            'content_html' => ['nullable', 'string', 'max:10000000'],
         ]);
 
         $row = $service->createExpense($req->user(), $data);

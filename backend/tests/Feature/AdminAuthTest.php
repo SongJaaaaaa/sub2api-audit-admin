@@ -14,23 +14,25 @@ class AdminAuthTest extends TestCase
     {
         $admin = Admin::query()->create([
             'name' => '管理员',
+            'username' => 'admin',
             'email' => 'admin@example.com',
             'password' => 'secret123',
             'status' => Admin::STATUS_ACTIVE,
         ]);
 
         $res = $this->postJson('/api/v1/auth/login', [
-            'email' => $admin->email,
+            'account' => $admin->username,
             'password' => 'secret123',
         ]);
 
         $res->assertOk()
             ->assertJsonPath('admin.id', $admin->id)
+            ->assertJsonPath('admin.username', $admin->username)
             ->assertJsonPath('admin.email', $admin->email)
             ->assertJsonPath('admin.status', Admin::STATUS_ACTIVE)
             ->assertJsonStructure([
                 'token',
-                'admin' => ['id', 'name', 'email', 'status'],
+                'admin' => ['id', 'name', 'username', 'email', 'status'],
             ]);
     }
 
@@ -49,7 +51,7 @@ class AdminAuthTest extends TestCase
         ]);
 
         $res->assertUnprocessable()
-            ->assertJsonValidationErrors('email');
+            ->assertJsonValidationErrors('account');
     }
 
     public function test_guest_cannot_get_current_admin(): void

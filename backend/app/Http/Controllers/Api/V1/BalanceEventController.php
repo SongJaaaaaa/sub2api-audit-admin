@@ -29,7 +29,7 @@ class BalanceEventController extends Controller
         return response()->streamDownload(function () use ($rows): void {
             echo "\xEF\xBB\xBF";
             $out = fopen('php://output', 'wb');
-            fputcsv($out, ['时间', '来源', '远端事件ID', '用户ID', '用户邮箱', '用户名', '方向', '金额', '关联状态', '本地单号', '备注']);
+            fputcsv($out, ['事件时间', '来源', '远端事件ID', '用户ID', '用户邮箱', '用户名', '方向', '金额', '关联状态', '本地单号', '备注']);
 
             foreach ($rows as $row) {
                 fputcsv($out, [

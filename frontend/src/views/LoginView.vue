@@ -11,14 +11,14 @@ const router = useRouter()
 const auth = useAuthStore()
 const loading = ref(false)
 const form = reactive({
-  email: '',
+  account: '',
   password: '',
 })
 
 async function submit() {
   loading.value = true
   try {
-    await auth.login(form.email, form.password)
+    await auth.login(form.account, form.password)
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
     router.replace(redirect)
   } catch (err) {
@@ -41,8 +41,8 @@ async function submit() {
         <p>管理员登录</p>
       </div>
       <a-form layout="vertical" :model="form" @finish="submit">
-        <a-form-item name="email" label="邮箱" :rules="[{ required: true, message: '请输入邮箱' }]">
-          <a-input v-model:value="form.email" size="large" autocomplete="username" placeholder="管理员邮箱">
+        <a-form-item name="account" label="账号" :rules="[{ required: true, message: '请输入账号' }]">
+          <a-input v-model:value="form.account" size="large" autocomplete="username" placeholder="用户名或管理员邮箱">
             <template #prefix><UserOutlined /></template>
           </a-input>
         </a-form-item>

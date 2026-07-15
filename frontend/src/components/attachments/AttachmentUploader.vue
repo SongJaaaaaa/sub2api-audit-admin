@@ -11,6 +11,7 @@ const props = defineProps<{
 
 const loading = ref(false)
 const items = ref<AttachmentItem[]>([])
+const maxImageSize = 2 * 1024 * 1024
 
 async function loadItems() {
   if (!props.attachableId) {
@@ -35,6 +36,10 @@ async function loadItems() {
 async function beforeUpload(file: File) {
   if (!props.attachableId) {
     message.warning('请先保存记录后再上传附件')
+    return false
+  }
+  if (file.type.startsWith('image/') && file.size > maxImageSize) {
+    message.warning('图片不能超过 2MB')
     return false
   }
 
