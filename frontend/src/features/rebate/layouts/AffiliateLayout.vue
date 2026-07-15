@@ -62,8 +62,11 @@ onBeforeUnmount(() => media.removeEventListener('change', updateMobile))
   <div class="affiliateApp">
     <aside v-if="!isMobile" class="affiliateSider">
       <div class="affiliateBrand">
-        <span class="affiliateBrandMark">R</span>
-        <strong>一级推广返利</strong>
+        <span class="affiliateBrandMark">S</span>
+        <div class="affiliateBrandCopy">
+          <strong>Sub2Rebate</strong>
+          <span>返利推广中心</span>
+        </div>
       </div>
       <nav class="affiliateNav" aria-label="推广用户导航">
         <button
@@ -77,12 +80,18 @@ onBeforeUnmount(() => media.removeEventListener('change', updateMobile))
           <span>{{ item.label }}</span>
         </button>
       </nav>
-      <div class="affiliateAccount">
-        <span>{{ auth.user?.username || auth.user?.email || '推广用户' }}</span>
-        <a-button type="text" size="small" @click="logout">
-          <template #icon><LogoutOutlined /></template>
-          退出
+      <div class="affiliateSidebarFooter">
+        <a-button class="affiliateWithdrawCta" type="primary" block @click="go('/affiliate/withdrawals')">
+          <template #icon><WalletOutlined /></template>
+          申请提现
         </a-button>
+        <div class="affiliateAccount">
+          <span>{{ auth.user?.username || auth.user?.email || '推广用户' }}</span>
+          <a-button type="text" size="small" @click="logout">
+            <template #icon><LogoutOutlined /></template>
+            退出
+          </a-button>
+        </div>
       </div>
     </aside>
 
@@ -92,17 +101,23 @@ onBeforeUnmount(() => media.removeEventListener('change', updateMobile))
           <template #icon><MenuFoldOutlined /></template>
         </a-button>
         <strong>{{ title }}</strong>
-        <span class="affiliateHeaderUser">{{ auth.user?.email || '' }}</span>
+        <div class="affiliateHeaderIdentity">
+          <span class="affiliateHeaderUser">{{ auth.user?.email || '' }}</span>
+          <small>推广用户</small>
+        </div>
       </header>
       <main class="affiliateContent">
         <RouterView />
       </main>
     </div>
 
-    <a-drawer v-model:open="drawerOpen" placement="left" :width="280" :closable="false">
+    <a-drawer v-model:open="drawerOpen" root-class-name="affiliateDrawer" placement="left" :width="280" :closable="false">
       <div class="affiliateBrand affiliateDrawerBrand">
-        <span class="affiliateBrandMark">R</span>
-        <strong>一级推广返利</strong>
+        <span class="affiliateBrandMark">S</span>
+        <div class="affiliateBrandCopy">
+          <strong>Sub2Rebate</strong>
+          <span>返利推广中心</span>
+        </div>
       </div>
       <nav class="affiliateNav" aria-label="推广用户导航">
         <button
@@ -117,7 +132,11 @@ onBeforeUnmount(() => media.removeEventListener('change', updateMobile))
         </button>
       </nav>
       <template #footer>
-        <a-button block @click="logout">
+        <a-button class="affiliateWithdrawCta" type="primary" block @click="go('/affiliate/withdrawals')">
+          <template #icon><WalletOutlined /></template>
+          申请提现
+        </a-button>
+        <a-button class="affiliateDrawerLogout" block @click="logout">
           <template #icon><LogoutOutlined /></template>
           退出登录
         </a-button>

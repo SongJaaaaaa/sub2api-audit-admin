@@ -206,8 +206,8 @@ test('admin rebate pages render without viewport overflow', async ({ page }) => 
   await loginAdmin(page)
 
   const pages = [
-    { path: '/rebate/dashboard', title: '推广返利看板', breadcrumb: '数据看板' },
-    { path: '/rebate/relationships', title: '推荐关系', breadcrumb: '推荐关系', state: '请选择账号后查看一级推荐关系' },
+    { path: '/rebate/dashboard', title: '数据看板', breadcrumb: '数据看板' },
+    { path: '/rebate/relationships', title: '推荐关系', breadcrumb: '推荐关系', state: '选择账号后查看推荐关系' },
     { path: '/rebate/withdrawals', title: '提现审核', breadcrumb: '提现审核', state: '暂无数据' },
     { path: '/rebate/config', title: '返利配置', breadcrumb: '返利配置', state: '初始累充门槛' },
   ]
@@ -226,8 +226,8 @@ test('affiliate rebate pages handle long content and empty states without viewpo
   await mockAffiliateApi(page)
 
   const pages = [
-    { path: '/affiliate/dashboard', title: '仪表盘', text: longEmail },
-    { path: '/affiliate/team', title: '我的团队', text: '暂无直接下级' },
+    { path: '/affiliate/dashboard', title: `欢迎回来，${affiliateUser.username}`, text: longEmail },
+    { path: '/affiliate/team', title: '我的推荐关系', text: '暂无直接下级' },
     { path: '/affiliate/promotion', title: '推广中心', text: longEmail },
     { path: '/affiliate/rebates', title: '返利明细', text: longEmail },
     { path: '/affiliate/withdrawals', title: '提现管理', text: '暂无提现记录' },
@@ -239,7 +239,8 @@ test('affiliate rebate pages handle long content and empty states without viewpo
     await expectPageReady(page, item.title)
     await expect(page.getByText(item.text, { exact: true }).first()).toBeVisible()
     if (item.path === '/affiliate/promotion') {
-      await expect(page.locator('input[readonly]').nth(1)).toHaveValue(longInviteUrl)
+      await expect(page.getByText(longInviteUrl, { exact: true })).toBeVisible()
+      await expect(page.getByRole('button', { name: '复制邀请链接' })).toBeVisible()
     }
     await expectNoViewportOverflow(page)
   }

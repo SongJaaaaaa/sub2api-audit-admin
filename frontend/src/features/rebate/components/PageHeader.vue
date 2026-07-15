@@ -1,10 +1,16 @@
 <script setup lang="ts">
-defineProps<{ title: string }>()
+defineProps<{
+  title: string
+  description?: string
+}>()
 </script>
 
 <template>
   <header class="rebatePageHeader">
-    <h1>{{ title }}</h1>
+    <div class="rebatePageTitle">
+      <h1>{{ title }}</h1>
+      <p v-if="description">{{ description }}</p>
+    </div>
     <div v-if="$slots.actions" class="rebatePageActions">
       <slot name="actions" />
     </div>

@@ -26,43 +26,39 @@ D:\test项目\分销\
 
 不要从 `deploy/*.tar.gz` 或 `deploy/.tmp-*` 复制源码。这些是旧发布快照，可能落后于当前工作区。迁移必须以根目录下的 `backend\` 和 `frontend\` 为准。
 
-### 0.2 推荐的新项目目录结构
+### 0.2 当前目标项目根目录
 
-假设另一个项目根目录是：
-
-```text
-D:\你的新项目
-```
-
-推荐组织为：
+本次迁移实际落在下面这个 Laravel/Vue 单体仓库：
 
 ```text
-D:\你的新项目\
-├── services\
-│   └── rebate-api\              独立返利后端，来源为 D:\test项目\分销\backend
-├── src\                          新项目原有前端源码
-│   ├── api\                      合并返利 API client
-│   ├── views\                    合并保留的返利页面
-│   ├── stores\                   合并返利 Pinia store
-│   ├── components\               合并返利公共组件
-│   ├── types\                    合并返利类型
-│   └── styles\                   合并或映射设计 Token
-└── docs\
-    └── rebate-integration.md     可复制本文作为新项目交接文档
+D:\test项目\sub2apiAccount\sub2api-audit-admin
 ```
 
-返利后端保持独立数据库、独立 Redis 队列和独立环境变量。新项目通过 `/api/v1` 调用它。除非另一个项目本身也是 Laravel 12 且确认要共用一套数据库，否则不要把 `backend/app/Modules/*` 直接混进另一个 Laravel 应用。
+当前目录组织为：
+
+```text
+D:\test项目\sub2apiAccount\sub2api-audit-admin\
+├── backend\app\Models\Rebate\
+├── backend\app\Services\Rebate\
+├── backend\app\Jobs\Rebate\
+├── backend\app\Http\Controllers\Api\V1\Affiliate\
+├── backend\app\Http\Controllers\Api\V1\RebateAdmin\
+├── frontend\src\features\rebate\
+└── docs\ONE_LEVEL_REBATE_INTEGRATION_GUIDE.md
+```
+
+旧项目只作为业务规则、历史数据和页面样式参考；当前实现不复制旧项目整套代码，也不使用独立 `services/rebate-api` 目录。
 
 ### 0.3 后端怎么迁移
 
-后端应整体迁移，源目录和目标目录如下：
+下面记录旧后端的参考入口。实际代码按需迁入当前单体的 `backend\app\Models\Rebate`、`Services\Rebate`、`Jobs\Rebate` 和对应控制器目录，不整体复制：
 
 ```text
 源：D:\test项目\分销\backend
-目标：D:\你的新项目\services\rebate-api
+目标：D:\test项目\sub2apiAccount\sub2api-audit-admin\backend
 ```
 
-需要迁移：
+旧项目参考范围：
 
 ```text
 backend\app\

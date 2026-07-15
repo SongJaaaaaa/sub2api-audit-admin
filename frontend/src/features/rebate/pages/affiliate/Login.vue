@@ -37,7 +37,15 @@ async function submit() {
 <template>
   <main class="affiliateLogin">
     <section class="affiliateLoginPanel">
+      <div class="affiliateLoginBrand">
+        <span class="affiliateBrandMark">S</span>
+        <div>
+          <strong>Sub2Rebate</strong>
+          <span>返利推广中心</span>
+        </div>
+      </div>
       <h1>推广用户登录</h1>
+      <p>Sub2API 账户</p>
       <a-alert v-if="error" class="affiliateLoginError" type="error" show-icon :message="error" />
       <a-form layout="vertical" :model="form" @finish="submit">
         <a-form-item name="account" label="Sub2API 账号" :rules="[{ required: true, message: '请输入账号' }]">
