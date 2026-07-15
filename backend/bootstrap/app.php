@@ -2,10 +2,12 @@
 
 use App\Exceptions\LedgerCutoverException;
 use App\Exceptions\Sub2ApiStatsException;
+use App\Http\Middleware\EnsureAdmin;
+use App\Http\Middleware\EnsureAffiliate;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -17,6 +19,10 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->redirectGuestsTo(fn () => null);
+        $middleware->alias([
+            'admin' => EnsureAdmin::class,
+            'affiliate' => EnsureAffiliate::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (LedgerCutoverException $e, Request $request) {

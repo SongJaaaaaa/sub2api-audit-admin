@@ -18,16 +18,17 @@ class FinanceLedgerService
 {
     public function __construct(private readonly AuditLogService $audit) {}
 
-    public function recordAdjustment(Admin $admin, LedgerAdjustment $adj): void
+    public function recordAdjustment(?Admin $admin, LedgerAdjustment $adj): void
     {
         if ($adj->operation !== LedgerAdjustment::OP_INCREMENT) {
             return;
         }
 
-        if ((float) $adj->cash_amount > 0) {
-            CashEntry::query()->create([
-                'entry_no' => $this->no('CASH'),
+        if (bccomp((string) $adj->cash_amount, '0', 2) > 0) {
+            CashEntry::query()->firstOrCreate([
                 'ledger_adjustment_id' => $adj->id,
+            ], [
+                'entry_no' => $this->no('CASH'),
                 'sub2api_user_id' => $adj->sub2api_user_id,
                 'sub2api_user_email' => $adj->sub2api_user_email,
                 'direction' => CashEntry::DIR_IN,
@@ -35,20 +36,21 @@ class FinanceLedgerService
                 'source' => 'ledger_adjustment',
                 'remark' => $adj->adjust_reason,
                 'profit_eligible' => true,
-                'created_by' => $admin->id,
+                'created_by' => $admin?->id,
             ]);
         }
 
-        if ((float) $adj->gift_quota_amount > 0) {
-            GiftQuotaEntry::query()->create([
-                'entry_no' => $this->no('GIFT'),
+        if (bccomp((string) $adj->gift_quota_amount, '0', 2) > 0) {
+            GiftQuotaEntry::query()->firstOrCreate([
                 'ledger_adjustment_id' => $adj->id,
+            ], [
+                'entry_no' => $this->no('GIFT'),
                 'sub2api_user_id' => $adj->sub2api_user_id,
                 'sub2api_user_email' => $adj->sub2api_user_email,
                 'quota_amount' => Money::fmt($adj->gift_quota_amount),
                 'source' => 'ledger_adjustment',
                 'remark' => $adj->adjust_reason,
-                'created_by' => $admin->id,
+                'created_by' => $admin?->id,
             ]);
         }
     }
@@ -166,7 +168,7 @@ class FinanceLedgerService
             'amount_total' => $amountTotal,
             'max_amount' => Money::fmt((clone $query)->max('amount') ?? 0),
             'daily_average' => $from !== '' && $to !== ''
-                ? Money::fmt((float) $amountTotal / (date_diff(date_create($from), date_create($to))->days + 1))
+                ? bcdiv($amountTotal, (string) (date_diff(date_create($from), date_create($to))->days + 1), 2)
                 : null,
         ];
         $categories = (clone $query)

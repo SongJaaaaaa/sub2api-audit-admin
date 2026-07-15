@@ -73,8 +73,8 @@ class ProfitService
 
             return $day;
         })->values();
-        $incomeTotal = Money::fmt($rows->sum(fn (array $row): float => (float) $row['income_total']));
-        $expenseTotal = Money::fmt($rows->sum(fn (array $row): float => (float) $row['expense_total']));
+        $incomeTotal = Money::sum($rows->pluck('income_total'));
+        $expenseTotal = Money::sum($rows->pluck('expense_total'));
 
         return [
             'owners' => $owners,
@@ -129,8 +129,8 @@ class ProfitService
                 abort(422, '该日期范围没有待分账流水');
             }
 
-            $incomeTotal = Money::fmt($income->sum('cash_amount'));
-            $expenseTotal = Money::fmt($expenses->sum('amount'));
+            $incomeTotal = Money::sum($income->pluck('cash_amount'));
+            $expenseTotal = Money::sum($expenses->pluck('amount'));
             $batch = ProfitSettlement::query()->create([
                 'batch_no' => 'PST'.now('Asia/Shanghai')->format('YmdHis').Str::upper(Str::random(4)),
                 'start_date' => $startDate,

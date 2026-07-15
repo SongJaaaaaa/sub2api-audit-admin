@@ -50,7 +50,7 @@ class LedgerAdjustmentTest extends TestCase
             && str_contains((string) $req['notes'], 'ledger_no=ADJ'));
     }
 
-    public function test_sub2api_call_failure_voids_adjustment_and_does_not_list_as_success(): void
+    public function test_sub2api_call_failure_marks_exception_and_does_not_list_as_success(): void
     {
         $admin = $this->admin();
         Http::fake([
@@ -67,12 +67,13 @@ class LedgerAdjustmentTest extends TestCase
         ]);
 
         $res->assertStatus(409)
-            ->assertJsonPath('adjustment.status', LedgerAdjustment::STATUS_VOIDED);
+            ->assertJsonPath('adjustment.status', LedgerAdjustment::STATUS_EXCEPTION);
 
         $this->assertDatabaseHas('ledger_adjustments', [
             'sub2api_user_id' => 1001,
-            'status' => LedgerAdjustment::STATUS_VOIDED,
+            'status' => LedgerAdjustment::STATUS_EXCEPTION,
         ]);
+        $this->assertNotNull(LedgerAdjustment::query()->firstOrFail()->request_started_at);
 
         $this->withToken($token)
             ->getJson('/api/v1/ledger-adjustments')

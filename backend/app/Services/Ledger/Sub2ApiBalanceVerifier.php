@@ -3,12 +3,11 @@
 namespace App\Services\Ledger;
 
 use App\Services\Sub2Api\Sub2ApiAdminClient;
+use App\Support\Money;
 
 class Sub2ApiBalanceVerifier
 {
-    public function __construct(private readonly Sub2ApiAdminClient $client)
-    {
-    }
+    public function __construct(private readonly Sub2ApiAdminClient $client) {}
 
     public function currentBalance(int $userId): array
     {
@@ -44,6 +43,6 @@ class Sub2ApiBalanceVerifier
             return null;
         }
 
-        return number_format((float) $val, 2, '.', '');
+        return Money::fmt($val);
     }
 }

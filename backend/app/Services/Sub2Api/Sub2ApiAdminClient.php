@@ -44,7 +44,7 @@ class Sub2ApiAdminClient
         $res = $this->http()
             ->withHeaders(['Idempotency-Key' => $idempotencyKey])
             ->post('/api/v1/admin/users/'.$id.'/balance', [
-                'balance' => (float) $amount,
+                'balance' => $amount,
                 'operation' => $sub2Op,
                 'notes' => $notes,
             ]);

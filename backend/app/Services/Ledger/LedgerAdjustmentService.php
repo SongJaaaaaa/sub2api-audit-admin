@@ -6,10 +6,12 @@ use App\Models\Admin;
 use App\Models\LedgerAdjustment;
 use App\Services\Audit\AuditLogService;
 use App\Services\Sub2Api\Sub2ApiAdminClient;
+use App\Services\Sub2Api\Sub2ApiReadRepository;
 use App\Support\ChinaTime;
 use App\Support\Money;
 use App\Support\SafeHtml;
 use App\Support\Sub2ApiNoteTag;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Throwable;
 
@@ -22,21 +24,101 @@ class LedgerAdjustmentService
         private readonly FinanceLedgerService $finance,
         private readonly AuditLogService $audit,
         private readonly LedgerSourceLinkService $sourceLink,
+        private readonly Sub2ApiReadRepository $read,
     ) {}
 
     public function adjust(Admin $admin, array $data): LedgerAdjustment
     {
-        $ledgerNo = $this->numbers->make();
-        $idempotencyKey = $this->numbers->idempotencyKey($ledgerNo);
+        $userId = (int) $data['sub2api_user_id'];
+
+        return $this->withUserLock($userId, function () use ($admin, $data, $userId): LedgerAdjustment {
+            $adj = DB::transaction(function () use ($admin, $data, $userId): LedgerAdjustment {
+                $this->lockUserRows($userId);
+                $ledgerNo = $this->numbers->make();
+
+                return $this->createAdjustment(
+                    $admin,
+                    $data,
+                    $ledgerNo,
+                    $this->numbers->idempotencyKey($ledgerNo),
+                );
+            }, 3);
+
+            return $this->execute($admin, $adj);
+        });
+    }
+
+    public function adjustBusiness(
+        ?Admin $admin,
+        array $data,
+        string $businessSource,
+        string $businessId,
+        string $idempotencyKey,
+    ): LedgerAdjustment {
+        $userId = (int) $data['sub2api_user_id'];
+
+        return $this->withUserLock($userId, function () use (
+            $admin,
+            $data,
+            $businessSource,
+            $businessId,
+            $idempotencyKey,
+            $userId,
+        ): LedgerAdjustment {
+            $adj = DB::transaction(function () use (
+                $admin,
+                $data,
+                $businessSource,
+                $businessId,
+                $idempotencyKey,
+                $userId,
+            ): LedgerAdjustment {
+                $this->lockUserRows($userId);
+                $adj = LedgerAdjustment::query()
+                    ->where('business_source', $businessSource)
+                    ->where('business_id', $businessId)
+                    ->lockForUpdate()
+                    ->first();
+
+                return $adj instanceof LedgerAdjustment
+                    ? $adj
+                    : $this->createAdjustment(
+                        $admin,
+                        $data,
+                        $this->businessLedgerNo($businessSource, $businessId),
+                        $idempotencyKey,
+                        $businessSource,
+                        $businessId,
+                    );
+            }, 3);
+
+            $adj = $adj->refresh();
+
+            return $adj->status === LedgerAdjustment::STATUS_SUCCEEDED
+                ? $adj
+                : $this->execute($admin, $adj);
+        });
+    }
+
+    private function createAdjustment(
+        ?Admin $admin,
+        array $data,
+        string $ledgerNo,
+        string $idempotencyKey,
+        ?string $businessSource = null,
+        ?string $businessId = null,
+    ): LedgerAdjustment {
         $amount = $this->money($data['amount']);
         [$cashAmount, $giftAmount] = $this->financeAmounts($amount, $data);
         $this->checkFinanceAmounts($amount, $cashAmount, $giftAmount);
         $adminNotes = SafeHtml::clean($data['admin_notes'] ?? null);
         $notes = Sub2ApiNoteTag::append($this->plainNotes($adminNotes), $ledgerNo, $idempotencyKey);
 
-        $adj = LedgerAdjustment::query()->create([
+        return LedgerAdjustment::query()->create([
             'ledger_no' => $ledgerNo,
             'idempotency_key' => $idempotencyKey,
+            'business_source' => $businessSource,
+            'business_id' => $businessId,
             'sub2api_user_id' => (int) $data['sub2api_user_id'],
             'operation' => $data['operation'],
             'amount' => $amount,
@@ -46,12 +128,31 @@ class LedgerAdjustmentService
             'adjust_reason' => $data['adjust_reason'],
             'admin_notes' => $adminNotes,
             'sub2api_notes' => $notes,
-            'created_by' => $admin->id,
+            'created_by' => $admin?->id,
         ]);
+    }
+
+    private function execute(?Admin $admin, LedgerAdjustment $adj): LedgerAdjustment
+    {
+        $amount = (string) $adj->amount;
+        $notes = (string) $adj->sub2api_notes;
+        $idempotencyKey = (string) $adj->idempotency_key;
 
         try {
+            if ($adj->request_started_at !== null || $adj->called_at !== null) {
+                $reconciled = $this->reconcileRemote($admin, $adj);
+                if ($reconciled instanceof LedgerAdjustment) {
+                    return $reconciled;
+                }
+
+                $delay = (int) config('ledger.remote_reconcile_delay_seconds', 60);
+                if ($adj->request_started_at?->isAfter(now()->subSeconds($delay))) {
+                    throw new RuntimeException('Sub2API 幂等流水尚未可见，请稍后重试');
+                }
+            }
+
             $current = $this->verifier->currentBalance($adj->sub2api_user_id);
-            $before = $current['balance'];
+            $before = $adj->before_balance ?? $current['balance'];
 
             if ($before === null) {
                 throw new RuntimeException('Sub2API 用户余额为空，无法确认调额前余额');
@@ -67,6 +168,12 @@ class LedgerAdjustmentService
                     'operation' => $adj->operation,
                     'notes' => $notes,
                 ],
+            ]);
+
+            $adj->update([
+                'status' => LedgerAdjustment::STATUS_PENDING,
+                'exception_reason' => null,
+                'request_started_at' => $adj->request_started_at ?? now(),
             ]);
 
             $res = $this->client->updateUserBalance(
@@ -95,21 +202,9 @@ class LedgerAdjustmentService
                 return $adj->refresh();
             }
 
-            $adj->update([
-                'status' => LedgerAdjustment::STATUS_SUCCEEDED,
-                'after_balance' => $confirm['balance'],
-                'confirm_response' => $confirm['response'],
-                'confirmed_at' => now(),
-            ]);
-            $adj = $adj->refresh();
-            $this->sourceLink->link($adj);
-            $adj = $adj->refresh();
-            $this->finance->recordAdjustment($admin, $adj);
-            $this->audit->record($admin, 'ledger_adjustment.succeeded', 'ledger_adjustment', $adj->id, null, $this->row($adj));
-
-            return $adj;
+            return $this->finalizeSuccess($admin, $adj, $confirm);
         } catch (Throwable $e) {
-            $status = $adj->called_at
+            $status = $adj->request_started_at || $adj->called_at
                 ? LedgerAdjustment::STATUS_EXCEPTION
                 : LedgerAdjustment::STATUS_VOIDED;
 
@@ -122,6 +217,71 @@ class LedgerAdjustmentService
 
             return $adj->refresh();
         }
+    }
+
+    private function reconcileRemote(?Admin $admin, LedgerAdjustment $adj): ?LedgerAdjustment
+    {
+        $rows = $this->read->findAdminAdjustmentSources(
+            (int) $adj->sub2api_user_id,
+            (string) $adj->idempotency_key,
+        );
+
+        if ($rows === []) {
+            return null;
+        }
+
+        if (count($rows) !== 1) {
+            throw new RuntimeException('Sub2API 幂等流水不唯一，已停止自动重试');
+        }
+
+        $remoteAmount = ltrim((string) $rows[0]['value'], '+-');
+        if (bccomp($remoteAmount, (string) $adj->amount, 2) !== 0) {
+            throw new RuntimeException('Sub2API 幂等流水金额与本地调额不一致');
+        }
+
+        $current = $this->verifier->currentBalance((int) $adj->sub2api_user_id);
+
+        return $this->finalizeSuccess($admin, $adj, [
+            'balance' => $current['balance'],
+            'response' => $current['response'],
+        ], (int) $rows[0]['id'], [
+            'sub2api_user_email' => $adj->sub2api_user_email ?: $current['email'],
+            'called_at' => $adj->called_at ?? now(),
+        ]);
+    }
+
+    private function finalizeSuccess(
+        ?Admin $admin,
+        LedgerAdjustment $adj,
+        array $confirm,
+        ?int $sourceId = null,
+        array $extra = [],
+    ): LedgerAdjustment {
+        return DB::transaction(function () use ($admin, $adj, $confirm, $sourceId, $extra): LedgerAdjustment {
+            $locked = LedgerAdjustment::query()->whereKey($adj->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status === LedgerAdjustment::STATUS_SUCCEEDED) {
+                return $locked;
+            }
+
+            $locked->update([
+                ...$extra,
+                'sub2api_source_id' => $sourceId ?: $locked->sub2api_source_id,
+                'status' => LedgerAdjustment::STATUS_SUCCEEDED,
+                'after_balance' => $confirm['balance'],
+                'confirm_response' => $confirm['response'],
+                'exception_reason' => null,
+                'confirmed_at' => now(),
+            ]);
+            $locked = $locked->refresh();
+            if ($sourceId === null) {
+                $this->sourceLink->link($locked);
+                $locked = $locked->refresh();
+            }
+            $this->finance->recordAdjustment($admin, $locked);
+            $this->audit->record($admin, 'ledger_adjustment.succeeded', 'ledger_adjustment', $locked->id, null, $this->row($locked));
+
+            return $locked;
+        }, 3);
     }
 
     public function list(array $filters, int $page, int $pageSize): array
@@ -230,6 +390,8 @@ class LedgerAdjustmentService
             'id' => $adj->id,
             'ledger_no' => $adj->ledger_no,
             'idempotency_key' => $adj->idempotency_key,
+            'business_source' => $adj->business_source,
+            'business_id' => $adj->business_id,
             'sub2api_user_id' => $adj->sub2api_user_id,
             'sub2api_source_id' => $adj->sub2api_source_id,
             'sub2api_user_email' => $adj->sub2api_user_email,
@@ -247,6 +409,7 @@ class LedgerAdjustmentService
             'admin_notes' => $adj->admin_notes,
             'sub2api_notes' => $adj->sub2api_notes,
             'exception_reason' => $adj->exception_reason,
+            'request_started_at' => ChinaTime::fmt($adj->request_started_at),
             'called_at' => ChinaTime::fmt($adj->called_at),
             'confirmed_at' => ChinaTime::fmt($adj->confirmed_at),
             'created_at' => ChinaTime::fmt($adj->created_at),
@@ -255,36 +418,41 @@ class LedgerAdjustmentService
 
     private function expectedBalance(string $before, string $amount, string $operation): string
     {
-        $next = $operation === LedgerAdjustment::OP_DECREMENT
-            ? (float) $before - (float) $amount
-            : (float) $before + (float) $amount;
-
-        return $this->money($next);
+        return $operation === LedgerAdjustment::OP_DECREMENT
+            ? bcsub($before, $amount, 2)
+            : bcadd($before, $amount, 2);
     }
 
     private function money(mixed $val): string
     {
-        return Money::fmt($val);
+        $amount = trim((string) $val);
+        $offset = str_starts_with($amount, '-') ? '-0.005' : '0.005';
+        $rounded = bcadd($amount, $offset, 2);
+
+        return $rounded === '-0.00' ? '0.00' : $rounded;
     }
 
     private function checkFinanceAmounts(string $amount, string $cashAmount, string $giftAmount): void
     {
-        if ((float) $cashAmount < 0 || (float) $giftAmount < 0) {
+        if (bccomp($cashAmount, '0', 2) < 0 || bccomp($giftAmount, '0', 2) < 0) {
             throw new RuntimeException('入账金额不能大于 Sub2API 金额调整');
         }
 
-        if ((float) $cashAmount <= 0 && (float) $giftAmount <= 0) {
+        if (bccomp($cashAmount, '0', 2) <= 0 && bccomp($giftAmount, '0', 2) <= 0) {
             return;
         }
 
-        if (Money::add($cashAmount, $giftAmount) !== $amount) {
+        if (bcadd($cashAmount, $giftAmount, 2) !== $amount) {
             throw new RuntimeException('现金金额和赠送额度之和必须等于调额额度');
         }
     }
 
     private function financeAmounts(string $amount, array $data): array
     {
-        if (($data['operation'] ?? '') === LedgerAdjustment::OP_DECREMENT || ($data['adjust_reason'] ?? '') === '异常修正') {
+        if (
+            ($data['operation'] ?? '') === LedgerAdjustment::OP_DECREMENT
+            || in_array(($data['adjust_reason'] ?? ''), ['异常修正', '返利提现'], true)
+        ) {
             return ['0.00', '0.00'];
         }
 
@@ -294,7 +462,41 @@ class LedgerAdjustmentService
 
         $cashAmount = $this->money($data['cash_amount'] ?? 0);
 
-        return [$cashAmount, $this->money((float) $amount - (float) $cashAmount)];
+        return [$cashAmount, bcsub($amount, $cashAmount, 2)];
+    }
+
+    private function businessLedgerNo(string $source, string $businessId): string
+    {
+        if ($source === LedgerAdjustment::BUSINESS_REBATE_WITHDRAWAL && strlen($businessId) <= 20) {
+            return 'RBW'.$businessId;
+        }
+
+        return 'ADJ'.strtoupper(substr(hash('sha256', $source.':'.$businessId), 0, 24));
+    }
+
+    private function withUserLock(int $userId, callable $callback): LedgerAdjustment
+    {
+        $pgsql = DB::connection()->getDriverName() === 'pgsql';
+        if ($pgsql) {
+            DB::select('SELECT pg_advisory_lock(?)', [$userId]);
+        }
+
+        try {
+            return $callback();
+        } finally {
+            if ($pgsql) {
+                DB::select('SELECT pg_advisory_unlock(?)', [$userId]);
+            }
+        }
+    }
+
+    private function lockUserRows(int $userId): void
+    {
+        LedgerAdjustment::query()
+            ->where('sub2api_user_id', $userId)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get(['id']);
     }
 
     private function plainNotes(?string $html): string

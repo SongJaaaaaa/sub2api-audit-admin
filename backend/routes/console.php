@@ -12,3 +12,11 @@ Schedule::command('ledger:reconcile')
     ->dailyAt('00:15')
     ->timezone(config('ledger.timezone', 'Asia/Shanghai'))
     ->withoutOverlapping();
+
+Schedule::command('rebate:scan')
+    ->everyMinute()
+    ->withoutOverlapping();
+
+Schedule::command('rebate:recover-queue')
+    ->everyMinute()
+    ->withoutOverlapping();

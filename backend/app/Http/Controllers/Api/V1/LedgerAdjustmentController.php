@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\LedgerAdjustment;
 use App\Services\Ledger\LedgerAdjustmentService;
+use App\Support\Money;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -41,10 +42,10 @@ class LedgerAdjustmentController extends Controller
             'adjust_reason' => ['required', Rule::in(['充值', '补发', '人工扣减', '异常修正'])],
             'admin_notes' => ['nullable', 'string', 'max:10000000', 'required_if:adjust_reason,异常修正'],
         ]);
-        $cash = number_format((float) ($data['cash_amount'] ?? 0), 2, '.', '');
-        $amount = number_format((float) $data['amount'], 2, '.', '');
+        $cash = Money::fmt($data['cash_amount'] ?? 0);
+        $amount = Money::fmt($data['amount']);
         $isRecharge = $data['operation'] === LedgerAdjustment::OP_INCREMENT && $data['adjust_reason'] === '充值';
-        if ($isRecharge && (float) $cash > (float) $amount) {
+        if ($isRecharge && bccomp($cash, $amount, 2) > 0) {
             throw new ValidationException(Validator::make([], []), response()->json([
                 'message' => '入账金额不能大于 Sub2API 金额调整',
                 'errors' => ['cash_amount' => ['入账金额不能大于 Sub2API 金额调整']],

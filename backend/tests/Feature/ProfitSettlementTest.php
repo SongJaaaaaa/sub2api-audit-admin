@@ -9,6 +9,7 @@ use App\Models\ProfitSettlement;
 use App\Models\ProfitSettlementItem;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class ProfitSettlementTest extends TestCase
@@ -123,6 +124,29 @@ class ProfitSettlementTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'items')
             ->assertJsonPath('items.0.owner_name', '牛宝');
+    }
+
+    public function test_postgres_large_decimal_totals_never_pass_through_float(): void
+    {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            $this->markTestSkipped('大额 decimal 精度回归在 PostgreSQL 实库执行');
+        }
+
+        $admin = $this->admin('精度测试');
+        $this->cash($admin, '900719925474099.91', '2026-07-08 09:00:00');
+        $this->cash($admin, '0.01', '2026-07-08 10:00:00');
+        $token = $admin->createToken('profit-precision')->plainTextToken;
+
+        $this->withToken($token)
+            ->getJson('/api/v1/profit/summary?start_date=2026-07-08&end_date=2026-07-08')
+            ->assertOk()
+            ->assertJsonPath('summary.income_total', '900719925474099.92');
+        $this->withToken($token)->postJson('/api/v1/profit/settlements', [
+            'start_date' => '2026-07-08',
+            'end_date' => '2026-07-08',
+        ])->assertCreated()
+            ->assertJsonPath('settlement.income_total', '900719925474099.92')
+            ->assertJsonPath('settlement.profit_total', '900719925474099.92');
     }
 
     private function admin(string $name): Admin
