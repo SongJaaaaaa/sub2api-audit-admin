@@ -82,6 +82,12 @@ async function loginAdmin(page: Page) {
 }
 
 async function mockAdminRebateApi(page: Page) {
+  await page.route('**/api/v1/sub2api/users/search**', (route) => json(route, {
+    items: [{ id: 89, email: 'test1@qq.com', username: 'test1', status: 'active' }],
+    total: 1,
+    page: 1,
+    page_size: 20,
+  }))
   await page.route('**/api/v1/rebate/admin/dashboard', (route) => json(route, {
     total_users: 0,
     direct_referral_count: 0,
@@ -253,6 +259,10 @@ test('admin rebate pages render without viewport overflow', async ({ page }) => 
     await expect(page.locator('.soyBreadcrumb')).toHaveText(item.breadcrumb)
     await expectPageReady(page, item.title)
     if (item.state) await expect(page.getByText(item.state, { exact: true }).first()).toBeVisible()
+    if (item.path === '/rebate/relationships') {
+      await page.getByRole('combobox').fill('89')
+      await expect(page.locator('.ant-select-item-option').filter({ hasText: 'test1@qq.com' })).toBeVisible()
+    }
     await expectNoViewportOverflow(page)
   }
 })

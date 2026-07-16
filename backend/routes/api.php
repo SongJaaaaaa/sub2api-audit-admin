@@ -37,6 +37,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('admins', [AdminController::class, 'index']);
 
         Route::get('sub2api/users', [Sub2ApiDataController::class, 'users']);
+        Route::get('sub2api/users/search', [Sub2ApiDataController::class, 'userSearch']);
         Route::get('sub2api/users/{id}/balance-history', [Sub2ApiDataController::class, 'balanceHistory']);
         Route::get('sub2api/model-stats', [Sub2ApiDataController::class, 'modelStats']);
         Route::get('dashboard', [DashboardController::class, 'index']);

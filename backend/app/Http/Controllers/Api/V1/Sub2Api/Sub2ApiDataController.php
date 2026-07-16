@@ -18,6 +18,21 @@ use Illuminate\Validation\ValidationException;
 
 class Sub2ApiDataController extends Controller
 {
+    public function userSearch(Request $req, Sub2ApiReadRepository $repo): JsonResponse
+    {
+        $data = $req->validate([
+            'keyword' => ['required', 'string', 'max:255'],
+        ]);
+        $items = $repo->searchUsers($data['keyword']);
+
+        return response()->json([
+            'items' => $items,
+            'total' => count($items),
+            'page' => 1,
+            'page_size' => 20,
+        ]);
+    }
+
     public function users(Request $req, Sub2ApiReadRepository $repo): JsonResponse
     {
         $page = max((int) $req->query('page', 1), 1);

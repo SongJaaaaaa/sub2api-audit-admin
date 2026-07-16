@@ -123,6 +123,36 @@ class Sub2ApiReadRepository
         return $row ? $this->userRow($row) : null;
     }
 
+    public function searchUsers(string $keyword, int $limit = 20): array
+    {
+        $keyword = trim($keyword);
+        $query = $this->db()
+            ->table('users')
+            ->select(['id', 'email', 'username', 'status'])
+            ->whereNull('deleted_at')
+            ->where(function ($sub) use ($keyword): void {
+                if (ctype_digit($keyword)) {
+                    $sub->where('id', (int) $keyword)->orWhere('email', 'like', "%{$keyword}%");
+                } else {
+                    $sub->where('email', 'like', "%{$keyword}%");
+                }
+
+                $sub->orWhere('username', 'like', "%{$keyword}%");
+            });
+
+        return $query
+            ->orderByDesc('id')
+            ->limit(min(max($limit, 1), 50))
+            ->get()
+            ->map(fn (object $user): array => [
+                'id' => (int) $user->id,
+                'email' => (string) ($user->email ?? ''),
+                'username' => $user->username === null ? null : (string) $user->username,
+                'status' => $user->status === null ? null : (string) $user->status,
+            ])
+            ->all();
+    }
+
     public function affiliateUser(int $id): ?array
     {
         $row = $this->db()

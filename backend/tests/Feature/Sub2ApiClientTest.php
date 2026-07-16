@@ -104,6 +104,27 @@ class Sub2ApiClientTest extends TestCase
         $this->assertSame('2026-07-14 10:00:00', $res['items'][0]['last_used_at']);
     }
 
+    public function test_lightweight_user_search_supports_email_username_and_id(): void
+    {
+        $this->insertSub2ApiUser();
+        $this->insertSub2ApiUser([
+            'id' => 1002,
+            'email' => 'beta@example.com',
+            'username' => 'second_user',
+            'status' => 'disabled',
+        ]);
+
+        $repo = app(Sub2ApiReadRepository::class);
+
+        $this->assertSame([1002], collect($repo->searchUsers('beta'))->pluck('id')->all());
+        $this->assertSame([1002], collect($repo->searchUsers('second'))->pluck('id')->all());
+        $this->assertSame([1001], collect($repo->searchUsers('1001'))->pluck('id')->all());
+        $this->assertSame(
+            ['id', 'email', 'username', 'status'],
+            array_keys($repo->searchUsers('alpha')[0]),
+        );
+    }
+
     public function test_active_balance_snapshot_excludes_admin_disabled_and_deleted_users(): void
     {
         $this->insertSub2ApiUser(['id' => 1001, 'balance' => '12.5']);

@@ -18,8 +18,8 @@ export function getAdminDashboard() {
 }
 
 export function searchSub2Users(keyword: string) {
-  return http.get<unknown, PageRes<UserSearchItem>>('/sub2api/users', {
-    params: { page: 1, page_size: 20, keyword },
+  return http.get<unknown, PageRes<UserSearchItem>>('/sub2api/users/search', {
+    params: { keyword },
   })
 }
 
