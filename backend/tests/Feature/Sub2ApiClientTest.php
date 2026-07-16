@@ -104,25 +104,38 @@ class Sub2ApiClientTest extends TestCase
         $this->assertSame('2026-07-14 10:00:00', $res['items'][0]['last_used_at']);
     }
 
-    public function test_lightweight_user_search_supports_email_username_and_id(): void
+    public function test_admin_api_user_search_supports_keyword_and_exact_id(): void
     {
-        $this->insertSub2ApiUser();
-        $this->insertSub2ApiUser([
-            'id' => 1002,
-            'email' => 'beta@example.com',
-            'username' => 'second_user',
-            'status' => 'disabled',
+        $this->withoutMiddleware();
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/users?page=1&page_size=20&search=alpha' => Http::response([
+                'code' => 0,
+                'data' => ['items' => [[
+                    'id' => 1001,
+                    'email' => 'alpha@example.com',
+                    'username' => 'alpha',
+                    'status' => 'active',
+                    'balance' => '99.00',
+                ]]],
+            ]),
+            'https://sub2api.test/api/v1/admin/users/1001' => Http::response([
+                'code' => 0,
+                'data' => [
+                    'id' => 1001,
+                    'email' => 'alpha@example.com',
+                    'username' => 'alpha',
+                    'status' => 'active',
+                ],
+            ]),
+            'https://sub2api.test/api/v1/admin/users/9999' => Http::response(['message' => 'not found'], 404),
         ]);
 
-        $repo = app(Sub2ApiReadRepository::class);
-
-        $this->assertSame([1002], collect($repo->searchUsers('beta'))->pluck('id')->all());
-        $this->assertSame([1002], collect($repo->searchUsers('second'))->pluck('id')->all());
-        $this->assertSame([1001], collect($repo->searchUsers('1001'))->pluck('id')->all());
-        $this->assertSame(
-            ['id', 'email', 'username', 'status'],
-            array_keys($repo->searchUsers('alpha')[0]),
-        );
+        $this->getJson('/api/v1/sub2api/users/search?keyword=alpha')
+            ->assertOk()
+            ->assertJsonPath('items.0.id', 1001)
+            ->assertJsonMissingPath('items.0.balance');
+        $this->assertSame([1001], collect(app(Sub2ApiAdminClient::class)->searchUsers('1001'))->pluck('id')->all());
+        $this->assertSame([], app(Sub2ApiAdminClient::class)->searchUsers('9999'));
     }
 
     public function test_active_balance_snapshot_excludes_admin_disabled_and_deleted_users(): void

@@ -33,6 +33,30 @@ class Sub2ApiAdminClient
         return $this->get('/api/v1/admin/users/'.$id);
     }
 
+    public function searchUsers(string $keyword, int $limit = 20): array
+    {
+        $keyword = trim($keyword);
+        if (ctype_digit($keyword)) {
+            $res = $this->http()->get('/api/v1/admin/users/'.(int) $keyword);
+            if ($res->status() === 404) {
+                return [];
+            }
+
+            $data = $this->json($res)['data'] ?? null;
+
+            return is_array($data) ? [$data] : [];
+        }
+
+        $res = $this->get('/api/v1/admin/users', [
+            'page' => 1,
+            'page_size' => min(max($limit, 1), 50),
+            'search' => $keyword,
+        ]);
+        $items = $res['data']['items'] ?? null;
+
+        return is_array($items) ? $items : [];
+    }
+
     public function updateUserBalance(int $id, string $amount, string $operation, string $notes, string $idempotencyKey): array
     {
         $sub2Op = match ($operation) {
