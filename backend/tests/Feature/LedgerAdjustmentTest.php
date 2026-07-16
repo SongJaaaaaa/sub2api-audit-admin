@@ -6,11 +6,25 @@ use App\Models\Admin;
 use App\Models\LedgerAdjustment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Tests\Support\Sub2ApiTestDatabase;
 use Tests\TestCase;
 
 class LedgerAdjustmentTest extends TestCase
 {
     use RefreshDatabase;
+    use Sub2ApiTestDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->setUpSub2ApiDatabase();
+    }
+
+    protected function tearDown(): void
+    {
+        $this->tearDownSub2ApiDatabase();
+        parent::tearDown();
+    }
 
     public function test_adjustment_succeeds_only_after_sub2api_confirmed(): void
     {
@@ -79,6 +93,40 @@ class LedgerAdjustmentTest extends TestCase
             ->getJson('/api/v1/ledger-adjustments')
             ->assertOk()
             ->assertJsonPath('total', 0);
+    }
+
+    public function test_exception_adjustment_retries_the_original_idempotent_order(): void
+    {
+        $admin = $this->admin();
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/users/1001' => $this->sub2ApiUserSequence('50.00', '50.00', '60.00'),
+            'https://sub2api.test/api/v1/admin/users/1001/balance' => Http::sequence()
+                ->push([], 400)
+                ->push(['data' => ['id' => 1001, 'balance' => '60.00']]),
+        ]);
+        $token = $admin->createToken('admin-token')->plainTextToken;
+        $this->withToken($token)->postJson('/api/v1/ledger-adjustments', [
+            'sub2api_user_id' => 1001,
+            'operation' => LedgerAdjustment::OP_INCREMENT,
+            'amount' => '10.00',
+            'cash_amount' => '10.00',
+            'adjust_reason' => '充值',
+        ])->assertStatus(409);
+        $adj = LedgerAdjustment::query()->firstOrFail();
+        $adj->update(['request_started_at' => now()->subMinutes(2)]);
+
+        $this->withToken($token)
+            ->postJson('/api/v1/ledger-adjustments/'.$adj->id.'/retry')
+            ->assertOk()
+            ->assertJsonPath('adjustment.id', $adj->id)
+            ->assertJsonPath('adjustment.status', LedgerAdjustment::STATUS_SUCCEEDED)
+            ->assertJsonPath('adjustment.after_balance', '60.00');
+
+        $this->assertSame(1, LedgerAdjustment::query()->count());
+        Http::assertSent(fn ($req): bool => str_ends_with($req->url(), '/api/v1/admin/users/1001/balance')
+            && $req->hasHeader('Idempotency-Key', $adj->idempotency_key)
+            && ! is_string($req['balance'])
+            && (float) $req['balance'] === 10.0);
     }
 
     public function test_list_filters_email_operator_and_date_and_returns_summary(): void

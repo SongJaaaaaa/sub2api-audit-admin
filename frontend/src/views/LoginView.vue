@@ -4,13 +4,11 @@ import { isAxiosError } from 'axios'
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { login } from '../api/auth'
-import { useAffiliateAuthStore } from '../features/rebate/stores/affiliateAuth'
 import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
 const router = useRouter()
 const adminAuth = useAuthStore()
-const affiliateAuth = useAffiliateAuthStore()
 const loading = ref(false)
 const error = ref('')
 const form = reactive({
@@ -33,15 +31,8 @@ async function submit() {
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
     const res = await login(account, form.password)
     adminAuth.clear()
-    affiliateAuth.clear()
-
-    if (res.identity_type === 'admin') {
-      adminAuth.save(res.token, res.admin)
-      await router.replace(redirect.startsWith('/') && !redirect.startsWith('/affiliate/') ? redirect : '/')
-    } else {
-      affiliateAuth.save(res.token, res.user)
-      await router.replace(redirect.startsWith('/affiliate/') ? redirect : '/affiliate/dashboard')
-    }
+    adminAuth.save(res.token, res.admin)
+    await router.replace(redirect.startsWith('/') ? redirect : '/')
   } catch (err) {
     error.value = errorMessage(err)
   } finally {

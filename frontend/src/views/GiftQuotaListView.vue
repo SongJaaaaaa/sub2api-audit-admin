@@ -101,18 +101,18 @@ onMounted(loadItems)
     </div>
 
     <div class="filterBar">
-      <a-input v-model:value="userId" placeholder="用户 ID" allow-clear @press-enter="search" />
-      <a-input v-model:value="email" placeholder="用户邮箱" allow-clear @press-enter="search" />
-      <a-input v-model:value="businessNo" placeholder="业务单号" allow-clear @press-enter="search" />
-      <a-select v-model:value="linkStatus" placeholder="关联状态" allow-clear>
+      <a-input v-model:value="userId" class="filterId" placeholder="用户 ID" allow-clear @press-enter="search" />
+      <a-input v-model:value="email" class="filterLg" placeholder="用户邮箱" allow-clear @press-enter="search" />
+      <a-input v-model:value="businessNo" class="filterBusiness" placeholder="业务单号" allow-clear @press-enter="search" />
+      <a-select v-model:value="linkStatus" class="filterSm" placeholder="关联状态" allow-clear>
         <a-select-option value="">全部关联状态</a-select-option>
         <a-select-option value="linked">已关联</a-select-option>
         <a-select-option value="unlinked">未关联</a-select-option>
       </a-select>
-      <a-select v-model:value="operator" placeholder="操作人" allow-clear>
+      <a-select v-model:value="operator" class="filterLg" placeholder="操作人" allow-clear>
         <a-select-option v-for="row in adminOptions" :key="row.id" :value="row.id">{{ row.name }}（{{ row.email }}）</a-select-option>
       </a-select>
-      <a-range-picker v-model:value="dates" />
+      <a-range-picker v-model:value="dates" class="filterDate" />
       <a-button type="primary" @click="search">查询</a-button>
       <a-button @click="resetFilters">重置</a-button>
     </div>
@@ -162,13 +162,14 @@ onMounted(loadItems)
 <style scoped>
 :deep(.clickableRow) { cursor: pointer; }
 :deep(.clickableRow:hover) > td { background: rgba(22, 119, 255, .06) !important; }
-.filterBar { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.filterBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.filterId { flex: 0 0 120px; }.filterSm { flex: 0 0 150px; }.filterBusiness { flex: 0 0 210px; }.filterLg { flex: 0 0 220px; }.filterDate { flex: 0 0 250px; }
 .summaryGrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .summaryGrid section { padding: 14px 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); }
 .summaryGrid span { display: block; color: var(--text-secondary, #7a8395); font-size: 13px; margin-bottom: 5px; }
 .summaryGrid strong { font-size: 22px; }
 .relatedCash { margin-top: 20px; }
 .relatedCash h3 { margin: 0 0 10px; }
-@media (max-width: 760px) { .filterBar { grid-template-columns: minmax(0, 1fr); } .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } :deep(.ant-descriptions-view) { overflow-x: auto; } }
+@media (max-width: 760px) { .filterBar > * { flex: 1 1 100%; width: 100% !important; } .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } :deep(.ant-descriptions-view) { overflow-x: auto; } }
 @media (max-width: 420px) { .summaryGrid { grid-template-columns: 1fr; } }
 </style>

@@ -226,7 +226,7 @@ function drawRankings() {
     `用户 ID：${row.user_id}`,
     `请求次数：${count(row.request_count)}`,
     `总 Token：${tokens(row.total_tokens)}`,
-    `实际消费：${money(row.actual_cost, 4)}`,
+    `实际消费：${money(row.actual_cost)}`,
   ])
 
 }
@@ -407,7 +407,7 @@ onBeforeUnmount(() => {
             <div class="kpiIcon"><RiseOutlined /></div>
             <div class="kpiBody">
               <span>实际消费</span>
-              <strong>{{ money(stats.usage.actual_cost, 4) }}</strong>
+              <strong>{{ money(stats.usage.actual_cost) }}</strong>
               <em>Token {{ tokens(stats.usage.total_tokens) }} · 请求 {{ count(stats.usage.request_count) }}</em>
             </div>
           </a-card>
@@ -415,7 +415,7 @@ onBeforeUnmount(() => {
             <div class="kpiIcon"><TeamOutlined /></div>
             <div class="kpiBody">
               <span>普通启用用户当前余额</span>
-              <strong>{{ money(stats.balance.active_user_balance, 4) }}</strong>
+              <strong>{{ money(stats.balance.active_user_balance) }}</strong>
               <em>{{ count(stats.balance.active_user_count) }} 位用户 · 当前快照，不随日期变化</em>
             </div>
           </a-card>

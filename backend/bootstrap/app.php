@@ -3,7 +3,6 @@
 use App\Exceptions\LedgerCutoverException;
 use App\Exceptions\Sub2ApiStatsException;
 use App\Http\Middleware\EnsureAdmin;
-use App\Http\Middleware\EnsureAffiliate;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -21,7 +20,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectGuestsTo(fn () => null);
         $middleware->alias([
             'admin' => EnsureAdmin::class,
-            'affiliate' => EnsureAffiliate::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

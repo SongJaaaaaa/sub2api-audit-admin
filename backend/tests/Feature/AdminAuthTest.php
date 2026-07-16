@@ -50,6 +50,7 @@ class AdminAuthTest extends TestCase
             'email' => 'song@qq.com',
             'password' => null,
         ]);
+        Http::assertSentCount(1);
     }
 
     public function test_disabled_sub2api_admin_cannot_login(): void
@@ -74,6 +75,25 @@ class AdminAuthTest extends TestCase
         $this->assertDatabaseCount('personal_access_tokens', 0);
     }
 
+    public function test_regular_sub2api_user_cannot_login_to_admin(): void
+    {
+        $this->fakeRemoteUser([
+            'id' => 3,
+            'email' => 'user@example.com',
+            'role' => 'user',
+            'status' => 'active',
+        ]);
+
+        $this->postJson('/api/v1/auth/login', [
+            'account' => 'user@example.com',
+            'password' => 'secret123',
+        ])->assertForbidden()
+            ->assertJsonPath('message', '仅 Sub2API 管理员可登录');
+
+        $this->assertDatabaseCount('admins', 0);
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+    }
+
     public function test_local_admin_password_is_not_a_login_source(): void
     {
         Admin::query()->create([
@@ -90,6 +110,21 @@ class AdminAuthTest extends TestCase
             'account' => 'admin@example.com',
             'password' => 'admin123',
         ])->assertUnauthorized();
+
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+    }
+
+    public function test_sub2api_bad_request_is_reported_as_invalid_credentials(): void
+    {
+        Http::fake([
+            'https://sub2api.test/api/v1/auth/login' => Http::response(['message' => 'invalid'], 400),
+        ]);
+
+        $this->postJson('/api/v1/auth/login', [
+            'account' => 'missing@example.com',
+            'password' => 'wrong-password',
+        ])->assertUnauthorized()
+            ->assertJsonPath('message', '账号或密码错误');
 
         $this->assertDatabaseCount('personal_access_tokens', 0);
     }
@@ -153,12 +188,11 @@ class AdminAuthTest extends TestCase
     {
         Http::fake([
             'https://sub2api.test/api/v1/auth/login' => Http::response([
-                'data' => ['access_token' => 'temporary-upstream-token'],
+                'data' => [
+                    'access_token' => 'temporary-upstream-token',
+                    'user' => $user,
+                ],
             ]),
-            'https://sub2api.test/api/v1/auth/me' => Http::response([
-                'data' => ['user' => $user],
-            ]),
-            'https://sub2api.test/api/v1/auth/logout' => Http::response(['code' => 0]),
         ]);
     }
 }

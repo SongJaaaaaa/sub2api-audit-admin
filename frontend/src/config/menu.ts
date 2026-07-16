@@ -1,7 +1,6 @@
 import {
   AuditOutlined,
   BarChartOutlined,
-  DashboardOutlined,
   DatabaseOutlined,
   DollarOutlined,
   ExceptionOutlined,
@@ -11,20 +10,16 @@ import {
   HistoryOutlined,
   HomeOutlined,
   ReconciliationOutlined,
-  SettingOutlined,
-  ShareAltOutlined,
   TeamOutlined,
   UserOutlined,
-  WalletOutlined,
 } from '@ant-design/icons-vue'
 import type { Component } from 'vue'
 
 export interface MenuItem {
   key: string
   label: string
-  path?: string
+  path: string
   icon: Component
-  children?: MenuItem[]
 }
 
 export const menuItems: MenuItem[] = [
@@ -41,15 +36,4 @@ export const menuItems: MenuItem[] = [
   { key: 'exception', label: '异常中心', path: '/exceptions', icon: ExceptionOutlined },
   { key: 'audit', label: '操作审计', path: '/audit-log', icon: AuditOutlined },
   { key: 'admins', label: '管理员账号', path: '/admins', icon: TeamOutlined },
-  {
-    key: 'rebate',
-    label: '推广返利',
-    icon: ShareAltOutlined,
-    children: [
-      { key: 'rebate-dashboard', label: '数据看板', path: '/rebate/dashboard', icon: DashboardOutlined },
-      { key: 'rebate-relationships', label: '推荐关系', path: '/rebate/relationships', icon: TeamOutlined },
-      { key: 'rebate-withdrawals', label: '提现审核', path: '/rebate/withdrawals', icon: WalletOutlined },
-      { key: 'rebate-config', label: '返利配置', path: '/rebate/config', icon: SettingOutlined },
-    ],
-  },
 ]

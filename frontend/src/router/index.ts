@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { rebateAdminRoutes, rebateAffiliateRoutes } from '../features/rebate/router'
 import AdminLayout from '../layouts/AdminLayout.vue'
 
 export const router = createRouter({
@@ -11,7 +10,6 @@ export const router = createRouter({
       component: () => import('../views/LoginView.vue'),
       meta: { guest: 'admin' },
     },
-    ...rebateAffiliateRoutes,
     {
       path: '/',
       component: AdminLayout,
@@ -30,7 +28,6 @@ export const router = createRouter({
         { path: 'exceptions', name: 'exception', component: () => import('../views/ExceptionCenterView.vue') },
         { path: 'audit-log', name: 'audit', component: () => import('../views/AuditLogView.vue') },
         { path: 'admins', name: 'admins', component: () => import('../views/AdminAccountsView.vue') },
-        ...rebateAdminRoutes,
       ],
     },
   ],
@@ -38,18 +35,11 @@ export const router = createRouter({
 
 router.beforeEach((to) => {
   const adminToken = localStorage.getItem('adminToken')
-  const affiliateToken = localStorage.getItem('affiliateToken')
   if (to.meta.auth === 'admin' && !adminToken) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  if (to.meta.auth === 'affiliate' && !affiliateToken) {
-    return { name: 'login', query: { redirect: to.fullPath } }
-  }
-  if ((to.name === 'login' || to.name === 'affiliate-login') && adminToken) {
+  if (to.name === 'login' && adminToken) {
     return { name: 'dashboard' }
-  }
-  if ((to.name === 'login' || to.name === 'affiliate-login') && affiliateToken) {
-    return { name: 'affiliate-dashboard' }
   }
 
   return true

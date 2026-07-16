@@ -1,5 +1,4 @@
 import { http } from './http'
-import type { AffiliateUser } from '../features/rebate/types'
 
 export interface AdminInfo {
   id: number
@@ -10,9 +9,11 @@ export interface AdminInfo {
   status: string
 }
 
-export type LoginRes =
-  | { identity_type: 'admin'; token: string; admin: AdminInfo }
-  | { identity_type: 'affiliate'; token: string; user: AffiliateUser }
+export interface LoginRes {
+  identity_type: 'admin'
+  token: string
+  admin: AdminInfo
+}
 
 export function login(account: string, password: string) {
   return http.post<unknown, LoginRes>('/auth/login', { account, password })

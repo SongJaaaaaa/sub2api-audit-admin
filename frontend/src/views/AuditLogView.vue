@@ -236,14 +236,14 @@ onMounted(loadItems)
     </div>
 
     <div class="filterBar">
-      <a-select v-model:value="filters.action" placeholder="操作类型" allow-clear><a-select-option value="">全部操作</a-select-option><a-select-option v-for="(label, key) in actionLabels" :key="key" :value="key">{{ label }}</a-select-option></a-select>
-      <a-select v-model:value="filters.admin_id" placeholder="操作人" allow-clear><a-select-option v-for="row in adminOptions" :key="row.id" :value="row.id">{{ row.name }}（{{ row.email }}）</a-select-option></a-select>
-      <a-select v-model:value="filters.target_type" placeholder="对象类型" allow-clear><a-select-option value="">全部对象</a-select-option><a-select-option v-for="(label, key) in targetTypeLabels" :key="key" :value="key">{{ label }}</a-select-option></a-select>
-      <a-input v-model:value="filters.target_id" placeholder="对象 ID" allow-clear />
-      <a-input v-model:value="filters.ip" placeholder="IP" allow-clear @press-enter="search" />
-      <a-range-picker v-model:value="filters.dates" />
-      <a-input v-model:value="filters.keyword" placeholder="关键字" allow-clear @press-enter="search" />
-      <a-select v-model:value="filters.risk" placeholder="风险级别"><a-select-option value="">全部风险</a-select-option><a-select-option value="high">高风险操作</a-select-option></a-select>
+      <a-select v-model:value="filters.action" class="filterAction" placeholder="操作类型" allow-clear><a-select-option value="">全部操作</a-select-option><a-select-option v-for="(label, key) in actionLabels" :key="key" :value="key">{{ label }}</a-select-option></a-select>
+      <a-select v-model:value="filters.admin_id" class="filterLg" placeholder="操作人" allow-clear><a-select-option v-for="row in adminOptions" :key="row.id" :value="row.id">{{ row.name }}（{{ row.email }}）</a-select-option></a-select>
+      <a-select v-model:value="filters.target_type" class="filterSm" placeholder="对象类型" allow-clear><a-select-option value="">全部对象</a-select-option><a-select-option v-for="(label, key) in targetTypeLabels" :key="key" :value="key">{{ label }}</a-select-option></a-select>
+      <a-input v-model:value="filters.target_id" class="filterId" placeholder="对象 ID" allow-clear />
+      <a-input v-model:value="filters.ip" class="filterIp" placeholder="IP" allow-clear @press-enter="search" />
+      <a-range-picker v-model:value="filters.dates" class="filterDate" />
+      <a-input v-model:value="filters.keyword" class="filterGrow" placeholder="关键字" allow-clear @press-enter="search" />
+      <a-select v-model:value="filters.risk" class="filterSm" placeholder="风险级别"><a-select-option value="">全部风险</a-select-option><a-select-option value="high">高风险操作</a-select-option></a-select>
       <a-button type="primary" @click="search">查询</a-button><a-button @click="resetFilters">重置</a-button>
     </div>
     <div class="summaryGrid">
@@ -351,11 +351,12 @@ onMounted(loadItems)
 </template>
 
 <style scoped>
-.filterBar { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.filterBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.filterId { flex: 0 0 120px; }.filterIp, .filterSm { flex: 0 0 150px; }.filterAction { flex: 0 0 190px; }.filterLg { flex: 0 0 220px; }.filterDate { flex: 0 0 250px; }.filterGrow { flex: 1 1 190px; max-width: 300px; }
 .summaryGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .summaryGrid section { padding: 14px 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); }
 .summaryGrid span { display: block; color: var(--text-secondary, #7a8395); font-size: 12px; margin-bottom: 6px; }
 .summaryGrid strong { font-size: 21px; } .risk { color: #cf1322; }
-@media (max-width: 760px) { .filterBar { grid-template-columns: minmax(0, 1fr); } .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .filterBar > * { flex: 1 1 100%; width: 100% !important; max-width: none; } .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 420px) { .summaryGrid { grid-template-columns: 1fr; } }
 </style>

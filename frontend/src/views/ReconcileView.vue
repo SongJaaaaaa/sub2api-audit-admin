@@ -166,11 +166,11 @@ onMounted(loadItems)
     </div>
 
     <div class="filterBar">
-      <a-range-picker v-model:value="filters.dates" />
-      <a-select v-model:value="filters.status" placeholder="对账状态"><a-select-option value="">全部状态</a-select-option><a-select-option value="ok">正常</a-select-option><a-select-option value="warning">告警</a-select-option><a-select-option value="error">错误</a-select-option></a-select>
-      <a-select v-model:value="filters.hasExternal" placeholder="外部调额"><a-select-option value="">全部</a-select-option><a-select-option value="1">存在外部调额</a-select-option><a-select-option value="0">无外部调额</a-select-option></a-select>
-      <a-select v-model:value="filters.hasOrphan" placeholder="审计孤儿"><a-select-option value="">全部</a-select-option><a-select-option value="1">存在审计孤儿</a-select-option><a-select-option value="0">无审计孤儿</a-select-option></a-select>
-      <a-select v-model:value="filters.operator" placeholder="操作人" allow-clear><a-select-option v-for="row in adminOptions" :key="row.id" :value="row.id">{{ row.name }}（{{ row.email }}）</a-select-option></a-select>
+      <a-range-picker v-model:value="filters.dates" class="filterDate" />
+      <a-select v-model:value="filters.status" class="filterStatus" placeholder="对账状态"><a-select-option value="">全部状态</a-select-option><a-select-option value="ok">正常</a-select-option><a-select-option value="warning">告警</a-select-option><a-select-option value="error">错误</a-select-option></a-select>
+      <a-select v-model:value="filters.hasExternal" class="filterExternal" placeholder="外部调额"><a-select-option value="">全部</a-select-option><a-select-option value="1">存在外部调额</a-select-option><a-select-option value="0">无外部调额</a-select-option></a-select>
+      <a-select v-model:value="filters.hasOrphan" class="filterOrphan" placeholder="审计孤儿"><a-select-option value="">全部</a-select-option><a-select-option value="1">存在审计孤儿</a-select-option><a-select-option value="0">无审计孤儿</a-select-option></a-select>
+      <a-select v-model:value="filters.operator" class="filterLg" placeholder="操作人" allow-clear><a-select-option v-for="row in adminOptions" :key="row.id" :value="row.id">{{ row.name }}（{{ row.email }}）</a-select-option></a-select>
       <a-button type="primary" @click="search">查询</a-button><a-button @click="resetFilters">重置</a-button>
     </div>
 
@@ -278,7 +278,8 @@ onMounted(loadItems)
 </template>
 
 <style scoped>
-.filterBar { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 10px; }
+.filterBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.filterStatus { flex: 0 0 140px; }.filterOrphan { flex: 0 0 160px; }.filterExternal { flex: 0 0 170px; }.filterLg { flex: 0 0 220px; }.filterDate { flex: 0 0 250px; }
 .summaryGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .summaryGrid section { padding: 14px 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); }
 .summaryGrid span { display: block; color: var(--text-secondary, #7a8395); font-size: 12px; margin-bottom: 6px; }
@@ -292,7 +293,7 @@ onMounted(loadItems)
 .drawerBlock { margin-top: 22px; }
 .sectionHead h3 { margin: 0; }
 @media (max-width: 760px) {
-  .filterBar { grid-template-columns: minmax(0, 1fr); } .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filterBar > * { flex: 1 1 100%; width: 100% !important; } .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .headActions, .headActions :deep(.ant-picker) { width: 100%; }
 }
 @media (max-width: 420px) { .summaryGrid { grid-template-columns: 1fr; } }

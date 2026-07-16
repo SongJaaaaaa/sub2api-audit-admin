@@ -2,25 +2,16 @@
 
 namespace Tests\Feature;
 
-use App\Jobs\Rebate\ProcessRebateWithdrawal;
 use App\Models\Admin;
 use App\Models\LedgerAdjustment;
-use App\Models\Rebate\RebateUser;
-use App\Models\Rebate\RebateWithdrawal;
 use App\Models\SystemSetting;
-use App\Services\Ledger\LedgerAdjustmentService;
 use App\Services\Ledger\LedgerCutoverService;
 use App\Services\Ledger\LedgerSourceLinkService;
-use App\Services\Ledger\RebateWithdrawalPayoutService;
-use App\Services\Rebate\BalanceService;
-use App\Services\Rebate\WithdrawalService;
 use App\Support\Sub2ApiNoteTag;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Queue;
 use Tests\Support\Sub2ApiTestDatabase;
 use Tests\TestCase;
 
@@ -163,127 +154,6 @@ class LedgerCutoverAndSourceLinkTest extends TestCase
             return $req->hasHeader('Idempotency-Key', $adj->idempotency_key)
                 && Sub2ApiNoteTag::idempotencyKey($req['notes']) === $adj->idempotency_key;
         });
-    }
-
-    public function test_lost_response_waits_for_delayed_remote_ledger_without_a_second_adjustment(): void
-    {
-        $admin = $this->admin();
-        config()->set('ledger.remote_reconcile_delay_seconds', 60);
-        $userSeq = Http::sequence()
-            ->push(['data' => ['id' => 1001, 'email' => 'alpha@example.com', 'balance' => '50.00']])
-            ->push(['data' => ['id' => 1001, 'email' => 'alpha@example.com', 'balance' => '60.00']]);
-        $postCalls = 0;
-        Http::fake([
-            'https://sub2api.test/api/v1/admin/users/1001' => $userSeq,
-            'https://sub2api.test/api/v1/admin/users/1001/balance' => function () use (&$postCalls) {
-                $postCalls++;
-
-                throw new ConnectionException('response lost');
-            },
-        ]);
-        $service = app(LedgerAdjustmentService::class);
-        $data = [
-            'sub2api_user_id' => 1001,
-            'operation' => LedgerAdjustment::OP_INCREMENT,
-            'amount' => '10.00',
-            'cash_amount' => '0.00',
-            'gift_quota_amount' => '0.00',
-            'adjust_reason' => '返利提现',
-            'admin_notes' => '返利提现 RBW-1',
-        ];
-
-        $first = $service->adjustBusiness(
-            $admin,
-            $data,
-            LedgerAdjustment::BUSINESS_REBATE_WITHDRAWAL,
-            '1',
-            'rebate-withdrawal-1',
-        );
-        $second = $service->adjustBusiness(
-            $admin,
-            $data,
-            LedgerAdjustment::BUSINESS_REBATE_WITHDRAWAL,
-            '1',
-            'rebate-withdrawal-1',
-        );
-
-        $this->assertSame(LedgerAdjustment::STATUS_EXCEPTION, $first->status);
-        $this->assertSame('Sub2API 幂等流水尚未可见，请稍后重试', $second->exception_reason);
-        $this->remote(901, 1001, Sub2ApiNoteTag::make('RBW1', 'rebate-withdrawal-1'));
-
-        $third = $service->adjustBusiness(
-            $admin,
-            $data,
-            LedgerAdjustment::BUSINESS_REBATE_WITHDRAWAL,
-            '1',
-            'rebate-withdrawal-1',
-        );
-
-        $this->assertSame($first->id, $third->id);
-        $this->assertSame(LedgerAdjustment::STATUS_SUCCEEDED, $third->status);
-        $this->assertSame(901, $third->sub2api_source_id);
-        $this->assertSame('0.00', $third->cash_amount);
-        $this->assertSame('0.00', $third->gift_quota_amount);
-        $this->assertSame(1, $postCalls);
-    }
-
-    public function test_withdrawal_lost_response_reuses_remote_adjustment_and_completes_frozen_balance(): void
-    {
-        Queue::fake();
-        config()->set('sub2api.admin_api.idempotency_verified', true);
-        config()->set('ledger.remote_reconcile_delay_seconds', 60);
-        $admin = $this->admin();
-        $user = RebateUser::query()->create([
-            'id' => 1001,
-            'email' => 'affiliate@example.com',
-            'username' => 'affiliate',
-            'status' => RebateUser::STATUS_ACTIVE,
-            'aff_code' => 'AFF1001',
-        ]);
-        $balances = app(BalanceService::class);
-        $withdrawals = app(WithdrawalService::class);
-        $balances->credit($user->id, '20.00', 'test', 'withdrawal-opening');
-        $withdrawal = $withdrawals->request($user, '10.00');
-        $withdrawals->approve($withdrawal, $admin->id);
-
-        $postCalls = 0;
-        $userSeq = Http::sequence()
-            ->push(['data' => ['id' => 1001, 'email' => $user->email, 'balance' => '50.00']])
-            ->push(['data' => ['id' => 1001, 'email' => $user->email, 'balance' => '60.00']]);
-        Http::fake([
-            'https://sub2api.test/api/v1/admin/users/1001' => $userSeq,
-            'https://sub2api.test/api/v1/admin/users/1001/balance' => function () use (&$postCalls) {
-                $postCalls++;
-
-                throw new ConnectionException('response lost');
-            },
-        ]);
-        $payout = app(RebateWithdrawalPayoutService::class);
-        $job = new ProcessRebateWithdrawal($withdrawal->id);
-
-        $job->handle($payout, $balances);
-
-        $this->assertSame(RebateWithdrawal::STATUS_EXCEPTION, $withdrawal->refresh()->status);
-        $this->assertSame('10.00', $balances->get($user->id)->refresh()->frozen_amount);
-        $this->assertSame(1, $postCalls);
-        $key = 'rebate-withdrawal-'.$withdrawal->id;
-        $this->remote(902, $user->id, Sub2ApiNoteTag::make('REMOTE-RBW', $key));
-
-        $withdrawals->retry($withdrawal, $admin->id);
-        $job->handle($payout, $balances);
-
-        $balance = $balances->get($user->id)->refresh();
-        $adjustment = LedgerAdjustment::query()->where('idempotency_key', $key)->firstOrFail();
-        $this->assertSame(RebateWithdrawal::STATUS_SUCCEEDED, $withdrawal->refresh()->status);
-        $this->assertSame('0.00', $balance->frozen_amount);
-        $this->assertSame('10.00', $balance->withdrawn_amount);
-        $this->assertSame(1, $postCalls);
-        $this->assertSame(LedgerAdjustment::STATUS_SUCCEEDED, $adjustment->status);
-        $this->assertSame(LedgerAdjustment::BUSINESS_REBATE_WITHDRAWAL, $adjustment->business_source);
-        $this->assertSame((string) $withdrawal->id, $adjustment->business_id);
-        $this->assertSame('0.00', $adjustment->cash_amount);
-        $this->assertSame('0.00', $adjustment->gift_quota_amount);
-        $this->assertSame(1, LedgerAdjustment::query()->where('idempotency_key', $key)->count());
     }
 
     private function admin(): Admin

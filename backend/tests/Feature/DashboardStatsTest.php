@@ -144,10 +144,8 @@ class DashboardStatsTest extends TestCase
             ->assertJsonPath('rankings.recharge_users.0.cash_total', '100.00')
             ->assertJsonPath('rankings.user_actual_cost.0.user_id', 1002)
             ->assertJsonPath('rankings.user_actual_cost.0.actual_cost', '8')
-            ->assertJsonPath('rankings.user_tokens.0.user_id', 1002)
-            ->assertJsonPath('rankings.user_tokens.0.total_tokens', 1200)
-            ->assertJsonPath('rankings.models.0.model', 'model-b')
-            ->assertJsonPath('rankings.models.0.total_tokens', 200)
+            ->assertJsonPath('rankings.user_tokens', [])
+            ->assertJsonPath('rankings.models', [])
             ->assertJsonPath('alerts.unlinked_adjustment_count', 1)
             ->assertJsonPath('alerts.reconcile_issue_count', 1)
             ->assertJsonPath('alerts.external_adjustment_count', 1)
@@ -158,6 +156,7 @@ class DashboardStatsTest extends TestCase
         $this->assertNull($res->json('quota_rank'));
         $this->assertNotContains($old->id, collect($res->json('recent_adjustments'))->pluck('id')->all());
         $this->assertContains($second->id, collect($res->json('recent_adjustments'))->pluck('id')->all());
+        Http::assertSentCount(3);
 
         Http::assertSent(function (Request $req): bool {
             if (! str_starts_with($req->url(), 'https://sub2api.test/api/v1/admin/dashboard/trend?')) {
@@ -169,14 +168,11 @@ class DashboardStatsTest extends TestCase
                 && $req['timezone'] === 'Asia/Shanghai'
                 && $req['granularity'] === 'day';
         });
-        Http::assertSent(fn (Request $req): bool => str_starts_with($req->url(), 'https://sub2api.test/api/v1/admin/dashboard/models?')
-            && $req['model_source'] === 'requested');
         Http::assertSent(fn (Request $req): bool => str_starts_with($req->url(), 'https://sub2api.test/api/v1/admin/dashboard/users-ranking?')
             && (int) $req['limit'] === 3);
-        Http::assertSent(fn (Request $req): bool => str_starts_with($req->url(), 'https://sub2api.test/api/v1/admin/dashboard/user-breakdown?')
-            && $req['model_source'] === 'requested'
-            && $req['sort_by'] === 'total_tokens'
-            && (int) $req['limit'] === 3);
+        Http::assertSent(fn (Request $req): bool => str_starts_with($req->url(), 'https://sub2api.test/api/v1/admin/users?')
+            && (int) $req['page'] === 1
+            && (int) $req['page_size'] === 100);
     }
 
     public function test_dashboard_defaults_to_today_and_validates_date_pairs(): void
@@ -299,17 +295,15 @@ class DashboardStatsTest extends TestCase
                     'actual_cost' => '2.2',
                 ],
             ])),
-            'https://sub2api.test/api/v1/admin/dashboard/models*' => Http::response($this->official('models', [
-                $this->modelRow('model-a', 100),
-                $this->modelRow('model-b', 200),
-            ])),
             'https://sub2api.test/api/v1/admin/dashboard/users-ranking*' => Http::response($this->official('ranking', [
                 ['user_id' => 1001, 'email' => 'alpha@example.com', 'actual_cost' => '4', 'requests' => 10, 'tokens' => 1000],
                 ['user_id' => 1002, 'email' => 'beta@example.com', 'actual_cost' => '8', 'requests' => 5, 'tokens' => 500],
             ])),
-            'https://sub2api.test/api/v1/admin/dashboard/user-breakdown*' => Http::response($this->official('users', [
-                $this->userTokenRow(1001, 900, '10'),
-                $this->userTokenRow(1002, 1200, '2'),
+            'https://sub2api.test/api/v1/admin/users*' => Http::response($this->official('items', [
+                ['role' => 'user', 'status' => 'active', 'balance' => '12.5', 'total_recharged' => '10'],
+                ['role' => 'user', 'status' => 'active', 'balance' => '7.5', 'total_recharged' => '20'],
+                ['role' => 'admin', 'status' => 'active', 'balance' => '100', 'total_recharged' => '5'],
+                ['role' => 'user', 'status' => 'disabled', 'balance' => '100', 'total_recharged' => '7'],
             ])),
         ]);
     }
@@ -317,35 +311,5 @@ class DashboardStatsTest extends TestCase
     private function official(string $field, array $rows): array
     {
         return ['code' => 0, 'message' => 'success', 'data' => [$field => $rows]];
-    }
-
-    private function modelRow(string $model, int $tokens): array
-    {
-        return [
-            'model' => $model,
-            'requests' => 2,
-            'input_tokens' => 10,
-            'output_tokens' => 20,
-            'cache_creation_tokens' => 30,
-            'cache_read_tokens' => 40,
-            'total_tokens' => $tokens,
-            'cost' => '3.5',
-            'actual_cost' => '3.1',
-        ];
-    }
-
-    private function userTokenRow(int $id, int $tokens, string $actual): array
-    {
-        return [
-            'user_id' => $id,
-            'email' => $id === 1001 ? 'alpha@example.com' : 'beta@example.com',
-            'requests' => 2,
-            'input_tokens' => 10,
-            'output_tokens' => 20,
-            'cache_tokens' => 30,
-            'total_tokens' => $tokens,
-            'cost' => '3.5',
-            'actual_cost' => $actual,
-        ];
     }
 }

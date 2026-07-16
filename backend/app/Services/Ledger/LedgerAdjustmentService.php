@@ -48,65 +48,33 @@ class LedgerAdjustmentService
         });
     }
 
-    public function adjustBusiness(
-        ?Admin $admin,
-        array $data,
-        string $businessSource,
-        string $businessId,
-        string $idempotencyKey,
-    ): LedgerAdjustment {
-        $userId = (int) $data['sub2api_user_id'];
+    public function retry(Admin $admin, LedgerAdjustment $adj): LedgerAdjustment
+    {
+        if ($adj->status === LedgerAdjustment::STATUS_SUCCEEDED) {
+            return $adj;
+        }
+        if (! in_array($adj->status, [LedgerAdjustment::STATUS_EXCEPTION, LedgerAdjustment::STATUS_VOIDED], true)) {
+            throw new RuntimeException('仅异常或作废调额可以重试');
+        }
 
-        return $this->withUserLock($userId, function () use (
-            $admin,
-            $data,
-            $businessSource,
-            $businessId,
-            $idempotencyKey,
-            $userId,
-        ): LedgerAdjustment {
-            $adj = DB::transaction(function () use (
-                $admin,
-                $data,
-                $businessSource,
-                $businessId,
-                $idempotencyKey,
-                $userId,
-            ): LedgerAdjustment {
-                $this->lockUserRows($userId);
-                $adj = LedgerAdjustment::query()
-                    ->where('business_source', $businessSource)
-                    ->where('business_id', $businessId)
-                    ->lockForUpdate()
-                    ->first();
+        return $this->withUserLock((int) $adj->sub2api_user_id, function () use ($admin, $adj): LedgerAdjustment {
+            $locked = DB::transaction(
+                fn (): LedgerAdjustment => LedgerAdjustment::query()->whereKey($adj->id)->lockForUpdate()->firstOrFail(),
+                3,
+            );
+            if ($locked->status === LedgerAdjustment::STATUS_SUCCEEDED) {
+                return $locked;
+            }
 
-                return $adj instanceof LedgerAdjustment
-                    ? $adj
-                    : $this->createAdjustment(
-                        $admin,
-                        $data,
-                        $this->businessLedgerNo($businessSource, $businessId),
-                        $idempotencyKey,
-                        $businessSource,
-                        $businessId,
-                    );
-            }, 3);
-
-            $adj = $adj->refresh();
-
-            return $adj->status === LedgerAdjustment::STATUS_SUCCEEDED
-                ? $adj
-                : $this->execute($admin, $adj);
+            return $this->execute($admin, $locked);
         });
     }
 
     private function createAdjustment(
-        ?Admin $admin,
+        Admin $admin,
         array $data,
         string $ledgerNo,
         string $idempotencyKey,
-        ?string $businessSource = null,
-        ?string $businessId = null,
     ): LedgerAdjustment {
         $amount = $this->money($data['amount']);
         [$cashAmount, $giftAmount] = $this->financeAmounts($amount, $data);
@@ -117,8 +85,6 @@ class LedgerAdjustmentService
         return LedgerAdjustment::query()->create([
             'ledger_no' => $ledgerNo,
             'idempotency_key' => $idempotencyKey,
-            'business_source' => $businessSource,
-            'business_id' => $businessId,
             'sub2api_user_id' => (int) $data['sub2api_user_id'],
             'operation' => $data['operation'],
             'amount' => $amount,
@@ -128,11 +94,11 @@ class LedgerAdjustmentService
             'adjust_reason' => $data['adjust_reason'],
             'admin_notes' => $adminNotes,
             'sub2api_notes' => $notes,
-            'created_by' => $admin?->id,
+            'created_by' => $admin->id,
         ]);
     }
 
-    private function execute(?Admin $admin, LedgerAdjustment $adj): LedgerAdjustment
+    private function execute(Admin $admin, LedgerAdjustment $adj): LedgerAdjustment
     {
         $amount = (string) $adj->amount;
         $notes = (string) $adj->sub2api_notes;
@@ -219,7 +185,7 @@ class LedgerAdjustmentService
         }
     }
 
-    private function reconcileRemote(?Admin $admin, LedgerAdjustment $adj): ?LedgerAdjustment
+    private function reconcileRemote(Admin $admin, LedgerAdjustment $adj): ?LedgerAdjustment
     {
         $rows = $this->read->findAdminAdjustmentSources(
             (int) $adj->sub2api_user_id,
@@ -251,7 +217,7 @@ class LedgerAdjustmentService
     }
 
     private function finalizeSuccess(
-        ?Admin $admin,
+        Admin $admin,
         LedgerAdjustment $adj,
         array $confirm,
         ?int $sourceId = null,
@@ -390,8 +356,6 @@ class LedgerAdjustmentService
             'id' => $adj->id,
             'ledger_no' => $adj->ledger_no,
             'idempotency_key' => $adj->idempotency_key,
-            'business_source' => $adj->business_source,
-            'business_id' => $adj->business_id,
             'sub2api_user_id' => $adj->sub2api_user_id,
             'sub2api_source_id' => $adj->sub2api_source_id,
             'sub2api_user_email' => $adj->sub2api_user_email,
@@ -451,7 +415,7 @@ class LedgerAdjustmentService
     {
         if (
             ($data['operation'] ?? '') === LedgerAdjustment::OP_DECREMENT
-            || in_array(($data['adjust_reason'] ?? ''), ['异常修正', '返利提现'], true)
+            || ($data['adjust_reason'] ?? '') === '异常修正'
         ) {
             return ['0.00', '0.00'];
         }
@@ -463,15 +427,6 @@ class LedgerAdjustmentService
         $cashAmount = $this->money($data['cash_amount'] ?? 0);
 
         return [$cashAmount, bcsub($amount, $cashAmount, 2)];
-    }
-
-    private function businessLedgerNo(string $source, string $businessId): string
-    {
-        if ($source === LedgerAdjustment::BUSINESS_REBATE_WITHDRAWAL && strlen($businessId) <= 20) {
-            return 'RBW'.$businessId;
-        }
-
-        return 'ADJ'.strtoupper(substr(hash('sha256', $source.':'.$businessId), 0, 24));
     }
 
     private function withUserLock(int $userId, callable $callback): LedgerAdjustment

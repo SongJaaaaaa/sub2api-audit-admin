@@ -7,7 +7,6 @@ use App\Models\ReconciliationBatch;
 use App\Models\ReconciliationDiff;
 use App\Services\Ledger\LedgerCutoverService;
 use App\Services\Sub2Api\Sub2ApiAdminClient;
-use App\Services\Sub2Api\Sub2ApiReadRepository;
 use App\Support\ChinaDateRange;
 use App\Support\ChinaTime;
 use Illuminate\Database\Eloquent\Builder;
@@ -16,16 +15,14 @@ class DashboardStatsService
 {
     public function __construct(
         private readonly Sub2ApiAdminClient $client,
-        private readonly Sub2ApiReadRepository $repo,
         private readonly LedgerCutoverService $cutover,
     ) {}
 
     public function data(ChinaDateRange $range, int $limit): array
     {
-        $trend = $this->usageTrend($range, $this->client->dashboardTrend($range)['trend']);
-        $models = $this->modelRanking($this->client->dashboardModels($range)['models'], $limit);
-        $costUsers = $this->userCostRanking($this->client->dashboardUsersRanking($range, $limit)['ranking'], $limit);
-        $tokenUsers = $this->userTokenRanking($this->client->dashboardUserBreakdown($range, $limit)['users'], $limit);
+        $stats = $this->client->dashboardStats($range, $limit);
+        $trend = $this->usageTrend($range, $stats['trend']);
+        $costUsers = $this->userCostRanking($stats['ranking'], $limit);
         $finance = $this->finance($range);
         $cutover = $this->cutover->get();
 
@@ -41,15 +38,27 @@ class DashboardStatsService
                 ...$this->usageSummary($trend),
                 'trend' => $trend,
             ],
-            'balance' => $this->repo->activeUserBalanceSnapshot(),
+            'balance' => $this->balanceSnapshot($stats['accounts']),
             'rankings' => [
                 'recharge_users' => $this->rechargeRanking($range, $limit),
-                'user_tokens' => $tokenUsers,
+                'user_tokens' => [],
                 'user_actual_cost' => $costUsers,
-                'models' => $models,
+                'models' => [],
             ],
             'recent_adjustments' => $this->recentAdjustments($range, $limit),
             'alerts' => $this->alerts($range),
+        ];
+    }
+
+    private function balanceSnapshot(array $accounts): array
+    {
+        $active = collect($accounts)->filter(fn (array $row): bool => $row['role'] === 'user' && $row['status'] === 'active');
+
+        return [
+            'active_user_count' => $active->count(),
+            'active_user_balance' => $this->decimal($active->sum(fn (array $row): float => (float) $row['balance']), 8),
+            'total_recharged' => $this->decimal(collect($accounts)->sum(fn (array $row): float => (float) $row['total_recharged']), 8),
+            'as_of' => now(config('ledger.timezone', 'Asia/Shanghai'))->format(ChinaTime::FORMAT),
         ];
     }
 
@@ -201,26 +210,6 @@ class DashboardStatsService
             ->all();
     }
 
-    private function userTokenRanking(array $rows, int $limit): array
-    {
-        return collect($rows)
-            ->sortByDesc(fn (array $row): int => (int) $row['total_tokens'])
-            ->take($limit)
-            ->values()
-            ->map(fn (array $row): array => [
-                'user_id' => (int) $row['user_id'],
-                'email' => $row['email'] ?? null,
-                'request_count' => (int) $row['requests'],
-                'input_tokens' => (int) $row['input_tokens'],
-                'output_tokens' => (int) $row['output_tokens'],
-                'cache_tokens' => (int) $row['cache_tokens'],
-                'total_tokens' => (int) $row['total_tokens'],
-                'standard_cost' => $this->decimal($row['cost'], 10),
-                'actual_cost' => $this->decimal($row['actual_cost'], 10),
-            ])
-            ->all();
-    }
-
     private function userCostRanking(array $rows, int $limit): array
     {
         return collect($rows)
@@ -233,26 +222,6 @@ class DashboardStatsService
                 'actual_cost' => $this->decimal($row['actual_cost'], 10),
                 'request_count' => (int) $row['requests'],
                 'total_tokens' => (int) $row['tokens'],
-            ])
-            ->all();
-    }
-
-    private function modelRanking(array $rows, int $limit): array
-    {
-        return collect($rows)
-            ->sortByDesc(fn (array $row): int => (int) $row['total_tokens'])
-            ->take($limit)
-            ->values()
-            ->map(fn (array $row): array => [
-                'model' => (string) $row['model'],
-                'request_count' => (int) $row['requests'],
-                'input_tokens' => (int) $row['input_tokens'],
-                'output_tokens' => (int) $row['output_tokens'],
-                'cache_creation_tokens' => (int) $row['cache_creation_tokens'],
-                'cache_read_tokens' => (int) $row['cache_read_tokens'],
-                'total_tokens' => (int) $row['total_tokens'],
-                'standard_cost' => $this->decimal($row['cost'], 10),
-                'actual_cost' => $this->decimal($row['actual_cost'], 10),
             ])
             ->all();
     }

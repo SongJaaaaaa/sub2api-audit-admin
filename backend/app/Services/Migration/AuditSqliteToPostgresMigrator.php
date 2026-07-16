@@ -20,16 +20,6 @@ class AuditSqliteToPostgresMigrator
         'system_settings',
         'profit_settlements',
         'profit_settlement_items',
-        'rebate_users',
-        'rebate_referrals',
-        'rebate_configs',
-        'rebate_scan_cursors',
-        'rebate_events',
-        'rebate_progress',
-        'rebate_balances',
-        'rebate_records',
-        'rebate_balance_entries',
-        'rebate_withdrawals',
     ];
 
     private const EXCLUDED_TABLES = [
@@ -41,6 +31,16 @@ class AuditSqliteToPostgresMigrator
         'migrations',
         'password_reset_tokens',
         'personal_access_tokens',
+        'rebate_balance_entries',
+        'rebate_balances',
+        'rebate_configs',
+        'rebate_events',
+        'rebate_progress',
+        'rebate_records',
+        'rebate_referrals',
+        'rebate_scan_cursors',
+        'rebate_users',
+        'rebate_withdrawals',
         'sessions',
         'sqlite_sequence',
     ];
@@ -54,12 +54,6 @@ class AuditSqliteToPostgresMigrator
         'reconciliation_diffs' => ['amount', 'local_amount', 'remote_amount'],
         'profit_settlements' => ['income_total', 'expense_total', 'profit_total'],
         'profit_settlement_items' => ['amount'],
-        'rebate_events' => ['amount'],
-        'rebate_progress' => ['total_recharge_amount'],
-        'rebate_records' => ['source_amount', 'rebate_amount'],
-        'rebate_balances' => ['available_amount', 'frozen_amount', 'withdrawn_amount'],
-        'rebate_balance_entries' => ['amount'],
-        'rebate_withdrawals' => ['amount', 'quota_amount'],
     ];
 
     public function run(Connection $source, Connection $target, bool $commit, ?callable $beforeCommit = null): array

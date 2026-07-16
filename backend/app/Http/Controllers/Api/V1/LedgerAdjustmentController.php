@@ -105,4 +105,15 @@ class LedgerAdjustmentController extends Controller
             'message' => "批量赠送完成：成功 {$success} 个，失败 {$failed} 个",
         ], $failed > 0 ? 207 : 201);
     }
+
+    public function retry(Request $req, LedgerAdjustment $adjustment, LedgerAdjustmentService $service): JsonResponse
+    {
+        $adj = $service->retry($req->user(), $adjustment);
+        $ok = $adj->status === LedgerAdjustment::STATUS_SUCCEEDED;
+
+        return response()->json([
+            'adjustment' => $service->row($adj),
+            'message' => $ok ? '原单重试成功，Sub2API 已入账并确认' : '原单重试后仍未确认成功',
+        ], $ok ? 200 : 409);
+    }
 }

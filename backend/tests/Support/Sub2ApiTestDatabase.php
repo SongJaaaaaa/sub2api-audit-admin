@@ -43,12 +43,6 @@ trait Sub2ApiTestDatabase
             $table->timestamp('created_at')->nullable();
         });
 
-        Schema::connection('sub2api')->create('user_affiliates', function (Blueprint $table): void {
-            $table->unsignedBigInteger('user_id')->primary();
-            $table->string('aff_code')->nullable();
-            $table->unsignedBigInteger('inviter_id')->nullable()->index();
-        });
-
         Schema::connection('sub2api')->create('usage_logs', function (Blueprint $table): void {
             $table->id();
             $table->unsignedBigInteger('user_id')->index();

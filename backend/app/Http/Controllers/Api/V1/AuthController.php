@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Admin;
 use App\Services\Auth\AdminAuthService;
 use App\Services\Auth\UnifiedAuthService;
-use App\Support\RebatePresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -24,18 +23,10 @@ class AuthController extends Controller
 
         $res = $auth->login($data['account'], $data['password']);
 
-        if ($res['identity_type'] === 'admin') {
-            return response()->json([
-                'identity_type' => 'admin',
-                'token' => $res['token'],
-                'admin' => $this->adminData($res['admin']),
-            ]);
-        }
-
         return response()->json([
-            'identity_type' => 'affiliate',
+            'identity_type' => 'admin',
             'token' => $res['token'],
-            'user' => RebatePresenter::user($res['user']),
+            'admin' => $this->adminData($res['admin']),
         ]);
     }
 

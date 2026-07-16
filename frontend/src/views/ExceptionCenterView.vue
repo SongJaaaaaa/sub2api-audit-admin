@@ -1,16 +1,18 @@
 <script setup lang="ts">
+import { RedoOutlined } from '@ant-design/icons-vue'
 import type { Dayjs } from 'dayjs'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import * as echarts from 'echarts'
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { getLedgerAdjustments, type LedgerAdjustment, type LedgerSummary } from '../api/ledger'
+import { getLedgerAdjustments, retryLedgerAdjustment, type LedgerAdjustment, type LedgerSummary } from '../api/ledger'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useAdminOptions } from '../composables/useAdminOptions'
 import { useTableColumns } from '../composables/useTableColumns'
 
 const adminOptions = useAdminOptions()
 const loading = ref(false)
+const retryingId = ref<number | null>(null)
 const items = ref<LedgerAdjustment[]>([])
 const chartEl = ref<HTMLDivElement>()
 let chart: echarts.ECharts | undefined
@@ -29,8 +31,9 @@ const allColumns = [
   { title: '调后', dataIndex: 'after_balance', align: 'right', width: 120 },
   { title: '异常原因', dataIndex: 'exception_reason' },
   { title: '创建时间', dataIndex: 'created_at', width: 180 },
+  { title: '操作', dataIndex: 'action', fixed: 'right', width: 90 },
 ] as const
-const { columns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('exception-center-columns', allColumns, 1450)
+const { columns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('exception-center-columns', allColumns, 1540)
 
 async function loadItems() {
   loading.value = true
@@ -63,6 +66,19 @@ function renderChart() {
 function search() { page.current = 1; loadItems() }
 function resetFilters() { Object.assign(filters, { userId: '', email: '', operator: undefined, dates: undefined, minAmount: '', maxAmount: '' }); search() }
 function change(pager: TablePaginationConfig) { page.current = pager.current || 1; page.pageSize = pager.pageSize || 20; loadItems() }
+async function retryItem(row: LedgerAdjustment) {
+  retryingId.value = row.id
+  try {
+    const res = await retryLedgerAdjustment(row.id)
+    message.success(res.message)
+    await loadItems()
+  } catch (err) {
+    const data = (err as { response?: { data?: { message?: string } } }).response?.data
+    message.error(data?.message || '重试失败')
+  } finally {
+    retryingId.value = null
+  }
+}
 function resize() { chart?.resize() }
 onMounted(() => { loadItems(); window.addEventListener('resize', resize) })
 onBeforeUnmount(() => { window.removeEventListener('resize', resize); chart?.dispose() })
@@ -72,12 +88,12 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resize); chart?.dis
   <section class="page">
     <div class="pageHead pageHeadActionsOnly"><a-button @click="loadItems">刷新</a-button></div>
     <div class="filterBar">
-      <a-input v-model:value="filters.userId" placeholder="用户 ID" allow-clear />
-      <a-input v-model:value="filters.email" placeholder="用户邮箱" allow-clear />
-      <a-select v-model:value="filters.operator" placeholder="操作人" allow-clear><a-select-option v-for="row in adminOptions" :key="row.id" :value="row.id">{{ row.name }}（{{ row.email }}）</a-select-option></a-select>
-      <a-range-picker v-model:value="filters.dates" />
-      <a-input v-model:value="filters.minAmount" placeholder="最小金额" allow-clear />
-      <a-input v-model:value="filters.maxAmount" placeholder="最大金额" allow-clear />
+      <a-input v-model:value="filters.userId" class="filterId" placeholder="用户 ID" allow-clear />
+      <a-input v-model:value="filters.email" class="filterLg" placeholder="用户邮箱" allow-clear />
+      <a-select v-model:value="filters.operator" class="filterLg" placeholder="操作人" allow-clear><a-select-option v-for="row in adminOptions" :key="row.id" :value="row.id">{{ row.name }}（{{ row.email }}）</a-select-option></a-select>
+      <a-range-picker v-model:value="filters.dates" class="filterDate" />
+      <a-input v-model:value="filters.minAmount" class="filterAmount" placeholder="最小金额" allow-clear />
+      <a-input v-model:value="filters.maxAmount" class="filterAmount" placeholder="最大金额" allow-clear />
       <a-button type="primary" @click="search">查询</a-button><a-button @click="resetFilters">重置</a-button>
     </div>
     <div class="summaryGrid">
@@ -95,18 +111,27 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resize); chart?.dis
         <template v-else-if="column.dataIndex === 'operation'">{{ record.operation === 'increment' ? '增加' : '扣减' }}</template>
         <template v-else-if="column.dataIndex === 'operator_name'">{{ record.operator_name || record.operator_email || '-' }}</template>
         <template v-else-if="['amount', 'before_balance', 'after_balance'].includes(column.dataIndex as string)"><span class="money">{{ record[column.dataIndex] || '-' }}</span></template>
+        <template v-else-if="column.dataIndex === 'action'">
+          <a-popconfirm title="确认按原单重试？" ok-text="确认" cancel-text="取消" @confirm="retryItem(record)">
+            <a-button type="link" size="small" :loading="retryingId === record.id">
+              <template #icon><RedoOutlined /></template>
+              重试
+            </a-button>
+          </a-popconfirm>
+        </template>
       </template>
     </a-table>
   </section>
 </template>
 
 <style scoped>
-.filterBar { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.filterBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.filterId { flex: 0 0 120px; }.filterAmount { flex: 0 0 130px; }.filterLg { flex: 0 0 220px; }.filterDate { flex: 0 0 250px; }
 .summaryGrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .summaryGrid section, .chartCard { padding: 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); }
 .summaryGrid span { display: block; margin-bottom: 6px; color: var(--text-secondary, #7a8395); font-size: 13px; }
 .summaryGrid strong { font-size: 23px; }.timeValue { font-size: 15px !important; }.negative { color: #cf1322; }
 .chartCard { margin-bottom: 14px; }.chartCard h3 { margin: 0; }.chart { height: 220px; }
-@media (max-width: 760px) { .filterBar { grid-template-columns: minmax(0, 1fr); } .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .filterBar > * { flex: 1 1 100%; width: 100% !important; } .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 420px) { .summaryGrid { grid-template-columns: 1fr; } }
 </style>

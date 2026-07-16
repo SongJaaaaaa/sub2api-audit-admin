@@ -19,7 +19,7 @@ import {
 } from 'naive-ui'
 import { computed, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
-import { menuItems, type MenuItem } from '../config/menu'
+import { menuItems } from '../config/menu'
 import { useAuthStore } from '../stores/auth'
 import { useThemeStore, type ThemeMode } from '../stores/theme'
 
@@ -31,7 +31,6 @@ const collapsed = ref(false)
 const drawerOpen = ref(false)
 const isMobile = ref(window.matchMedia('(max-width: 760px)').matches)
 const mobileMedia = window.matchMedia('(max-width: 760px)')
-const defaultExpandedKeys = ['rebate']
 
 const themeOptions: { label: string; value: ThemeMode }[] = [
   { label: '跟随系统', value: 'system' },
@@ -40,36 +39,21 @@ const themeOptions: { label: string; value: ThemeMode }[] = [
 ]
 
 const selectedKey = computed(() => {
-  const hit = findMenu((item) => item.path === route.path)
+  const hit = menuItems.find((item) => item.path === route.path)
   return hit?.key || 'dashboard'
 })
 
-const selectedItem = computed(() => findMenu((item) => item.key === selectedKey.value))
-
 const menuData = computed<MenuOption[]>(() =>
-  menuItems.map(toMenuOption),
-)
-
-function toMenuOption(item: MenuItem): MenuOption {
-  return {
+  menuItems.map((item) => ({
     key: item.key,
     label: item.label,
     icon: () => h(item.icon),
-    children: item.children?.map(toMenuOption),
-  }
-}
-
-function findMenu(match: (item: MenuItem) => boolean, items = menuItems): MenuItem | undefined {
-  for (const item of items) {
-    if (match(item)) return item
-    const hit = item.children && findMenu(match, item.children)
-    if (hit) return hit
-  }
-}
+  })),
+)
 
 function goMenu(key: string) {
-  const hit = findMenu((item) => item.key === key)
-  if (hit?.path) {
+  const hit = menuItems.find((item) => item.key === key)
+  if (hit) {
     router.push(hit.path)
     drawerOpen.value = false
   }
@@ -124,7 +108,6 @@ onBeforeUnmount(() => {
         :collapsed-icon-size="20"
         :options="menuData"
         :value="selectedKey"
-        :default-expanded-keys="defaultExpandedKeys"
         @update:value="goMenu"
       />
     </NLayoutSider>
@@ -138,7 +121,7 @@ onBeforeUnmount(() => {
               <MenuFoldOutlined v-else />
             </template>
           </NButton>
-          <span class="soyBreadcrumb">{{ selectedItem?.label || '首页' }}</span>
+          <span class="soyBreadcrumb">{{ menuItems.find((item) => item.key === selectedKey)?.label || '首页' }}</span>
         </div>
 
         <div class="soyHeaderRight">
@@ -189,12 +172,7 @@ onBeforeUnmount(() => {
           <span class="brandMark">S</span>
           <strong>Sub2API 审计</strong>
         </div>
-        <NMenu
-          :options="menuData"
-          :value="selectedKey"
-          :default-expanded-keys="defaultExpandedKeys"
-          @update:value="goMenu"
-        />
+        <NMenu :options="menuData" :value="selectedKey" @update:value="goMenu" />
       </NDrawerContent>
     </NDrawer>
   </NLayout>

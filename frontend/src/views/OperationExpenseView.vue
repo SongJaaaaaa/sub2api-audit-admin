@@ -150,17 +150,17 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); chart
     </div>
 
     <div class="expenseFilterBar">
-      <a-select v-model:value="filters.category" placeholder="全部分类" allow-clear>
+      <a-select v-model:value="filters.category" class="filterSm" placeholder="全部分类" allow-clear>
         <a-select-option value="">全部分类</a-select-option>
         <a-select-option v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</a-select-option>
       </a-select>
-      <a-range-picker v-model:value="filters.dateRange" :placeholder="['开始日期', '结束日期']" format="YYYY-MM-DD" />
-      <a-select v-model:value="filters.operator" placeholder="操作人" allow-clear>
+      <a-range-picker v-model:value="filters.dateRange" class="filterDate" :placeholder="['开始日期', '结束日期']" format="YYYY-MM-DD" />
+      <a-select v-model:value="filters.operator" class="filterLg" placeholder="操作人" allow-clear>
         <a-select-option v-for="row in adminOptions" :key="row.id" :value="row.id">{{ row.name }}（{{ row.email }}）</a-select-option>
       </a-select>
-      <a-input v-model:value="filters.minAmount" placeholder="最小金额" allow-clear />
-      <a-input v-model:value="filters.maxAmount" placeholder="最大金额" allow-clear />
-      <a-input v-model:value="filters.keyword" placeholder="备注关键词" allow-clear @press-enter="search" />
+      <a-input v-model:value="filters.minAmount" class="filterAmount" placeholder="最小金额" allow-clear />
+      <a-input v-model:value="filters.maxAmount" class="filterAmount" placeholder="最大金额" allow-clear />
+      <a-input v-model:value="filters.keyword" class="filterGrow" placeholder="备注关键词" allow-clear @press-enter="search" />
       <a-button type="primary" @click="search">查询</a-button>
       <a-button @click="resetFilters">重置</a-button>
     </div>
@@ -213,7 +213,8 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); chart
 </template>
 
 <style scoped>
-.expenseFilterBar { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.expenseFilterBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+.filterSm { flex: 0 0 150px; }.filterAmount { flex: 0 0 130px; }.filterLg { flex: 0 0 220px; }.filterDate { flex: 0 0 250px; }.filterGrow { flex: 1 1 200px; max-width: 320px; }
 .summaryGrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .summaryGrid section, .chartCard { padding: 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); }
 .summaryGrid span { display: block; color: var(--text-secondary, #7a8395); margin-bottom: 6px; font-size: 13px; }
@@ -221,6 +222,6 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); chart
 .chartCard { margin-bottom: 14px; }
 .chartCard h3 { margin: 0 0 8px; }
 .categoryChart { height: 320px; }
-@media (max-width: 760px) { .expenseFilterBar { grid-template-columns: 1fr; } .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .expenseFilterBar > * { flex: 1 1 100%; width: 100% !important; max-width: none; } .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 420px) { .summaryGrid { grid-template-columns: 1fr; } }
 </style>

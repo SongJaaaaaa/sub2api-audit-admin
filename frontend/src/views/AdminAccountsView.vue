@@ -63,14 +63,16 @@ onMounted(loadItems)
 <template>
   <section class="page adminAccountsPage">
     <div class="adminFilterBar">
-      <a-input v-model:value="filters.keyword" placeholder="姓名或登录邮箱" allow-clear @press-enter="search" />
-      <a-select v-model:value="filters.status" placeholder="全部状态">
+      <a-input v-model:value="filters.keyword" class="filterGrow" placeholder="姓名或登录邮箱" allow-clear @press-enter="search" />
+      <a-select v-model:value="filters.status" class="filterStatus" placeholder="全部状态">
         <a-select-option value="">全部状态</a-select-option>
         <a-select-option value="active">启用</a-select-option>
         <a-select-option value="disabled">停用</a-select-option>
       </a-select>
-      <a-button type="primary" @click="search">查询</a-button>
-      <a-button @click="resetFilters">重置</a-button>
+      <div class="filterActions">
+        <a-button type="primary" @click="search">查询</a-button>
+        <a-button @click="resetFilters">重置</a-button>
+      </div>
     </div>
 
     <div class="summaryGrid">
@@ -105,15 +107,19 @@ onMounted(loadItems)
 
 <style scoped>
 .adminAccountsPage { gap: 16px; }
-.adminFilterBar { display: grid; grid-template-columns: minmax(220px, 1fr) 180px auto auto; gap: 10px; }
+.adminFilterBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.filterGrow { flex: 1 1 240px; max-width: 360px; }
+.filterStatus { flex: 0 0 140px; }
+.filterActions { display: flex; flex: 0 0 auto; gap: 10px; }
 .summaryGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .summaryGrid section { padding: 14px 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 8px; background: var(--card-bg, #fff); }
 .summaryGrid span { display: block; margin-bottom: 6px; color: var(--text-secondary, #7a8395); font-size: 12px; }
 .summaryGrid strong { font-size: 22px; }
 .activeCount { color: #389e0d; }
 @media (max-width: 760px) {
-  .adminFilterBar { grid-template-columns: minmax(0, 1fr); }
-  .adminFilterBar > * { width: 100%; min-width: 0; }
+  .adminFilterBar > :not(.filterActions) { flex: 1 1 100%; width: 100%; max-width: none; min-width: 0; }
+  .filterActions { flex: 1 1 100%; }
+  .filterActions button { flex: 1; }
   .summaryGrid { grid-template-columns: minmax(0, 1fr); }
 }
 </style>

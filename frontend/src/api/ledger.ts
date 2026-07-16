@@ -92,6 +92,10 @@ export function createLedgerAdjustment(data: {
   return http.post<unknown, AdjustmentRes>('/ledger-adjustments', data)
 }
 
+export function retryLedgerAdjustment(id: number) {
+  return http.post<unknown, AdjustmentRes>(`/ledger-adjustments/${id}/retry`)
+}
+
 export function createBatchGift(data: {
   user_ids: number[]
   amount: string

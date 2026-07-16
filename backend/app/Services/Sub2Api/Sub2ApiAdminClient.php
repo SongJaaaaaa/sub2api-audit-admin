@@ -5,6 +5,7 @@ namespace App\Services\Sub2Api;
 use App\Exceptions\Sub2ApiStatsException;
 use App\Support\ChinaDateRange;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -33,30 +34,6 @@ class Sub2ApiAdminClient
         return $this->get('/api/v1/admin/users/'.$id);
     }
 
-    public function searchUsers(string $keyword, int $limit = 20): array
-    {
-        $keyword = trim($keyword);
-        if (ctype_digit($keyword)) {
-            $res = $this->http()->get('/api/v1/admin/users/'.(int) $keyword);
-            if ($res->status() === 404) {
-                return [];
-            }
-
-            $data = $this->json($res)['data'] ?? null;
-
-            return is_array($data) ? [$data] : [];
-        }
-
-        $res = $this->get('/api/v1/admin/users', [
-            'page' => 1,
-            'page_size' => min(max($limit, 1), 50),
-            'search' => $keyword,
-        ]);
-        $items = $res['data']['items'] ?? null;
-
-        return is_array($items) ? $items : [];
-    }
-
     public function updateUserBalance(int $id, string $amount, string $operation, string $notes, string $idempotencyKey): array
     {
         $sub2Op = match ($operation) {
@@ -68,7 +45,7 @@ class Sub2ApiAdminClient
         $res = $this->http()
             ->withHeaders(['Idempotency-Key' => $idempotencyKey])
             ->post('/api/v1/admin/users/'.$id.'/balance', [
-                'balance' => $amount,
+                'balance' => (float) $amount,
                 'operation' => $sub2Op,
                 'notes' => $notes,
             ]);
@@ -160,6 +137,48 @@ class Sub2ApiAdminClient
         ]);
     }
 
+    public function dashboardStats(ChinaDateRange $range, int $limit): array
+    {
+        $res = Http::pool(fn (Pool $pool): array => [
+            $this->poolHttp($pool, 'trend')->get('/api/v1/admin/dashboard/trend', [
+                ...$range->apiParams(),
+                'granularity' => 'day',
+            ]),
+            $this->poolHttp($pool, 'ranking')->get('/api/v1/admin/dashboard/users-ranking', [
+                ...$range->apiParams(),
+                'limit' => $limit,
+            ]),
+            $this->poolHttp($pool, 'accounts')->get('/api/v1/admin/users', [
+                'page' => 1,
+                'page_size' => 100,
+            ]),
+        ]);
+
+        $accountData = $this->statsResult($res['accounts'], '/api/v1/admin/users', 'items', [
+            'role', 'status', 'balance', 'total_recharged',
+        ]);
+        $accounts = $accountData['items'];
+        $pages = (int) ($accountData['pages'] ?? 1);
+        for ($page = 2; $page <= $pages; $page++) {
+            $pageData = $this->stats('/api/v1/admin/users', [
+                'page' => $page,
+                'page_size' => 100,
+            ], 'items', ['role', 'status', 'balance', 'total_recharged']);
+            array_push($accounts, ...$pageData['items']);
+        }
+
+        return [
+            'trend' => $this->statsResult($res['trend'], '/api/v1/admin/dashboard/trend', 'trend', [
+                'date', 'requests', 'input_tokens', 'output_tokens', 'cache_creation_tokens',
+                'cache_read_tokens', 'total_tokens', 'cost', 'actual_cost',
+            ])['trend'],
+            'ranking' => $this->statsResult($res['ranking'], '/api/v1/admin/dashboard/users-ranking', 'ranking', [
+                'user_id', 'email', 'actual_cost', 'requests', 'tokens',
+            ])['ranking'],
+            'accounts' => $accounts,
+        ];
+    }
+
     private function get(string $path, array $params = []): array
     {
         return $this->json($this->http()->get($path, $params));
@@ -170,12 +189,21 @@ class Sub2ApiAdminClient
         try {
             $res = $this->http()->get($path, $params);
         } catch (Throwable $e) {
+            return $this->statsResult($e, $path, $field, $requiredFields);
+        }
+
+        return $this->statsResult($res, $path, $field, $requiredFields);
+    }
+
+    private function statsResult(mixed $res, string $path, string $field, array $requiredFields): array
+    {
+        if ($res instanceof Throwable) {
             Log::error('sub2api.stats.request_failed', [
                 'path' => $path,
-                'error_type' => $e::class,
+                'error_type' => $res::class,
             ]);
 
-            throw new Sub2ApiStatsException('Sub2API 官方统计请求失败', previous: $e);
+            throw new Sub2ApiStatsException('Sub2API 官方统计请求失败', previous: $res);
         }
 
         if (! $res->successful()) {
@@ -224,28 +252,44 @@ class Sub2ApiAdminClient
         return $data;
     }
 
+    private function poolHttp(Pool $pool, string $key): PendingRequest
+    {
+        [$baseUrl, $apiKey, $timeout] = $this->adminConfig();
+
+        return $pool->as($key)
+            ->baseUrl($baseUrl)
+            ->timeout($timeout)
+            ->acceptJson()
+            ->withHeaders(['x-api-key' => $apiKey]);
+    }
+
     private function http(bool $withKey = true): PendingRequest
     {
-        $baseUrl = rtrim((string) config('sub2api.admin_api.base_url'), '/');
-        $key = (string) config('sub2api.admin_api.key');
-
-        if ($baseUrl === '') {
-            throw new RuntimeException('缺少 SUB2API_ADMIN_API_URL');
-        }
-
+        [$baseUrl, $apiKey, $timeout] = $this->adminConfig($withKey);
         $http = Http::baseUrl($baseUrl)
-            ->timeout((int) config('sub2api.admin_api.timeout', 10))
+            ->timeout($timeout)
             ->acceptJson();
 
         if (! $withKey) {
             return $http;
         }
 
-        if ($key === '') {
+        return $http->withHeaders(['x-api-key' => $apiKey]);
+    }
+
+    private function adminConfig(bool $withKey = true): array
+    {
+        $baseUrl = rtrim((string) config('sub2api.admin_api.base_url'), '/');
+        $apiKey = (string) config('sub2api.admin_api.key');
+
+        if ($baseUrl === '') {
+            throw new RuntimeException('缺少 SUB2API_ADMIN_API_URL');
+        }
+        if ($withKey && $apiKey === '') {
             throw new RuntimeException('缺少 SUB2API_ADMIN_API_KEY');
         }
 
-        return $http->withHeaders(['x-api-key' => $key]);
+        return [$baseUrl, $apiKey, (int) config('sub2api.admin_api.timeout', 10)];
     }
 
     private function json(Response $res): array

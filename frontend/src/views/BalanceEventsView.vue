@@ -187,19 +187,19 @@ onMounted(() => loadItems())
 
     <section class="filterPanel">
       <div class="filterGrid">
-        <label class="dateFilter">
+        <label class="filterDate">
           <span>时间</span>
           <a-range-picker v-model:value="dateRange" />
         </label>
-        <label>
+        <label class="filterId">
           <span>用户 ID</span>
           <a-input v-model:value="userId" allow-clear placeholder="精确用户 ID" @press-enter="loadItems(true)" />
         </label>
-        <label>
+        <label class="filterGrow">
           <span>用户关键字</span>
           <a-input v-model:value="keyword" allow-clear placeholder="邮箱 / 用户名 / ID" @press-enter="loadItems(true)" />
         </label>
-        <label>
+        <label class="filterSource">
           <span>来源</span>
           <a-select v-model:value="source" allow-clear placeholder="全部来源">
             <a-select-option value="admin_adjustment">后台余额调额</a-select-option>
@@ -207,14 +207,14 @@ onMounted(() => loadItems())
             <a-select-option value="payment_order">支付订单</a-select-option>
           </a-select>
         </label>
-        <label>
+        <label class="filterDirection">
           <span>方向</span>
           <a-select v-model:value="direction" allow-clear placeholder="全部方向">
             <a-select-option value="increment">调增</a-select-option>
             <a-select-option value="decrement">调减</a-select-option>
           </a-select>
         </label>
-        <label>
+        <label class="filterStatus">
           <span>关联状态</span>
           <a-select v-model:value="linkStatus" allow-clear placeholder="全部状态">
             <a-select-option value="linked">已关联</a-select-option>
@@ -304,22 +304,27 @@ onMounted(() => loadItems())
 .summaryGrid strong { font-size: 21px; }
 .increment { color: #389e0d; } .decrement { color: #cf1322; }
 .filterPanel { padding: 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); }
-.filterGrid { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 14px; align-items: end; }
+.filterGrid { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; }
 .filterGrid label { display: grid; gap: 6px; min-width: 0; }
 .filterGrid label > span { color: var(--text-secondary, #70798c); font-size: 12px; }
-.filterActions { display: flex; gap: 9px; }
+.filterGrid label :deep(.ant-picker), .filterGrid label :deep(.ant-select) { width: 100%; }
+.filterDate { flex: 0 0 250px; }
+.filterId { flex: 0 0 130px; }
+.filterGrow { flex: 1 1 220px; max-width: 320px; }
+.filterSource { flex: 0 0 160px; }
+.filterDirection { flex: 0 0 120px; }
+.filterStatus { flex: 0 0 150px; }
+.filterActions { display: flex; flex: 0 0 auto; gap: 9px; }
 .filterMeta { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border-color, #e8eaf0); color: var(--text-secondary, #70798c); font-size: 12px; }
 .money { font-weight: 700; font-variant-numeric: tabular-nums; }
 .money.increment { color: #389e0d; }
 .money.decrement { color: #cf1322; }
 small { display: block; margin-top: 3px; color: var(--text-secondary, #7a8395); }
 .notes { white-space: pre-wrap; word-break: break-word; }
-@media (max-width: 1180px) {
-  .filterGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 @media (max-width: 760px) { .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) {
-  .filterGrid { grid-template-columns: 1fr; }
+  .filterGrid label { flex: 1 1 100%; max-width: none; }
+  .filterGrid label > * { min-width: 0; }
   .filterActions, .filterActions button { flex: 1; }
 }
 @media (max-width: 420px) { .summaryGrid { grid-template-columns: 1fr; } }

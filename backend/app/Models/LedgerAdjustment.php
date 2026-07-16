@@ -7,8 +7,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class LedgerAdjustment extends Model
 {
-    public const BUSINESS_REBATE_WITHDRAWAL = 'rebate_withdrawal';
-
     public const STATUS_PENDING = 'pending';
 
     public const STATUS_SUCCEEDED = 'succeeded';
@@ -24,8 +22,6 @@ class LedgerAdjustment extends Model
     protected $fillable = [
         'ledger_no',
         'idempotency_key',
-        'business_source',
-        'business_id',
         'sub2api_user_id',
         'sub2api_source_id',
         'sub2api_user_email',

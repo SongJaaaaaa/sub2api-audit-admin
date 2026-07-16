@@ -4,8 +4,6 @@ namespace Tests\Feature;
 
 use App\Exceptions\Sub2ApiStatsException;
 use App\Models\LedgerAdjustment;
-use App\Models\Rebate\RebateConfig;
-use App\Models\Rebate\RebateScanCursor;
 use App\Services\Sub2Api\Sub2ApiAdminClient;
 use App\Services\Sub2Api\Sub2ApiReadRepository;
 use App\Support\ChinaDateRange;
@@ -34,7 +32,6 @@ class Sub2ApiClientTest extends TestCase
 
     protected function tearDown(): void
     {
-        CarbonImmutable::setTestNow();
         $this->tearDownSub2ApiDatabase();
 
         parent::tearDown();
@@ -53,8 +50,13 @@ class Sub2ApiClientTest extends TestCase
             'status' => 'disabled',
         ]);
 
+        $queries = 0;
+        DB::connection('sub2api')->listen(function () use (&$queries): void {
+            $queries++;
+        });
         $repo = app(Sub2ApiReadRepository::class);
         $res = $repo->users(['keyword' => 'alpha'], 1, 20);
+        $this->assertSame(2, $queries);
         $detail = $repo->user(1001);
 
         $this->assertSame(1, $res['total']);
@@ -104,40 +106,6 @@ class Sub2ApiClientTest extends TestCase
         $this->assertSame('2026-07-14 10:00:00', $res['items'][0]['last_used_at']);
     }
 
-    public function test_admin_api_user_search_supports_keyword_and_exact_id(): void
-    {
-        $this->withoutMiddleware();
-        Http::fake([
-            'https://sub2api.test/api/v1/admin/users?page=1&page_size=20&search=alpha' => Http::response([
-                'code' => 0,
-                'data' => ['items' => [[
-                    'id' => 1001,
-                    'email' => 'alpha@example.com',
-                    'username' => 'alpha',
-                    'status' => 'active',
-                    'balance' => '99.00',
-                ]]],
-            ]),
-            'https://sub2api.test/api/v1/admin/users/1001' => Http::response([
-                'code' => 0,
-                'data' => [
-                    'id' => 1001,
-                    'email' => 'alpha@example.com',
-                    'username' => 'alpha',
-                    'status' => 'active',
-                ],
-            ]),
-            'https://sub2api.test/api/v1/admin/users/9999' => Http::response(['message' => 'not found'], 404),
-        ]);
-
-        $this->getJson('/api/v1/sub2api/users/search?keyword=alpha')
-            ->assertOk()
-            ->assertJsonPath('items.0.id', 1001)
-            ->assertJsonMissingPath('items.0.balance');
-        $this->assertSame([1001], collect(app(Sub2ApiAdminClient::class)->searchUsers('1001'))->pluck('id')->all());
-        $this->assertSame([], app(Sub2ApiAdminClient::class)->searchUsers('9999'));
-    }
-
     public function test_active_balance_snapshot_excludes_admin_disabled_and_deleted_users(): void
     {
         $this->insertSub2ApiUser(['id' => 1001, 'balance' => '12.5']);
@@ -146,8 +114,13 @@ class Sub2ApiClientTest extends TestCase
         $this->insertSub2ApiUser(['id' => 1004, 'email' => 'disabled@example.com', 'status' => 'disabled', 'balance' => '100']);
         $this->insertSub2ApiUser(['id' => 1005, 'email' => 'deleted@example.com', 'balance' => '100', 'deleted_at' => '2026-07-01 00:00:00']);
 
+        $queries = 0;
+        DB::connection('sub2api')->listen(function () use (&$queries): void {
+            $queries++;
+        });
         $res = app(Sub2ApiReadRepository::class)->activeUserBalanceSnapshot();
 
+        $this->assertSame(1, $queries);
         $this->assertSame(2, $res['active_user_count']);
         $this->assertSame('20', $res['active_user_balance']);
         $this->assertArrayHasKey('as_of', $res);
@@ -209,150 +182,9 @@ class Sub2ApiClientTest extends TestCase
         Http::assertSent(fn (Request $req): bool => $req->url() === 'https://sub2api.test/api/v1/admin/users/1001/balance'
             && $req->hasHeader('x-api-key', 'test-key')
             && $req->hasHeader('Idempotency-Key', 'idem-1001-full')
+            && ! is_string($req['balance'])
             && (float) $req['balance'] === 10.0
             && $req['operation'] === 'add');
-    }
-
-    public function test_affiliate_user_and_direct_children_come_from_sub2api_relationships(): void
-    {
-        $this->insertSub2ApiUser(['id' => 1001]);
-        $this->insertSub2ApiUser(['id' => 1002, 'email' => 'beta@example.com', 'username' => 'beta']);
-        $this->insertSub2ApiUser(['id' => 1003, 'email' => 'gamma@example.com', 'username' => 'gamma']);
-        DB::connection('sub2api')->table('user_affiliates')->insert([
-            ['user_id' => 1001, 'aff_code' => 'A1001', 'inviter_id' => null],
-            ['user_id' => 1002, 'aff_code' => 'A1002', 'inviter_id' => 1001],
-            ['user_id' => 1003, 'aff_code' => 'A1003', 'inviter_id' => 1002],
-        ]);
-
-        $repo = app(Sub2ApiReadRepository::class);
-
-        $this->assertSame('A1002', $repo->affiliateUser(1002)['aff_code']);
-        $this->assertSame(1001, $repo->affiliateUser(1002)['parent_user_id']);
-        $this->assertSame([1002], collect($repo->affiliateChildren(1001)['items'])->pluck('id')->all());
-    }
-
-    public function test_rebate_event_sources_use_cursors_and_exclude_gifts_and_withdrawal_echo(): void
-    {
-        DB::connection('sub2api')->table('payment_orders')->insert([
-            [
-                'id' => 10,
-                'user_id' => 1001,
-                'amount' => '100.00',
-                'out_trade_no' => 'PAY-10',
-                'order_type' => 'balance',
-                'status' => 'completed',
-                'completed_at' => '2026-07-15 00:00:00',
-                'created_at' => '2026-07-15 00:00:00',
-            ],
-        ]);
-        DB::connection('sub2api')->table('redeem_codes')->insert([
-            $this->redeem(20, '2026-07-15 00:01:00', ['type' => 'balance', 'value' => '30.00']),
-            $this->redeem(30, '2026-07-15 00:02:00', ['value' => '24.00', 'notes' => Sub2ApiNoteTag::make('RBW1', 'rebate-withdrawal-1')]),
-            $this->redeem(31, '2026-07-15 00:03:00', ['value' => '10.00', 'notes' => Sub2ApiNoteTag::make('GIFT1', 'gift-1')]),
-            $this->redeem(32, '2026-07-15 00:04:00', ['value' => '10.00', 'notes' => Sub2ApiNoteTag::make('CASH1', 'cash-1')]),
-        ]);
-        foreach ([
-            [30, 'RBW1', 'rebate-withdrawal-1', LedgerAdjustment::BUSINESS_REBATE_WITHDRAWAL, '0.00', '0.00'],
-            [31, 'GIFT1', 'gift-1', null, '0.00', '10.00'],
-            [32, 'CASH1', 'cash-1', null, '8.00', '2.00'],
-        ] as [$sourceId, $ledgerNo, $key, $businessSource, $cash, $gift]) {
-            LedgerAdjustment::query()->create([
-                'ledger_no' => $ledgerNo,
-                'idempotency_key' => $key,
-                'business_source' => $businessSource,
-                'business_id' => $businessSource ? '1' : null,
-                'sub2api_user_id' => 1001,
-                'sub2api_source_id' => $sourceId,
-                'operation' => LedgerAdjustment::OP_INCREMENT,
-                'amount' => '10.00',
-                'cash_amount' => $cash,
-                'gift_quota_amount' => $gift,
-                'status' => LedgerAdjustment::STATUS_SUCCEEDED,
-                'adjust_reason' => '测试',
-            ]);
-        }
-
-        $repo = app(Sub2ApiReadRepository::class);
-        $native = $repo->rebateEvents('native_recharge', null, 10);
-        $redeem = $repo->rebateEvents('redeem', null, 10);
-        $admin = $repo->rebateEvents('admin_adjustment', null, 10);
-
-        $this->assertSame(['10'], collect($native['items'])->pluck('source_id')->all());
-        $this->assertSame(['at' => '2026-07-15 00:00:00', 'id' => 10], json_decode($native['next_cursor'], true));
-        $this->assertSame(['20'], collect($redeem['items'])->pluck('source_id')->all());
-        $this->assertSame(['32'], collect($admin['items'])->pluck('source_id')->all());
-        $this->assertSame('8.00', $admin['items'][0]['amount']);
-        $this->assertSame(['at' => '2026-07-15 00:04:00', 'id' => 32], json_decode($admin['next_cursor'], true));
-    }
-
-    public function test_rebate_cursor_does_not_miss_a_lower_id_completed_later(): void
-    {
-        DB::connection('sub2api')->table('payment_orders')->insert([
-            [
-                'id' => 10,
-                'user_id' => 1001,
-                'amount' => '20.00',
-                'out_trade_no' => 'PAY-10',
-                'order_type' => 'balance',
-                'status' => 'pending',
-                'completed_at' => null,
-                'created_at' => '2026-07-15 00:00:00',
-            ],
-            [
-                'id' => 20,
-                'user_id' => 1001,
-                'amount' => '30.00',
-                'out_trade_no' => 'PAY-20',
-                'order_type' => 'balance',
-                'status' => 'completed',
-                'completed_at' => '2026-07-15 00:01:00',
-                'created_at' => '2026-07-15 00:00:00',
-            ],
-        ]);
-        $repo = app(Sub2ApiReadRepository::class);
-        $first = $repo->rebateEvents('native_recharge', null, 10);
-
-        DB::connection('sub2api')->table('payment_orders')->where('id', 10)->update([
-            'status' => 'completed',
-            'completed_at' => '2026-07-15 00:02:00',
-        ]);
-        $second = $repo->rebateEvents('native_recharge', $first['next_cursor'], 10);
-
-        $this->assertSame(['20'], collect($first['items'])->pluck('source_id')->all());
-        $this->assertSame(['10'], collect($second['items'])->pluck('source_id')->all());
-    }
-
-    public function test_cutover_command_locks_time_and_starts_each_cursor_at_the_time_boundary(): void
-    {
-        CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-15 08:00:00.987654', 'Asia/Shanghai'));
-        $this->artisan('rebate:cutover')->assertSuccessful();
-
-        $this->assertSame(
-            '2026-07-15 08:00:00.000000',
-            RebateConfig::query()->findOrFail(1)->rebate_cutover_at->format('Y-m-d H:i:s.u'),
-        );
-        $this->assertSame(3, RebateScanCursor::query()->count());
-        foreach (RebateScanCursor::query()->pluck('cursor_value') as $cursor) {
-            $this->assertSame([
-                'at' => '2026-07-15 00:00:00',
-                'id' => 0,
-            ], json_decode($cursor, true));
-        }
-
-        DB::connection('sub2api')->table('payment_orders')->insert([
-            'id' => 99,
-            'user_id' => 1001,
-            'amount' => '10.00',
-            'out_trade_no' => 'PAY-SAME-SECOND',
-            'order_type' => 'balance',
-            'status' => 'completed',
-            'completed_at' => '2026-07-15 00:00:00',
-            'created_at' => '2026-07-15 00:00:00',
-        ]);
-        $cursor = RebateScanCursor::query()->where('source_type', 'native_recharge')->value('cursor_value');
-        $events = app(Sub2ApiReadRepository::class)->rebateEvents('native_recharge', $cursor, 10);
-
-        $this->assertSame(['99'], collect($events['items'])->pluck('source_id')->all());
     }
 
     public function test_stats_wrapper_requires_success_code(): void
