@@ -13,7 +13,7 @@ function chinaMonth() {
     year: 'numeric',
     month: '2-digit',
   }).formatToParts(new Date())
-  const part = (type: 'year' | 'month') => parts.find((item) => item.type === type)?.value || ''
+  const part = (type: 'year' | 'month') => (parts.find((item) => item.type === type)?.value || '').padStart(2, '0')
   return `${part('year')}-${part('month')}`
 }
 

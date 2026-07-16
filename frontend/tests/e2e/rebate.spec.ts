@@ -2,6 +2,11 @@ import { expect, test, type BrowserContext, type Page, type Route } from '@playw
 
 const longEmail = 'affiliate.user.with.a.very.long.business.account.name.for.mobile.layout.2026@example-company-domain.test'
 const longInviteUrl = `https://portal.example.test/register?invite=AFF-2026-LONG-CODE&source=${'campaign-'.repeat(18)}mobile`
+const currentChinaMonth = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: '2-digit',
+}).format(new Date())
 
 const affiliateUser = {
   id: 9001,
@@ -33,7 +38,7 @@ const rebateRecord = {
   source_amount: '100.00',
   rebate_amount: '15.00',
   status: 'confirmed',
-  created_at: '2026-07-15 10:10:00',
+  created_at: `${currentChinaMonth}-15 10:10:00`,
 }
 
 const rebateTrend = [
@@ -286,6 +291,10 @@ test('affiliate rebate pages handle long content and empty states without viewpo
     if (item.path === '/affiliate/promotion') {
       await expect(page.getByText(longInviteUrl, { exact: true })).toBeVisible()
       await expect(page.getByRole('button', { name: '复制邀请链接' })).toBeVisible()
+    }
+    if (item.path === '/affiliate/rebates') {
+      const monthMetric = page.locator('article').filter({ hasText: '本页本月返利' })
+      await expect(monthMetric.getByText('¥15.00', { exact: true })).toBeVisible()
     }
     if (item.path === '/affiliate/withdrawals') {
       await page.getByPlaceholder('请输入金额，如 100.00').fill('1.23')
