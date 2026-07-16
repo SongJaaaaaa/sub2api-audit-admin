@@ -368,6 +368,7 @@ test('withdrawal review refreshes server state after a lost response', async ({ 
 })
 
 test('admin and affiliate 401 responses clear only their own login state', async ({ context, page }) => {
+  await page.route('**/api/v1/dashboard**', (route) => route.abort('failed'))
   await page.goto('/login')
   await page.evaluate(({ admin, affiliate }) => {
     localStorage.setItem('adminToken', 'expired-admin-token')
