@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\Admin;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -21,16 +20,6 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => 'Test User',
                 'password' => 'password',
-            ],
-        );
-
-        Admin::query()->updateOrCreate(
-            ['email' => 'admin@example.com'],
-            [
-                'name' => '管理员',
-                'username' => 'admin',
-                'password' => '1',
-                'status' => Admin::STATUS_ACTIVE,
             ],
         );
     }

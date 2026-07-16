@@ -27,7 +27,7 @@ Route::prefix('v1')->group(function (): void {
         ]);
     });
 
-    Route::post('auth/login', [AuthController::class, 'login']);
+    Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
     Route::post('affiliate/auth/login', [AffiliateAuthController::class, 'login'])->middleware('throttle:10,1');
 
     Route::middleware(['auth:sanctum', 'admin'])->group(function (): void {
@@ -35,7 +35,6 @@ Route::prefix('v1')->group(function (): void {
         Route::post('auth/logout', [AuthController::class, 'logout']);
         Route::get('auth/admin-options', [AuthController::class, 'options']);
         Route::get('admins', [AdminController::class, 'index']);
-        Route::post('admins', [AdminController::class, 'store']);
 
         Route::get('sub2api/users', [Sub2ApiDataController::class, 'users']);
         Route::get('sub2api/users/{id}/balance-history', [Sub2ApiDataController::class, 'balanceHistory']);

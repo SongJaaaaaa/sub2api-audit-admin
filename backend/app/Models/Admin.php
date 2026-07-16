@@ -16,6 +16,7 @@ class Admin extends Authenticatable
     public const STATUS_DISABLED = 'disabled';
 
     protected $fillable = [
+        'sub2api_user_id',
         'name',
         'username',
         'email',
@@ -35,6 +36,7 @@ class Admin extends Authenticatable
     protected function casts(): array
     {
         return [
+            'sub2api_user_id' => 'integer',
             'password' => 'hashed',
         ];
     }

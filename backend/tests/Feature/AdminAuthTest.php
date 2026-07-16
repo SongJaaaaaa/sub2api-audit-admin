@@ -4,54 +4,94 @@ namespace Tests\Feature;
 
 use App\Models\Admin;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class AdminAuthTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_active_admin_can_login(): void
+    protected function setUp(): void
     {
-        $admin = Admin::query()->create([
-            'name' => '管理员',
-            'username' => 'admin',
-            'email' => 'admin@example.com',
-            'password' => 'secret123',
-            'status' => Admin::STATUS_ACTIVE,
+        parent::setUp();
+
+        config()->set('sub2api.user_api.base_url', 'https://sub2api.test');
+    }
+
+    public function test_sub2api_admin_can_login_and_is_synced(): void
+    {
+        $this->fakeRemoteUser([
+            'id' => 1,
+            'name' => 'Song',
+            'username' => 'song',
+            'email' => 'Song@qq.com',
+            'role' => 'admin',
+            'status' => 'active',
         ]);
 
         $res = $this->postJson('/api/v1/auth/login', [
-            'account' => $admin->username,
-            'password' => 'secret123',
+            'account' => 'Song@qq.com',
+            'password' => 'song123',
         ]);
 
         $res->assertOk()
-            ->assertJsonPath('admin.id', $admin->id)
-            ->assertJsonPath('admin.username', $admin->username)
-            ->assertJsonPath('admin.email', $admin->email)
-            ->assertJsonPath('admin.status', Admin::STATUS_ACTIVE)
+            ->assertJsonPath('identity_type', 'admin')
+            ->assertJsonPath('admin.sub2api_user_id', 1)
+            ->assertJsonPath('admin.username', 'song')
+            ->assertJsonPath('admin.email', 'song@qq.com')
             ->assertJsonStructure([
+                'identity_type',
                 'token',
-                'admin' => ['id', 'name', 'username', 'email', 'status'],
+                'admin' => ['id', 'sub2api_user_id', 'name', 'username', 'email', 'status'],
             ]);
+
+        $this->assertDatabaseHas('admins', [
+            'sub2api_user_id' => 1,
+            'email' => 'song@qq.com',
+            'password' => null,
+        ]);
     }
 
-    public function test_disabled_admin_cannot_login(): void
+    public function test_disabled_sub2api_admin_cannot_login(): void
     {
-        $admin = Admin::query()->create([
-            'name' => '停用管理员',
+        $this->fakeRemoteUser([
+            'id' => 2,
             'email' => 'disabled@example.com',
+            'role' => 'admin',
+            'status' => 'disabled',
+        ]);
+
+        $this->postJson('/api/v1/auth/login', [
+            'account' => 'disabled@example.com',
             'password' => 'secret123',
+        ])->assertForbidden()
+            ->assertJsonPath('message', '账号已被禁用');
+
+        $this->assertDatabaseHas('admins', [
+            'sub2api_user_id' => 2,
             'status' => Admin::STATUS_DISABLED,
         ]);
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+    }
 
-        $res = $this->postJson('/api/v1/auth/login', [
-            'email' => $admin->email,
-            'password' => 'secret123',
+    public function test_local_admin_password_is_not_a_login_source(): void
+    {
+        Admin::query()->create([
+            'name' => '旧管理员',
+            'email' => 'admin@example.com',
+            'password' => 'admin123',
+            'status' => Admin::STATUS_ACTIVE,
+        ]);
+        Http::fake([
+            'https://sub2api.test/api/v1/auth/login' => Http::response(['message' => 'invalid'], 401),
         ]);
 
-        $res->assertUnprocessable()
-            ->assertJsonValidationErrors('account');
+        $this->postJson('/api/v1/auth/login', [
+            'account' => 'admin@example.com',
+            'password' => 'admin123',
+        ])->assertUnauthorized();
+
+        $this->assertDatabaseCount('personal_access_tokens', 0);
     }
 
     public function test_guest_cannot_get_current_admin(): void
@@ -61,13 +101,7 @@ class AdminAuthTest extends TestCase
 
     public function test_admin_can_get_current_admin_and_logout(): void
     {
-        $admin = Admin::query()->create([
-            'name' => '管理员',
-            'email' => 'admin@example.com',
-            'password' => 'secret123',
-            'status' => Admin::STATUS_ACTIVE,
-        ]);
-
+        $admin = $this->admin('admin@example.com');
         $token = $admin->createToken('admin-token')->plainTextToken;
 
         $this->withToken($token)
@@ -87,24 +121,14 @@ class AdminAuthTest extends TestCase
             ->getJson('/api/v1/auth/me')
             ->assertUnauthorized();
     }
+
     public function test_admin_can_get_active_admin_options(): void
     {
-        $admin = Admin::query()->create([
-            'name' => '当前管理员',
-            'email' => 'current@example.com',
-            'password' => 'secret123',
-            'status' => Admin::STATUS_ACTIVE,
-        ]);
-        Admin::query()->create([
-            'name' => '其他管理员',
-            'email' => 'other@example.com',
-            'password' => 'secret123',
-            'status' => Admin::STATUS_ACTIVE,
-        ]);
+        $admin = $this->admin('current@example.com', '当前管理员');
+        $this->admin('other@example.com', '其他管理员');
         Admin::query()->create([
             'name' => '停用管理员',
             'email' => 'disabled@example.com',
-            'password' => 'secret123',
             'status' => Admin::STATUS_DISABLED,
         ]);
 
@@ -113,7 +137,28 @@ class AdminAuthTest extends TestCase
             ->assertOk()
             ->assertJsonCount(2, 'items')
             ->assertJsonMissing(['email' => 'disabled@example.com'])
-            ->assertJsonStructure(['items' => [['id', 'name', 'email', 'status']]]);
+            ->assertJsonStructure(['items' => [['id', 'sub2api_user_id', 'name', 'email', 'status']]]);
     }
 
+    private function admin(string $email, string $name = '管理员'): Admin
+    {
+        return Admin::query()->create([
+            'name' => $name,
+            'email' => $email,
+            'status' => Admin::STATUS_ACTIVE,
+        ]);
+    }
+
+    private function fakeRemoteUser(array $user): void
+    {
+        Http::fake([
+            'https://sub2api.test/api/v1/auth/login' => Http::response([
+                'data' => ['access_token' => 'temporary-upstream-token'],
+            ]),
+            'https://sub2api.test/api/v1/auth/me' => Http::response([
+                'data' => ['user' => $user],
+            ]),
+            'https://sub2api.test/api/v1/auth/logout' => Http::response(['code' => 0]),
+        ]);
+    }
 }

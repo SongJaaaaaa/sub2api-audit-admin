@@ -3,6 +3,7 @@ import type { PageRes } from './finance'
 
 export interface AdminOption {
   id: number
+  sub2api_user_id: number | null
   name: string
   email: string
   status: string
@@ -29,14 +30,4 @@ export function getAdmins(params: {
   status?: string
 }) {
   return http.get<unknown, PageRes<AdminAccount, AdminSummary>>('/admins', { params })
-}
-
-export function createAdmin(data: {
-  name: string
-  email: string
-  password: string
-  password_confirmation: string
-  status: 'active' | 'disabled'
-}) {
-  return http.post<unknown, { message: string; admin: AdminAccount }>('/admins', data)
 }

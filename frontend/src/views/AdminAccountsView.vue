@@ -1,23 +1,19 @@
 <script setup lang="ts">
-import { UserAddOutlined } from '@ant-design/icons-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import { onMounted, reactive, ref } from 'vue'
-import { createAdmin, getAdmins, type AdminAccount, type AdminSummary } from '../api/admin'
+import { getAdmins, type AdminAccount, type AdminSummary } from '../api/admin'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useTableColumns } from '../composables/useTableColumns'
 
 const loading = ref(false)
-const submitting = ref(false)
-const modalOpen = ref(false)
 const items = ref<AdminAccount[]>([])
 const filters = reactive({ keyword: '', status: '' })
 const summary = reactive<AdminSummary>({ admin_count: 0, active_count: 0, disabled_count: 0 })
 const page = reactive({ current: 1, pageSize: 20, total: 0 })
-const form = reactive({ name: '', email: '', password: '', password_confirmation: '', active: true })
 
 const allColumns = [
-  { title: 'ID', dataIndex: 'id', width: 90 },
+  { title: 'Sub2API ID', dataIndex: 'sub2api_user_id', width: 120 },
   { title: '管理员姓名', dataIndex: 'name', width: 180 },
   { title: '登录邮箱', dataIndex: 'email', minWidth: 240 },
   { title: '状态', dataIndex: 'status', width: 110 },
@@ -61,50 +57,11 @@ function change(pager: TablePaginationConfig) {
   loadItems()
 }
 
-function openCreate() {
-  Object.assign(form, { name: '', email: '', password: '', password_confirmation: '', active: true })
-  modalOpen.value = true
-}
-
-async function submit() {
-  if (!form.name.trim()) return void message.warning('请填写管理员姓名')
-  if (!form.email.trim()) return void message.warning('请填写登录邮箱')
-  if (form.password.length < 8) return void message.warning('密码至少 8 位')
-  if (form.password !== form.password_confirmation) return void message.warning('两次输入的密码不一致')
-
-  submitting.value = true
-  try {
-    const res = await createAdmin({
-      name: form.name.trim(),
-      email: form.email.trim(),
-      password: form.password,
-      password_confirmation: form.password_confirmation,
-      status: form.active ? 'active' : 'disabled',
-    })
-    message.success(res.message)
-    modalOpen.value = false
-    page.current = 1
-    loadItems()
-  } catch (err) {
-    const data = (err as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } }).response?.data
-    message.error(data?.errors?.email?.[0] || data?.errors?.password?.[0] || data?.message || '创建管理员失败')
-  } finally {
-    submitting.value = false
-  }
-}
-
 onMounted(loadItems)
 </script>
 
 <template>
   <section class="page adminAccountsPage">
-    <div class="pageHead pageHeadActionsOnly">
-      <a-button type="primary" @click="openCreate">
-        <template #icon><UserAddOutlined /></template>
-        新增管理员
-      </a-button>
-    </div>
-
     <div class="adminFilterBar">
       <a-input v-model:value="filters.keyword" placeholder="姓名或登录邮箱" allow-clear @press-enter="search" />
       <a-select v-model:value="filters.status" placeholder="全部状态">
@@ -143,36 +100,6 @@ onMounted(loadItems)
         </template>
       </template>
     </a-table>
-
-    <a-modal
-      v-model:open="modalOpen"
-      title="新增管理员"
-      :confirm-loading="submitting"
-      ok-text="创建账号"
-      cancel-text="取消"
-      @ok="submit"
-    >
-      <a-form layout="vertical" autocomplete="off">
-        <a-form-item label="管理员姓名" required>
-          <a-input v-model:value="form.name" placeholder="例如：运营管理员" :maxlength="100" />
-        </a-form-item>
-        <a-form-item label="登录邮箱" required>
-          <a-input v-model:value="form.email" type="email" autocomplete="off" placeholder="admin@example.com" />
-        </a-form-item>
-        <a-form-item label="登录密码" required>
-          <a-input-password v-model:value="form.password" autocomplete="new-password" placeholder="至少 8 位" :maxlength="72" />
-        </a-form-item>
-        <a-form-item label="确认密码" required>
-          <a-input-password v-model:value="form.password_confirmation" autocomplete="new-password" placeholder="再次输入密码" :maxlength="72" />
-        </a-form-item>
-        <a-form-item label="账号状态">
-          <div class="statusSwitch">
-            <a-switch v-model:checked="form.active" />
-            <span>{{ form.active ? '启用' : '停用' }}</span>
-          </div>
-        </a-form-item>
-      </a-form>
-    </a-modal>
   </section>
 </template>
 
@@ -184,7 +111,6 @@ onMounted(loadItems)
 .summaryGrid span { display: block; margin-bottom: 6px; color: var(--text-secondary, #7a8395); font-size: 12px; }
 .summaryGrid strong { font-size: 22px; }
 .activeCount { color: #389e0d; }
-.statusSwitch { display: flex; align-items: center; gap: 10px; }
 @media (max-width: 760px) {
   .adminFilterBar { grid-template-columns: minmax(0, 1fr); }
   .adminFilterBar > * { width: 100%; min-width: 0; }

@@ -13,13 +13,6 @@ import type {
 
 const base = '/affiliate'
 
-export function loginAffiliate(account: string, password: string) {
-  return affiliateHttp.post<unknown, { token: string; user: AffiliateUser }>(`${base}/auth/login`, {
-    account,
-    password,
-  })
-}
-
 export function getAffiliateMe() {
   return affiliateHttp.get<unknown, { user: AffiliateUser }>(`${base}/auth/me`)
 }

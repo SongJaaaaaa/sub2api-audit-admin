@@ -7,7 +7,7 @@ export const rebateAffiliateRoutes: RouteRecordRaw[] = [
     name: 'affiliate-login',
     redirect: (to) => ({
       name: 'login',
-      query: { ...to.query, mode: 'affiliate' },
+      query: to.query,
     }),
     meta: { guest: 'affiliate' },
   },

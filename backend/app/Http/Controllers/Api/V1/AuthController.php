@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Admin;
 use App\Services\Auth\AdminAuthService;
+use App\Services\Auth\UnifiedAuthService;
+use App\Support\RebatePresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AuthController extends Controller
 {
-    public function login(Request $req, AdminAuthService $svc): JsonResponse
+    public function login(Request $req, UnifiedAuthService $auth): JsonResponse
     {
         $req->merge([
             'account' => trim((string) $req->input('account', $req->input('email', ''))),
@@ -20,11 +22,20 @@ class AuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        $res = $svc->login($data['account'], $data['password']);
+        $res = $auth->login($data['account'], $data['password']);
+
+        if ($res['identity_type'] === 'admin') {
+            return response()->json([
+                'identity_type' => 'admin',
+                'token' => $res['token'],
+                'admin' => $this->adminData($res['admin']),
+            ]);
+        }
 
         return response()->json([
+            'identity_type' => 'affiliate',
             'token' => $res['token'],
-            'admin' => $this->adminData($res['admin']),
+            'user' => RebatePresenter::user($res['user']),
         ]);
     }
 
@@ -63,12 +74,13 @@ class AuthController extends Controller
     }
 
     /**
-     * @return array{id: int, name: string, username: ?string, email: string, status: string}
+     * @return array{id: int, sub2api_user_id: ?int, name: string, username: ?string, email: string, status: string}
      */
     private function adminData(Admin $admin): array
     {
         return [
             'id' => $admin->id,
+            'sub2api_user_id' => $admin->sub2api_user_id,
             'name' => $admin->name,
             'username' => $admin->username,
             'email' => $admin->email,

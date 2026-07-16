@@ -1,19 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { http } from '../api/http'
-
-export interface AdminInfo {
-  id: number
-  name: string
-  username: string | null
-  email: string
-  status: string
-}
-
-interface LoginRes {
-  token: string
-  admin: AdminInfo
-}
+import type { AdminInfo } from '../api/auth'
 
 interface MeRes {
   admin: AdminInfo
@@ -29,12 +17,18 @@ export const useAuthStore = defineStore('auth', () => {
   const admin = ref<AdminInfo | null>(savedAdmin())
   const authed = computed(() => token.value !== '')
 
-  async function login(account: string, password: string) {
-    const res = await http.post<unknown, LoginRes>('/auth/login', { account, password })
-    token.value = res.token
-    admin.value = res.admin
-    localStorage.setItem('adminToken', res.token)
-    localStorage.setItem('adminInfo', JSON.stringify(res.admin))
+  function save(nextToken: string, nextAdmin: AdminInfo) {
+    token.value = nextToken
+    admin.value = nextAdmin
+    localStorage.setItem('adminToken', nextToken)
+    localStorage.setItem('adminInfo', JSON.stringify(nextAdmin))
+  }
+
+  function clear() {
+    token.value = ''
+    admin.value = null
+    localStorage.removeItem('adminToken')
+    localStorage.removeItem('adminInfo')
   }
 
   async function fetchMe() {
@@ -51,17 +45,15 @@ export const useAuthStore = defineStore('auth', () => {
         // 本地退出不能被已失效 token 阻断。
       }
     }
-    token.value = ''
-    admin.value = null
-    localStorage.removeItem('adminToken')
-    localStorage.removeItem('adminInfo')
+    clear()
   }
 
   return {
     token,
     admin,
     authed,
-    login,
+    save,
+    clear,
     fetchMe,
     logout,
   }

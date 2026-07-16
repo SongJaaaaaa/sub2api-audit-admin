@@ -4,11 +4,9 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Admin;
-use App\Services\Audit\AuditLogService;
 use App\Support\ChinaTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class AdminController extends Controller
 {
@@ -51,37 +49,11 @@ class AdminController extends Controller
         ]);
     }
 
-    public function store(Request $req, AuditLogService $audit): JsonResponse
-    {
-        $username = strtolower(trim((string) $req->input('username')));
-        $req->merge([
-            'name' => trim((string) $req->input('name')),
-            'username' => $username === '' ? null : $username,
-            'email' => strtolower(trim((string) $req->input('email'))),
-        ]);
-        $data = $req->validate([
-            'name' => ['required', 'string', 'max:100'],
-            'username' => ['nullable', 'regex:/^[a-z0-9_-]+$/', 'max:50', Rule::unique('admins', 'username')],
-            'email' => ['required', 'email', 'max:255', Rule::unique('admins', 'email')],
-            'password' => ['required', 'string', 'min:8', 'max:72', 'confirmed'],
-            'status' => ['required', Rule::in([Admin::STATUS_ACTIVE, Admin::STATUS_DISABLED])],
-        ]);
-
-        unset($data['password_confirmation']);
-        $admin = Admin::query()->create($data);
-        $row = $this->row($admin);
-        $audit->record($req->user(), 'admin.create', 'admin', $admin->id, null, $row);
-
-        return response()->json([
-            'message' => '管理员账号已创建',
-            'admin' => $row,
-        ], 201);
-    }
-
     private function row(Admin $admin): array
     {
         return [
             'id' => $admin->id,
+            'sub2api_user_id' => $admin->sub2api_user_id,
             'name' => $admin->name,
             'username' => $admin->username,
             'email' => $admin->email,

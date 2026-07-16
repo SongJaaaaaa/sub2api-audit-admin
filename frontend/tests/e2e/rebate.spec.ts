@@ -14,6 +14,7 @@ const affiliateUser = {
 
 const adminInfo = {
   id: 1,
+  sub2api_user_id: 1,
   name: '管理员',
   username: 'admin',
   email: 'admin@example.com',
@@ -66,10 +67,16 @@ const teamMembers = [
 ]
 
 async function loginAdmin(page: Page) {
+  await page.route('**/api/v1/auth/login', (route) => json(route, {
+    identity_type: 'admin',
+    token: 'e2e-admin-token',
+    admin: adminInfo,
+  }))
+  await page.route('**/api/v1/auth/me', (route) => json(route, { admin: adminInfo }))
   await page.route('**/api/v1/dashboard**', (route) => route.abort('failed'))
   await page.goto('/login')
-  await page.getByPlaceholder('用户名或管理员邮箱').fill('admin')
-  await page.getByPlaceholder('密码').fill('1')
+  await page.getByPlaceholder('Sub2API 用户邮箱').fill('admin@example.com')
+  await page.getByPlaceholder('密码').fill('secret123')
   await page.locator('button[type="submit"]').click()
   await expect(page).toHaveURL(/\/$/)
 }
@@ -359,12 +366,31 @@ test('admin and affiliate 401 responses clear only their own login state', async
     localStorage.setItem('affiliateInfo', JSON.stringify(affiliate))
   }, { admin: adminInfo, affiliate: affiliateUser })
   await page.route('**/api/v1/auth/me', (route) => json(route, { message: 'Unauthenticated.' }, 401))
+  await page.route('**/api/v1/affiliate/auth/me', (route) => json(route, { user: affiliateUser }))
+  await page.route('**/api/v1/affiliate/dashboard', (route) => json(route, {
+    user: affiliateUser,
+    balance: {
+      available_amount: '0.00',
+      frozen_amount: '0.00',
+      withdrawn_amount: '0.00',
+      total_rebate_amount: '0.00',
+    },
+    direct_count: 0,
+    converted_count: 0,
+    total_direct_recharge_amount: '0.00',
+    pending_withdrawal_amount: '0.00',
+    rebate_trend: [],
+    recent_rebates: [],
+  }))
   await page.route('**/api/v1/rebate/admin/dashboard', (route) => route.abort('failed'))
 
   await page.goto('/rebate/dashboard')
-  await expect(page).toHaveURL(/\/login(?:\?|$)/)
+  await expect(page).toHaveURL(/\/affiliate\/dashboard$/)
   await expect.poll(() => savedTokens(context)).toEqual({ admin: null, affiliate: 'valid-affiliate-token' })
 
+  await page.unroute('**/api/v1/auth/me')
+  await page.route('**/api/v1/auth/me', (route) => json(route, { admin: adminInfo }))
+  await page.unroute('**/api/v1/affiliate/auth/me')
   await page.evaluate(({ admin }) => {
     localStorage.setItem('adminToken', 'valid-admin-token')
     localStorage.setItem('adminInfo', JSON.stringify(admin))
@@ -374,6 +400,6 @@ test('admin and affiliate 401 responses clear only their own login state', async
   await page.route('**/api/v1/affiliate/dashboard', (route) => route.abort('failed'))
 
   await page.goto('/affiliate/dashboard')
-  await expect(page).toHaveURL(/\/affiliate\/login(?:\?|$)/)
+  await expect(page).toHaveURL(/\/$/)
   await expect.poll(() => savedTokens(context)).toEqual({ admin: 'valid-admin-token', affiliate: null })
 })

@@ -45,7 +45,7 @@ class RebateAuthIsolationTest extends TestCase
                 'data' => ['access_token' => 'temporary-upstream-token'],
             ]),
             'https://sub2api.test/api/v1/auth/me' => Http::response([
-                'data' => ['user' => ['id' => 1001]],
+                'data' => ['user' => ['id' => 1001, 'role' => 'user', 'status' => 'active']],
             ]),
             'https://sub2api.test/api/v1/auth/logout' => Http::response(['code' => 0]),
         ]);
@@ -68,6 +68,31 @@ class RebateAuthIsolationTest extends TestCase
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://sub2api.test/api/v1/auth/me'
             && $request->hasHeader('Authorization', 'Bearer temporary-upstream-token'));
         Http::assertSent(fn (Request $request): bool => $request->url() === 'https://sub2api.test/api/v1/auth/logout');
+    }
+
+    public function test_unified_login_routes_regular_user_to_affiliate_identity(): void
+    {
+        Http::fake([
+            'https://sub2api.test/api/v1/auth/login' => Http::response([
+                'data' => ['access_token' => 'temporary-upstream-token'],
+            ]),
+            'https://sub2api.test/api/v1/auth/me' => Http::response([
+                'data' => ['user' => ['id' => 1001, 'role' => 'user', 'status' => 'active']],
+            ]),
+            'https://sub2api.test/api/v1/auth/logout' => Http::response(['code' => 0]),
+        ]);
+
+        $response = $this->postJson('/api/v1/auth/login', [
+            'account' => 'alpha@example.com',
+            'password' => 'secret123',
+        ])->assertOk()
+            ->assertJsonPath('identity_type', 'affiliate')
+            ->assertJsonPath('user.id', 1001)
+            ->assertJsonMissingPath('admin');
+
+        $token = (string) $response->json('token');
+        $this->withToken($token)->getJson('/api/v1/affiliate/dashboard')->assertOk();
+        $this->withToken($token)->getJson('/api/v1/dashboard')->assertForbidden();
     }
 
     public function test_admin_token_cannot_access_affiliate_api(): void

@@ -18,6 +18,16 @@ class AffiliateAuthService
     public function login(string $account, string $password): array
     {
         $remote = $this->client->authenticate($account, $password)['user'];
+
+        return $this->loginRemote($remote);
+    }
+
+    public function loginRemote(array $remote): array
+    {
+        if (($remote['role'] ?? null) !== 'user') {
+            abort(403, '该账号不是推广用户');
+        }
+
         $userData = $this->read->affiliateUser((int) $remote['id']);
         if ($userData === null) {
             abort(502, 'Sub2API 用户资料不存在');

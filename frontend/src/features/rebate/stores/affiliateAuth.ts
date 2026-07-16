@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { getAffiliateMe, loginAffiliate, logoutAffiliate } from '../api/affiliate'
+import { getAffiliateMe, logoutAffiliate } from '../api/affiliate'
 import type { AffiliateUser } from '../types'
 
 const savedUser = () => {
@@ -27,11 +27,6 @@ export const useAffiliateAuthStore = defineStore('affiliateAuth', () => {
     localStorage.removeItem('affiliateInfo')
   }
 
-  async function login(account: string, password: string) {
-    const res = await loginAffiliate(account, password)
-    save(res.token, res.user)
-  }
-
   async function fetchMe() {
     const res = await getAffiliateMe()
     user.value = res.user
@@ -49,5 +44,5 @@ export const useAffiliateAuthStore = defineStore('affiliateAuth', () => {
     clear()
   }
 
-  return { token, user, authed, login, fetchMe, logout, clear }
+  return { token, user, authed, save, fetchMe, logout, clear }
 })
