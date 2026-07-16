@@ -5,7 +5,10 @@ export const rebateAffiliateRoutes: RouteRecordRaw[] = [
   {
     path: '/affiliate/login',
     name: 'affiliate-login',
-    component: () => import('./pages/affiliate/Login.vue'),
+    redirect: (to) => ({
+      name: 'login',
+      query: { ...to.query, mode: 'affiliate' },
+    }),
     meta: { guest: 'affiliate' },
   },
   {

@@ -39,6 +39,7 @@ export const router = createRouter({
 router.beforeEach((to) => {
   const adminToken = localStorage.getItem('adminToken')
   const affiliateToken = localStorage.getItem('affiliateToken')
+  const loginMode = to.query.mode === 'affiliate' ? 'affiliate' : 'admin'
 
   if (to.meta.auth === 'admin' && !adminToken) {
     return { name: 'login', query: { redirect: to.fullPath } }
@@ -46,10 +47,10 @@ router.beforeEach((to) => {
   if (to.meta.auth === 'affiliate' && !affiliateToken) {
     return { name: 'affiliate-login', query: { redirect: to.fullPath } }
   }
-  if (to.name === 'login' && adminToken) {
+  if (to.name === 'login' && loginMode === 'admin' && adminToken) {
     return { name: 'dashboard' }
   }
-  if (to.name === 'affiliate-login' && affiliateToken) {
+  if ((to.name === 'affiliate-login' || (to.name === 'login' && loginMode === 'affiliate')) && affiliateToken) {
     return { name: 'affiliate-dashboard' }
   }
 
