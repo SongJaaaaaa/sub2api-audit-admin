@@ -11,7 +11,7 @@ return [
     ],
 
     'user_api' => [
-        'base_url' => env('SUB2API_USER_API_URL'),
+        'base_url' => env('SUB2API_USER_API_URL') ?: env('SUB2API_ADMIN_API_URL'),
         'timeout' => env('SUB2API_USER_API_TIMEOUT', 10),
     ],
 ];

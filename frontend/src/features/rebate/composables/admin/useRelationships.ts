@@ -29,9 +29,11 @@ export function useRelationships() {
 
   async function loadUsers(keyword: string) {
     userLoading.value = true
+    error.value = ''
     try {
       users.value = (await searchSub2Users(keyword)).items
     } catch (err) {
+      users.value = []
       error.value = apiMessage(err, '搜索 Sub2API 用户失败')
     } finally {
       userLoading.value = false

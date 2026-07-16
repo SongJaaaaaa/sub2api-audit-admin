@@ -32,7 +32,7 @@ const form = defineModel<RebateConfigInput>({ required: true })
 </template>
 
 <style scoped>
-.configWorkspace { display: grid; min-width: 0; grid-template-columns: 224px minmax(0, 1fr); gap: 24px; align-items: start; }
+.configWorkspace { display: grid; min-width: 0; grid-template-columns: 168px minmax(0, 1fr); gap: 16px; align-items: start; }
 .configContent { display: flex; min-width: 0; flex-direction: column; gap: 24px; }
 .configFooter { padding: 8px 4px 0; color: var(--rebate-muted); font-size: 12px; line-height: 20px; }
 

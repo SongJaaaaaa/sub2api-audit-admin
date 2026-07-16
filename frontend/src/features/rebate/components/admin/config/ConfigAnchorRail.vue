@@ -32,22 +32,22 @@ function jump(id: string) {
 </template>
 
 <style scoped>
-.configRail { position: sticky; top: 16px; width: 224px; padding-top: 8px; }
+.configRail { position: sticky; top: 16px; width: 168px; padding-top: 4px; }
 .configRail nav { display: flex; flex-direction: column; }
 .configRail button {
   display: flex;
   width: 100%;
-  min-height: 48px;
-  padding: 0 14px;
+  min-height: 42px;
+  padding: 0 10px;
   align-items: center;
   justify-content: space-between;
   border: 0;
-  border-left: 4px solid transparent;
+  border-left: 3px solid transparent;
   background: transparent;
   color: var(--rebate-muted);
   cursor: pointer;
   font: inherit;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   text-align: left;
 }
