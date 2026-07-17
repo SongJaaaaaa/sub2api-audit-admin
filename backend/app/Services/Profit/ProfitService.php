@@ -93,6 +93,14 @@ class ProfitService
         })->values();
         $incomeTotal = Money::sum($rows->pluck('income_total'));
         $expenseTotal = Money::sum($rows->pluck('expense_total'));
+        $pendingIncome = $this->pendingIncomeQuery($startDate, $endDate)
+            ->selectRaw('COUNT(*) as record_count, COALESCE(SUM(cash_amount), 0) as amount_total')
+            ->first();
+        $pendingExpenses = $this->pendingExpenseQuery($startDate, $endDate)
+            ->selectRaw('COUNT(*) as record_count, COALESCE(SUM(amount), 0) as amount_total')
+            ->first();
+        $pendingIncomeTotal = Money::fmt($pendingIncome->amount_total);
+        $pendingExpenseTotal = Money::fmt($pendingExpenses->amount_total);
 
         return [
             'owners' => $owners,
@@ -103,6 +111,13 @@ class ProfitService
                 'profit_total' => Money::sub($incomeTotal, $expenseTotal),
                 'income_count' => $rows->sum('income_count'),
                 'expense_count' => $rows->sum('expense_count'),
+            ],
+            'pending_summary' => [
+                'income_total' => $pendingIncomeTotal,
+                'expense_total' => $pendingExpenseTotal,
+                'profit_total' => Money::sub($pendingIncomeTotal, $pendingExpenseTotal),
+                'income_count' => (int) $pendingIncome->record_count,
+                'expense_count' => (int) $pendingExpenses->record_count,
             ],
         ];
     }
@@ -141,8 +156,8 @@ class ProfitService
     public function settle(Admin $admin, string $startDate, string $endDate): ProfitSettlement
     {
         $batch = DB::transaction(function () use ($admin, $startDate, $endDate): ProfitSettlement {
-            $income = $this->incomeQuery($startDate, $endDate)->with('creator:id,name,email')->lockForUpdate()->get();
-            $expenses = $this->expenseQuery($startDate, $endDate)->with('creator:id,name,email')->lockForUpdate()->get();
+            $income = $this->pendingIncomeQuery($startDate, $endDate)->with('creator:id,name,email')->lockForUpdate()->get();
+            $expenses = $this->pendingExpenseQuery($startDate, $endDate)->with('creator:id,name,email')->lockForUpdate()->get();
             if ($income->isEmpty() && $expenses->isEmpty()) {
                 abort(422, '该日期范围没有待分账流水');
             }
@@ -294,7 +309,6 @@ class ProfitService
 
         return CashEntry::query()
             ->where('profit_eligible', true)
-            ->whereNull('profit_settlement_id')
             ->where('created_at', '>=', $range->localStartText())
             ->where('created_at', '<', $range->localEndExclusiveText());
     }
@@ -305,9 +319,18 @@ class ProfitService
 
         return OperationExpense::query()
             ->where('profit_eligible', true)
-            ->whereNull('profit_settlement_id')
             ->where('paid_at', '>=', $startDate)
             ->where('paid_at', '<=', $endDate);
+    }
+
+    private function pendingIncomeQuery(string $startDate, string $endDate): Builder
+    {
+        return $this->incomeQuery($startDate, $endDate)->whereNull('profit_settlement_id');
+    }
+
+    private function pendingExpenseQuery(string $startDate, string $endDate): Builder
+    {
+        return $this->expenseQuery($startDate, $endDate)->whereNull('profit_settlement_id');
     }
 
     private function ownerName(?Admin $admin): string

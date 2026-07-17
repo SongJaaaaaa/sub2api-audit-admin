@@ -20,6 +20,7 @@ import {
   type ProfitSummary,
 } from '../api/profit'
 
+const emptySummary = (): ProfitSummary => ({ income_total: '0.00', expense_total: '0.00', profit_total: '0.00', income_count: 0, expense_count: 0 })
 const activeTab = ref('pending')
 const dates = ref<[Dayjs, Dayjs] | null>([dayjs().subtract(6, 'day'), dayjs()])
 const loading = ref(false)
@@ -27,7 +28,8 @@ const settling = ref(false)
 const confirmOpen = ref(false)
 const owners = ref<ProfitOwner[]>([])
 const days = ref<ProfitDay[]>([])
-const summary = reactive<ProfitSummary>({ income_total: '0.00', expense_total: '0.00', profit_total: '0.00', income_count: 0, expense_count: 0 })
+const summary = reactive<ProfitSummary>(emptySummary())
+const pendingSummary = reactive<ProfitSummary>(emptySummary())
 
 const detailOpen = ref(false)
 const detailLoading = ref(false)
@@ -44,13 +46,14 @@ const batchLoading = ref(false)
 const selectedBatch = ref<ProfitSettlement | null>(null)
 const batchItems = ref<ProfitSettlementItem[]>([])
 
-const canSettle = computed(() => summary.income_count + summary.expense_count > 0)
+const pendingCount = computed(() => pendingSummary.income_count + pendingSummary.expense_count)
+const canSettle = computed(() => !loading.value && pendingCount.value > 0)
 const incomeOwners = computed(() => owners.value.filter(owner => owner.income_count > 0))
 const expenseOwners = computed(() => owners.value.filter(owner => owner.expense_count > 0))
 const tableWidth = computed(() => 475 + (incomeOwners.value.length + expenseOwners.value.length) * 140)
 const batchIncome = computed(() => batchItems.value.filter(row => row.item_type === 'cash_entry'))
 const batchExpenses = computed(() => batchItems.value.filter(row => row.item_type === 'operation_expense'))
-const pendingColumns = computed(() => [
+const profitColumns = computed(() => [
   { title: '日期', dataIndex: 'biz_date', key: 'biz_date', fixed: 'left', width: 110 },
   {
     title: '收入',
@@ -128,15 +131,21 @@ function apiMessage(err: unknown, fallback: string) {
   return (err as any)?.response?.data?.message || fallback
 }
 
+function clearPending() {
+  Object.assign(pendingSummary, emptySummary())
+}
+
 async function loadSummary() {
   const range = params()
   if (!range) return void message.warning('请选择日期范围')
+  clearPending()
   loading.value = true
   try {
     const res = await getProfitSummary(range)
     owners.value = res.owners
     days.value = res.days
     Object.assign(summary, res.summary)
+    Object.assign(pendingSummary, res.pending_summary)
   } catch (err) {
     message.error(apiMessage(err, '读取利润统计失败'))
   } finally {
@@ -219,7 +228,7 @@ async function openBatch(row: ProfitSettlement) {
 function reverseBatch(row: ProfitSettlement) {
   Modal.confirm({
     title: '确认撤销该分账批次？',
-    content: `${row.start_date} 至 ${row.end_date} 的流水将重新进入待分账统计。`,
+    content: `${row.start_date} 至 ${row.end_date} 的流水将重新进入待分账状态。`,
     okText: '撤销分账',
     okType: 'danger',
     cancelText: '取消',
@@ -242,15 +251,15 @@ onMounted(() => Promise.all([loadSummary(), loadSettlements()]))
 <template>
   <section class="page profitPage">
     <a-tabs v-model:active-key="activeTab">
-      <a-tab-pane key="pending" tab="待分账统计">
+      <a-tab-pane key="pending" tab="利润明细">
         <div class="profitToolbar">
-          <a-range-picker v-model:value="dates" />
+          <a-range-picker v-model:value="dates" @change="clearPending" />
           <a-button type="primary" :loading="loading" @click="loadSummary"><SearchOutlined />查询</a-button>
-          <a-button type="primary" danger :disabled="!canSettle" @click="confirmOpen = true"><CheckOutlined />确认分账</a-button>
+          <a-button type="primary" danger :disabled="!canSettle" @click="confirmOpen = true"><CheckOutlined />确认分账（{{ pendingCount }} 笔）</a-button>
         </div>
 
         <div class="profitSummary">
-          <section><span>待分账收入</span><strong class="money">{{ summary.income_total }}</strong></section>
+          <section><span>收入合计</span><strong class="money">{{ summary.income_total }}</strong></section>
           <section><span>经营支出</span><strong class="money expenseValue">{{ summary.expense_total }}</strong></section>
           <section><span>净利润</span><strong class="money" :class="{ negative: Number(summary.profit_total) < 0 }">{{ summary.profit_total }}</strong></section>
           <section><span>收入笔数</span><strong>{{ summary.income_count }}</strong></section>
@@ -260,12 +269,12 @@ onMounted(() => Promise.all([loadSummary(), loadSettlements()]))
         <a-table
           row-key="biz_date"
           :custom-row="dayRow"
-          :columns="pendingColumns"
+          :columns="profitColumns"
           :data-source="days"
           :loading="loading"
           :pagination="false"
           :scroll="{ x: tableWidth }"
-          :locale="{ emptyText: '当前日期范围暂无待分账流水' }"
+          :locale="{ emptyText: '当前日期范围暂无收支流水' }"
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.dataIndex === 'income_total' || column.dataIndex === 'expense_total'">
@@ -347,9 +356,9 @@ onMounted(() => Promise.all([loadSummary(), loadSettlements()]))
     <a-modal v-model:open="confirmOpen" title="确认分账" :confirm-loading="settling" ok-text="确认分账" cancel-text="取消" @ok="confirmSettlement">
       <a-descriptions :column="1" bordered size="small">
         <a-descriptions-item label="日期范围">{{ params()?.start_date }} 至 {{ params()?.end_date }}</a-descriptions-item>
-        <a-descriptions-item label="收入">{{ summary.income_total }}（{{ summary.income_count }} 笔）</a-descriptions-item>
-        <a-descriptions-item label="支出">{{ summary.expense_total }}（{{ summary.expense_count }} 笔）</a-descriptions-item>
-        <a-descriptions-item label="净利润"><strong class="money">{{ summary.profit_total }}</strong></a-descriptions-item>
+        <a-descriptions-item label="待分账收入">{{ pendingSummary.income_total }}（{{ pendingSummary.income_count }} 笔）</a-descriptions-item>
+        <a-descriptions-item label="待分账支出">{{ pendingSummary.expense_total }}（{{ pendingSummary.expense_count }} 笔）</a-descriptions-item>
+        <a-descriptions-item label="待分账净利润"><strong class="money">{{ pendingSummary.profit_total }}</strong></a-descriptions-item>
       </a-descriptions>
     </a-modal>
 

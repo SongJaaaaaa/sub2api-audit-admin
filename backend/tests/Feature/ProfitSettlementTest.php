@@ -22,7 +22,7 @@ class ProfitSettlementTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_summary_groups_new_unsettled_rows_by_date_and_admin(): void
+    public function test_summary_groups_eligible_rows_by_date_and_admin(): void
     {
         $first = $this->admin('爱吃胡萝卜');
         $second = $this->admin('牛宝');
@@ -70,7 +70,12 @@ class ProfitSettlementTest extends TestCase
             ->assertJsonPath('summary.expense_total', '6600.00')
             ->assertJsonPath('summary.profit_total', '-2940.00')
             ->assertJsonPath('summary.income_count', 2)
-            ->assertJsonPath('summary.expense_count', 3);
+            ->assertJsonPath('summary.expense_count', 3)
+            ->assertJsonPath('pending_summary.income_total', '3660.00')
+            ->assertJsonPath('pending_summary.expense_total', '6600.00')
+            ->assertJsonPath('pending_summary.profit_total', '-2940.00')
+            ->assertJsonPath('pending_summary.income_count', 2)
+            ->assertJsonPath('pending_summary.expense_count', 3);
     }
 
     public function test_summary_keeps_unknown_admin_in_owner_breakdown(): void
@@ -95,7 +100,10 @@ class ProfitSettlementTest extends TestCase
             ->assertJsonPath('days.0.expense_by_owner.0', '5.67')
             ->assertJsonPath('summary.income_total', '12.34')
             ->assertJsonPath('summary.expense_total', '5.67')
-            ->assertJsonPath('summary.profit_total', '6.67');
+            ->assertJsonPath('summary.profit_total', '6.67')
+            ->assertJsonPath('pending_summary.income_total', '12.34')
+            ->assertJsonPath('pending_summary.expense_total', '5.67')
+            ->assertJsonPath('pending_summary.profit_total', '6.67');
     }
 
     public function test_confirm_late_entry_and_reverse_flow(): void
@@ -126,12 +134,34 @@ class ProfitSettlementTest extends TestCase
             ->assertStatus(422)
             ->assertJsonPath('message', '该日期范围没有待分账流水');
 
+        $this->withToken($token)
+            ->getJson('/api/v1/profit/summary?start_date=2026-07-04&end_date=2026-07-04')
+            ->assertOk()
+            ->assertJsonPath('owners.0.name', '爱吃胡萝卜')
+            ->assertJsonPath('days.0.income_by_owner.'.$admin->id, '3200.00')
+            ->assertJsonPath('days.0.expense_by_owner.'.$admin->id, '1500.00')
+            ->assertJsonPath('summary.income_total', '3200.00')
+            ->assertJsonPath('summary.expense_total', '1500.00')
+            ->assertJsonPath('pending_summary.income_total', '0.00')
+            ->assertJsonPath('pending_summary.expense_total', '0.00')
+            ->assertJsonPath('pending_summary.income_count', 0)
+            ->assertJsonPath('pending_summary.expense_count', 0);
+        $this->withToken($token)
+            ->getJson('/api/v1/profit/details?biz_date=2026-07-04')
+            ->assertOk()
+            ->assertJsonCount(1, 'income')
+            ->assertJsonCount(1, 'expenses')
+            ->assertJsonPath('income.0.owner_name', '爱吃胡萝卜')
+            ->assertJsonPath('expenses.0.owner_name', '爱吃胡萝卜');
+
         $late = $this->cash($admin, '500.00', '2026-07-04 18:00:00');
         $this->withToken($token)
             ->getJson('/api/v1/profit/summary?start_date=2026-07-04&end_date=2026-07-04')
             ->assertOk()
-            ->assertJsonPath('summary.income_total', '500.00')
-            ->assertJsonPath('summary.expense_total', '0.00');
+            ->assertJsonPath('summary.income_total', '3700.00')
+            ->assertJsonPath('summary.expense_total', '1500.00')
+            ->assertJsonPath('pending_summary.income_total', '500.00')
+            ->assertJsonPath('pending_summary.expense_total', '0.00');
 
         $this->withToken($token)->postJson("/api/v1/profit/settlements/{$batchId}/reverse")
             ->assertOk()
@@ -144,11 +174,45 @@ class ProfitSettlementTest extends TestCase
         $this->withToken($token)
             ->getJson('/api/v1/profit/summary?start_date=2026-07-04&end_date=2026-07-04')
             ->assertJsonPath('summary.income_total', '3700.00')
-            ->assertJsonPath('summary.expense_total', '1500.00');
+            ->assertJsonPath('summary.expense_total', '1500.00')
+            ->assertJsonPath('pending_summary.income_total', '3700.00')
+            ->assertJsonPath('pending_summary.expense_total', '1500.00');
 
         $this->withToken($token)->postJson("/api/v1/profit/settlements/{$batchId}/reverse")
             ->assertStatus(422)
             ->assertJsonPath('message', '该分账批次已撤销');
+    }
+
+    public function test_late_settlement_only_processes_pending_rows(): void
+    {
+        $admin = $this->admin('小铺');
+        $first = $this->cash($admin, '100.00', '2026-07-09 09:00:00');
+        $token = $admin->createToken('profit-pending')->plainTextToken;
+        $firstBatch = $this->withToken($token)->postJson('/api/v1/profit/settlements', [
+            'start_date' => '2026-07-09',
+            'end_date' => '2026-07-09',
+        ])->assertCreated()->json('settlement');
+
+        $late = $this->cash($admin, '25.00', '2026-07-09 18:00:00');
+        $secondBatch = $this->withToken($token)->postJson('/api/v1/profit/settlements', [
+            'start_date' => '2026-07-09',
+            'end_date' => '2026-07-09',
+        ])->assertCreated()
+            ->assertJsonPath('settlement.income_total', '25.00')
+            ->assertJsonPath('settlement.income_count', 1)
+            ->assertJsonPath('settlement.expense_count', 0)
+            ->json('settlement');
+
+        $this->assertSame((int) $firstBatch['id'], $first->refresh()->profit_settlement_id);
+        $this->assertSame((int) $secondBatch['id'], $late->refresh()->profit_settlement_id);
+        $this->assertDatabaseCount('profit_settlement_items', 2);
+        $this->withToken($token)
+            ->getJson('/api/v1/profit/summary?start_date=2026-07-09&end_date=2026-07-09')
+            ->assertOk()
+            ->assertJsonPath('owners.0.name', '小铺')
+            ->assertJsonPath('summary.income_total', '125.00')
+            ->assertJsonPath('pending_summary.income_total', '0.00')
+            ->assertJsonPath('pending_summary.income_count', 0);
     }
 
     public function test_validation_auth_and_batch_items(): void
@@ -188,7 +252,8 @@ class ProfitSettlementTest extends TestCase
             ->getJson('/api/v1/profit/summary?start_date=2026-07-08&end_date=2026-07-08')
             ->assertOk()
             ->assertJsonPath('owners.0.income_total', '900719925474099.92')
-            ->assertJsonPath('summary.income_total', '900719925474099.92');
+            ->assertJsonPath('summary.income_total', '900719925474099.92')
+            ->assertJsonPath('pending_summary.income_total', '900719925474099.92');
         $this->withToken($token)->postJson('/api/v1/profit/settlements', [
             'start_date' => '2026-07-08',
             'end_date' => '2026-07-08',

@@ -42,6 +42,7 @@ test('admin can login and open core business pages', async ({ page }) => {
         owners: [],
         days: [],
         summary: { income_total: '0.00', expense_total: '0.00', profit_total: '0.00', income_count: 0, expense_count: 0 },
+        pending_summary: { income_total: '0.00', expense_total: '0.00', profit_total: '0.00', income_count: 0, expense_count: 0 },
       }
     } else if (path.endsWith('/reconciliations')) {
       body = {

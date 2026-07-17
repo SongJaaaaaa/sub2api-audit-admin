@@ -86,7 +86,7 @@ export interface ProfitSettlementItem {
 }
 
 export function getProfitSummary(params: { start_date: string; end_date: string }) {
-  return http.get<unknown, { owners: ProfitOwner[]; days: ProfitDay[]; summary: ProfitSummary }>('/profit/summary', { params })
+  return http.get<unknown, { owners: ProfitOwner[]; days: ProfitDay[]; summary: ProfitSummary; pending_summary: ProfitSummary }>('/profit/summary', { params })
 }
 
 export function getProfitDetails(bizDate: string) {
