@@ -29,17 +29,31 @@ class ProfitService
             ->selectRaw('paid_at as biz_date, created_by as owner_id, COUNT(*) as record_count, SUM(amount) as amount_total')
             ->groupBy('paid_at', 'created_by')
             ->get();
-        $ownerIds = $income->pluck('owner_id')->merge($expenses->pluck('owner_id'))->filter()->unique()->values();
+        $ownerIds = $income->pluck('owner_id')
+            ->merge($expenses->pluck('owner_id'))
+            ->map(fn ($id): int => (int) ($id ?? 0))
+            ->unique()
+            ->sort()
+            ->values();
         $admins = Admin::query()->whereIn('id', $ownerIds)->get(['id', 'name', 'email'])->keyBy('id');
-        $owners = $ownerIds->map(function ($id) use ($admins): array {
+        $incomeByOwner = $income->groupBy(fn ($row): int => (int) ($row->owner_id ?? 0));
+        $expensesByOwner = $expenses->groupBy(fn ($row): int => (int) ($row->owner_id ?? 0));
+        $owners = $ownerIds->map(function ($id) use ($admins, $incomeByOwner, $expensesByOwner): array {
+            $id = (int) $id;
             $admin = $admins->get((int) $id);
+            $ownerIncome = $incomeByOwner->get($id, collect());
+            $ownerExpenses = $expensesByOwner->get($id, collect());
 
             return [
-                'id' => (int) $id,
+                'id' => $id,
                 'name' => $admin?->name ?? '未知管理员',
                 'email' => $admin?->email,
+                'income_total' => Money::sum($ownerIncome->pluck('amount_total')),
+                'income_count' => (int) $ownerIncome->sum('record_count'),
+                'expense_total' => Money::sum($ownerExpenses->pluck('amount_total')),
+                'expense_count' => (int) $ownerExpenses->sum('record_count'),
             ];
-        })->sortBy('id')->values()->all();
+        })->values()->all();
         $days = collect($range->dates())->mapWithKeys(fn (string $date): array => [$date => [
             'biz_date' => $date,
             'income_by_owner' => [],
@@ -54,7 +68,8 @@ class ProfitService
         foreach ($income as $row) {
             $date = (string) $row->biz_date;
             $day = $days->get($date);
-            $day['income_by_owner'][(int) $row->owner_id] = Money::fmt($row->amount_total);
+            $ownerId = (int) ($row->owner_id ?? 0);
+            $day['income_by_owner'][$ownerId] = Money::fmt($row->amount_total);
             $day['income_total'] = Money::add($day['income_total'], $row->amount_total);
             $day['income_count'] += (int) $row->record_count;
             $days->put($date, $day);
@@ -62,7 +77,8 @@ class ProfitService
         foreach ($expenses as $row) {
             $date = (string) $row->biz_date;
             $day = $days->get($date);
-            $day['expense_by_owner'][(int) $row->owner_id] = Money::fmt($row->amount_total);
+            $ownerId = (int) ($row->owner_id ?? 0);
+            $day['expense_by_owner'][$ownerId] = Money::fmt($row->amount_total);
             $day['expense_total'] = Money::add($day['expense_total'], $row->amount_total);
             $day['expense_count'] += (int) $row->record_count;
             $days->put($date, $day);
@@ -70,6 +86,8 @@ class ProfitService
 
         $rows = $days->map(function (array $day): array {
             $day['profit_total'] = Money::sub($day['income_total'], $day['expense_total']);
+            $day['income_by_owner'] = (object) $day['income_by_owner'];
+            $day['expense_by_owner'] = (object) $day['expense_by_owner'];
 
             return $day;
         })->values();

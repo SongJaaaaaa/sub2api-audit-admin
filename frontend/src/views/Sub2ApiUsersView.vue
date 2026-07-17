@@ -27,7 +27,7 @@ const userFilter = ref<'zero_balance' | 'negative_balance' | 'disabled' | ''>(''
 const lastUsedRange = ref<[Dayjs, Dayjs] | null>(null)
 const batchMode = ref<'selected' | 'all'>('selected')
 const batchProgress = ref('')
-const batchForm = reactive({ amount: '', admin_notes: '' })
+const batchForm = reactive({ amount: '', admin_notes: '', include_revenue: false })
 const page = reactive({
   current: 1,
   pageSize: 20,
@@ -39,8 +39,8 @@ const page = reactive({
 
 const allColumns = [
   { title: 'ID', dataIndex: 'id', width: 90 },
-  { title: '邮箱', dataIndex: 'email' },
-  { title: '用户名', dataIndex: 'username' },
+  { title: '邮箱', dataIndex: 'email', width: 220 },
+  { title: '用户名', dataIndex: 'username', width: 140 },
   { title: '角色', dataIndex: 'role', width: 100 },
   { title: '余额', dataIndex: 'balance', align: 'right', width: 120 },
   { title: 'Sub2API 累计充值字段', dataIndex: 'total_recharged', align: 'right', width: 190 },
@@ -49,7 +49,7 @@ const allColumns = [
   { title: '创建时间', dataIndex: 'created_at', width: 180 },
   { title: '操作', dataIndex: 'action', fixed: 'right', width: 90 },
 ] as const
-const { columns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('sub2api-users-columns', allColumns, 1200)
+const { columns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('sub2api-users-columns', allColumns, 1480)
 const selectedUsers = computed(() => users.value.filter(row => selectedIds.value.includes(row.id)))
 const batchCount = computed(() => batchMode.value === 'selected' ? selectedIds.value.length : page.total)
 const rowSelection = computed(() => ({
@@ -136,6 +136,7 @@ function openBatchGift() {
   batchMode.value = selectedIds.value.length > 0 ? 'selected' : 'all'
   batchForm.amount = ''
   batchForm.admin_notes = '管理员赠送'
+  batchForm.include_revenue = false
   batchProgress.value = ''
   batchOpen.value = true
 }
@@ -174,6 +175,7 @@ async function submitBatchGift() {
         user_ids: chunk,
         amount: batchForm.amount,
         admin_notes: batchForm.admin_notes,
+        include_revenue: batchForm.include_revenue,
       })
       success += res.success_count
       failed += res.failed_count
@@ -213,6 +215,10 @@ function absVal(v: string | number) {
   return Math.abs(Number(v || 0)).toFixed(2)
 }
 
+function moneyText(v: string | number) {
+  return Number(v || 0).toFixed(2)
+}
+
 function typeLabel(type: string) {
   const map: Record<string, string> = {
     admin_balance: '管理员调额',
@@ -233,7 +239,7 @@ onMounted(loadUsers)
       <div class="headActions userFilters">
         <div v-if="loaded" class="compactSummary">
           <span>用户 {{ summary.user_count }}</span>
-          <span>余额 <strong>{{ summary.balance_total }}</strong></span>
+          <span>余额 <strong>{{ moneyText(summary.balance_total) }}</strong></span>
         </div>
         <a-select v-model:value="userFilter" class="userFilterSelect" @change="changeUserFilter">
           <a-select-option value="">全部用户</a-select-option>
@@ -285,10 +291,10 @@ onMounted(loadUsers)
           </a-tag>
         </template>
         <template v-if="column.dataIndex === 'balance'">
-          <span class="money">{{ record.balance }}</span>
+          <span class="money">{{ moneyText(record.balance) }}</span>
         </template>
         <template v-if="column.dataIndex === 'total_recharged'">
-          <span class="money">{{ record.total_recharged }}</span>
+          <span class="money">{{ moneyText(record.total_recharged) }}</span>
         </template>
         <template v-if="column.dataIndex === 'last_used_at'">
           {{ record.last_used_at || '从未使用' }}
@@ -336,6 +342,12 @@ onMounted(loadUsers)
         </a-form-item>
         <a-form-item label="每人赠送额度" required>
           <a-input v-model:value="batchForm.amount" placeholder="0.00" />
+        </a-form-item>
+        <a-form-item label="营收入账">
+          <a-radio-group v-model:value="batchForm.include_revenue" class="batchScope">
+            <a-radio :value="false">不计入营收</a-radio>
+            <a-radio :value="true">计入营收</a-radio>
+          </a-radio-group>
         </a-form-item>
         <a-form-item label="备注">
           <a-textarea v-model:value="batchForm.admin_notes" :rows="3" placeholder="管理员赠送" />

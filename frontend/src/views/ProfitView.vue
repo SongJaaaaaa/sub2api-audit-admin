@@ -45,38 +45,40 @@ const selectedBatch = ref<ProfitSettlement | null>(null)
 const batchItems = ref<ProfitSettlementItem[]>([])
 
 const canSettle = computed(() => summary.income_count + summary.expense_count > 0)
-const tableWidth = computed(() => 500 + owners.value.length * 240)
+const incomeOwners = computed(() => owners.value.filter(owner => owner.income_count > 0))
+const expenseOwners = computed(() => owners.value.filter(owner => owner.expense_count > 0))
+const tableWidth = computed(() => 475 + (incomeOwners.value.length + expenseOwners.value.length) * 140)
 const batchIncome = computed(() => batchItems.value.filter(row => row.item_type === 'cash_entry'))
 const batchExpenses = computed(() => batchItems.value.filter(row => row.item_type === 'operation_expense'))
 const pendingColumns = computed(() => [
-  { title: '日期', dataIndex: 'biz_date', key: 'biz_date', fixed: 'left', width: 115 },
+  { title: '日期', dataIndex: 'biz_date', key: 'biz_date', fixed: 'left', width: 110 },
   {
     title: '收入',
     children: [
-      ...owners.value.map(owner => ({
-        title: owner.name,
+      ...incomeOwners.value.map(owner => ({
+        title: `${owner.name}入账`,
         key: `income-${owner.id}`,
-        width: 120,
+        width: 140,
         align: 'right',
         customRender: ({ record }: { record: ProfitDay }) => cellMoney(record.income_by_owner[owner.id]),
       })),
-      { title: '收入合计', dataIndex: 'income_total', key: 'income_total', width: 125, align: 'right' },
+      { title: '收入合计', dataIndex: 'income_total', key: 'income_total', width: 120, align: 'right' },
     ],
   },
   {
     title: '支出',
     children: [
-      ...owners.value.map(owner => ({
-        title: owner.name,
+      ...expenseOwners.value.map(owner => ({
+        title: `${owner.name}支出`,
         key: `expense-${owner.id}`,
-        width: 120,
+        width: 140,
         align: 'right',
         customRender: ({ record }: { record: ProfitDay }) => cellMoney(record.expense_by_owner[owner.id]),
       })),
-      { title: '支出合计', dataIndex: 'expense_total', key: 'expense_total', width: 125, align: 'right' },
+      { title: '支出合计', dataIndex: 'expense_total', key: 'expense_total', width: 120, align: 'right' },
     ],
   },
-  { title: '净利润', dataIndex: 'profit_total', key: 'profit_total', width: 130, align: 'right' },
+  { title: '净利润', dataIndex: 'profit_total', key: 'profit_total', width: 125, align: 'right' },
 ])
 
 const incomeColumns = [
@@ -273,6 +275,38 @@ onMounted(() => Promise.all([loadSummary(), loadSettlements()]))
               <strong class="money" :class="{ negative: Number(record.profit_total) < 0 }">{{ record.profit_total }}</strong>
             </template>
           </template>
+          <template #summary>
+            <a-table-summary fixed>
+              <a-table-summary-row class="profitTotalRow">
+                <a-table-summary-cell :index="0"><strong>区间合计</strong></a-table-summary-cell>
+                <a-table-summary-cell
+                  v-for="(owner, index) in incomeOwners"
+                  :key="`income-total-${owner.id}`"
+                  :index="index + 1"
+                  align="right"
+                >
+                  <strong class="money">{{ owner.income_total }}</strong>
+                </a-table-summary-cell>
+                <a-table-summary-cell :index="incomeOwners.length + 1" align="right">
+                  <strong class="money">{{ summary.income_total }}</strong>
+                </a-table-summary-cell>
+                <a-table-summary-cell
+                  v-for="(owner, index) in expenseOwners"
+                  :key="`expense-total-${owner.id}`"
+                  :index="incomeOwners.length + index + 2"
+                  align="right"
+                >
+                  <strong class="money expenseValue">{{ owner.expense_total }}</strong>
+                </a-table-summary-cell>
+                <a-table-summary-cell :index="incomeOwners.length + expenseOwners.length + 2" align="right">
+                  <strong class="money expenseValue">{{ summary.expense_total }}</strong>
+                </a-table-summary-cell>
+                <a-table-summary-cell :index="incomeOwners.length + expenseOwners.length + 3" align="right">
+                  <strong class="money" :class="{ negative: Number(summary.profit_total) < 0 }">{{ summary.profit_total }}</strong>
+                </a-table-summary-cell>
+              </a-table-summary-row>
+            </a-table-summary>
+          </template>
         </a-table>
       </a-tab-pane>
 
@@ -358,6 +392,7 @@ onMounted(() => Promise.all([loadSummary(), loadSettlements()]))
 .detailSection h3 { margin: 0 0 10px; font-size: 15px; }
 :deep(.clickableRow) { cursor: pointer; }
 :deep(.clickableRow:hover) > td { background: rgba(22, 119, 255, .06) !important; }
+:deep(.profitTotalRow > td) { background: var(--surface-muted, #fafafa); }
 @media (max-width: 760px) { .profitSummary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .profitToolbar :deep(.ant-picker) { width: 100%; } }
 @media (max-width: 420px) { .profitSummary { grid-template-columns: 1fr; } }
 </style>

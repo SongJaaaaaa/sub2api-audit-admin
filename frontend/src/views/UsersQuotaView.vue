@@ -166,10 +166,6 @@ onMounted(loadUsers)
 
 <template>
   <section class="page quotaPage">
-    <div class="quotaHero quotaHeroActionsOnly">
-      <a-button :loading="loading" @click="loadUsers">刷新用户</a-button>
-    </div>
-
     <div class="quotaWorkGrid">
       <section class="panel quotaUserPanel">
         <div class="panelHead">

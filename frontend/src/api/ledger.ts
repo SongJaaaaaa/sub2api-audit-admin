@@ -100,6 +100,7 @@ export function createBatchGift(data: {
   user_ids: number[]
   amount: string
   admin_notes?: string
+  include_revenue?: boolean
 }) {
   return http.post<unknown, BatchGiftRes>('/ledger-adjustments/batch-gift', data, { timeout: 120000 })
 }

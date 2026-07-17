@@ -4,6 +4,10 @@ export interface ProfitOwner {
   id: number
   name: string
   email: string | null
+  income_total: string
+  income_count: number
+  expense_total: string
+  expense_count: number
 }
 
 export interface ProfitDay {

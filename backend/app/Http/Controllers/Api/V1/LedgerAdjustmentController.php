@@ -70,17 +70,19 @@ class LedgerAdjustmentController extends Controller
             'user_ids.*' => ['required', 'integer', 'min:1', 'distinct'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'admin_notes' => ['nullable', 'string', 'max:10000000'],
+            'include_revenue' => ['sometimes', 'boolean'],
         ]);
 
         $items = [];
         $notes = trim((string) ($data['admin_notes'] ?? '')) ?: '管理员赠送';
+        $includeRevenue = (bool) ($data['include_revenue'] ?? false);
         foreach ($data['user_ids'] as $userId) {
             $adj = $service->adjust($req->user(), [
                 'sub2api_user_id' => (int) $userId,
                 'operation' => LedgerAdjustment::OP_INCREMENT,
                 'amount' => $data['amount'],
-                'cash_amount' => '0',
-                'gift_quota_amount' => $data['amount'],
+                'cash_amount' => $includeRevenue ? $data['amount'] : '0',
+                'gift_quota_amount' => $includeRevenue ? '0' : $data['amount'],
                 'adjust_reason' => '管理员赠送',
                 'admin_notes' => $notes,
             ]);

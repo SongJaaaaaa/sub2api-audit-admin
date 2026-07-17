@@ -158,6 +158,67 @@ class FinanceLedgerTest extends TestCase
         $this->assertDatabaseHas('gift_quota_entries', ['sub2api_user_id' => 1001, 'quota_amount' => '10.00']);
     }
 
+    public function test_batch_gift_does_not_record_revenue_by_default(): void
+    {
+        $admin = $this->admin();
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/users/1001' => $this->sub2ApiUserSequence('50.00', '60.00'),
+            'https://sub2api.test/api/v1/admin/users/1001/balance' => Http::response(['data' => ['balance' => '60.00']]),
+        ]);
+
+        $this->withToken($admin->createToken('admin-token')->plainTextToken)
+            ->postJson('/api/v1/ledger-adjustments/batch-gift', [
+                'user_ids' => [1001],
+                'amount' => '10.00',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('items.0.adjustment.cash_amount', '0.00')
+            ->assertJsonPath('items.0.adjustment.gift_quota_amount', '10.00');
+
+        $this->assertDatabaseCount('cash_entries', 0);
+        $this->assertDatabaseHas('gift_quota_entries', ['sub2api_user_id' => 1001, 'quota_amount' => '10.00']);
+    }
+
+    public function test_batch_gift_can_record_revenue(): void
+    {
+        $admin = $this->admin();
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/users/1001' => $this->sub2ApiUserSequence('50.00', '60.00'),
+            'https://sub2api.test/api/v1/admin/users/1001/balance' => Http::response(['data' => ['balance' => '60.00']]),
+        ]);
+
+        $this->withToken($admin->createToken('admin-token')->plainTextToken)
+            ->postJson('/api/v1/ledger-adjustments/batch-gift', [
+                'user_ids' => [1001],
+                'amount' => '10.00',
+                'include_revenue' => true,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('items.0.adjustment.cash_amount', '10.00')
+            ->assertJsonPath('items.0.adjustment.gift_quota_amount', '0.00');
+
+        $this->assertDatabaseHas('cash_entries', [
+            'sub2api_user_id' => 1001,
+            'cash_amount' => '10.00',
+            'profit_eligible' => true,
+        ]);
+        $this->assertDatabaseCount('gift_quota_entries', 0);
+    }
+
+    public function test_batch_gift_rejects_invalid_revenue_flag(): void
+    {
+        $admin = $this->admin();
+
+        $this->withToken($admin->createToken('admin-token')->plainTextToken)
+            ->postJson('/api/v1/ledger-adjustments/batch-gift', [
+                'user_ids' => [1001],
+                'amount' => '10.00',
+                'include_revenue' => 'yes',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('include_revenue');
+    }
+
     public function test_decrement_ignores_finance_split(): void
     {
         $admin = $this->admin();

@@ -187,18 +187,6 @@
     font-size: 20px;
   }
 
-  .quotaHero {
-    display: grid;
-  }
-
-  .quotaHeroActionsOnly {
-    justify-items: end;
-  }
-
-  .quotaHero h1 {
-    font-size: 22px;
-  }
-
   .quotaFormGrid,
   .quotaBalanceGrid {
     grid-template-columns: 1fr;

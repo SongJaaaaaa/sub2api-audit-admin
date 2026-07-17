@@ -35,20 +35,67 @@ class ProfitSettlementTest extends TestCase
 
         $token = $first->createToken('profit')->plainTextToken;
         $this->withToken($token)
-            ->getJson('/api/v1/profit/summary?start_date=2026-07-04&end_date=2026-07-05')
+            ->getJson('/api/v1/profit/summary?start_date=2026-07-04&end_date=2026-07-06')
             ->assertOk()
             ->assertJsonCount(2, 'owners')
-            ->assertJsonCount(2, 'days')
+            ->assertJsonCount(3, 'days')
+            ->assertJsonPath('owners.0.id', $first->id)
+            ->assertJsonPath('owners.0.name', '爱吃胡萝卜')
+            ->assertJsonPath('owners.0.income_total', '3200.00')
+            ->assertJsonPath('owners.0.income_count', 1)
+            ->assertJsonPath('owners.0.expense_total', '1600.00')
+            ->assertJsonPath('owners.0.expense_count', 2)
+            ->assertJsonPath('owners.1.id', $second->id)
+            ->assertJsonPath('owners.1.name', '牛宝')
+            ->assertJsonPath('owners.1.income_total', '460.00')
+            ->assertJsonPath('owners.1.income_count', 1)
+            ->assertJsonPath('owners.1.expense_total', '5000.00')
+            ->assertJsonPath('owners.1.expense_count', 1)
+            ->assertJsonPath('days.0.biz_date', '2026-07-04')
+            ->assertJsonPath('days.0.income_by_owner.'.$first->id, '3200.00')
+            ->assertJsonPath('days.0.income_by_owner.'.$second->id, '460.00')
+            ->assertJsonPath('days.0.expense_by_owner.'.$first->id, '1500.00')
+            ->assertJsonPath('days.0.expense_by_owner.'.$second->id, '5000.00')
             ->assertJsonPath('days.0.income_total', '3660.00')
             ->assertJsonPath('days.0.expense_total', '6500.00')
             ->assertJsonPath('days.0.profit_total', '-2840.00')
+            ->assertJsonPath('days.1.biz_date', '2026-07-05')
             ->assertJsonPath('days.1.income_total', '0.00')
             ->assertJsonPath('days.1.expense_total', '100.00')
+            ->assertJsonPath('days.2.biz_date', '2026-07-06')
+            ->assertJsonPath('days.2.income_total', '0.00')
+            ->assertJsonPath('days.2.expense_total', '0.00')
+            ->assertJsonPath('days.2.profit_total', '0.00')
             ->assertJsonPath('summary.income_total', '3660.00')
             ->assertJsonPath('summary.expense_total', '6600.00')
             ->assertJsonPath('summary.profit_total', '-2940.00')
             ->assertJsonPath('summary.income_count', 2)
             ->assertJsonPath('summary.expense_count', 3);
+    }
+
+    public function test_summary_keeps_unknown_admin_in_owner_breakdown(): void
+    {
+        $admin = $this->admin('查询管理员');
+        $this->cash(null, '12.34', '2026-07-07 09:00:00');
+        $this->expense(null, '5.67', '2026-07-07');
+
+        $token = $admin->createToken('profit')->plainTextToken;
+        $this->withToken($token)
+            ->getJson('/api/v1/profit/summary?start_date=2026-07-07&end_date=2026-07-07')
+            ->assertOk()
+            ->assertJsonCount(1, 'owners')
+            ->assertJsonPath('owners.0.id', 0)
+            ->assertJsonPath('owners.0.name', '未知管理员')
+            ->assertJsonPath('owners.0.email', null)
+            ->assertJsonPath('owners.0.income_total', '12.34')
+            ->assertJsonPath('owners.0.income_count', 1)
+            ->assertJsonPath('owners.0.expense_total', '5.67')
+            ->assertJsonPath('owners.0.expense_count', 1)
+            ->assertJsonPath('days.0.income_by_owner.0', '12.34')
+            ->assertJsonPath('days.0.expense_by_owner.0', '5.67')
+            ->assertJsonPath('summary.income_total', '12.34')
+            ->assertJsonPath('summary.expense_total', '5.67')
+            ->assertJsonPath('summary.profit_total', '6.67');
     }
 
     public function test_confirm_late_entry_and_reverse_flow(): void
@@ -140,6 +187,7 @@ class ProfitSettlementTest extends TestCase
         $this->withToken($token)
             ->getJson('/api/v1/profit/summary?start_date=2026-07-08&end_date=2026-07-08')
             ->assertOk()
+            ->assertJsonPath('owners.0.income_total', '900719925474099.92')
             ->assertJsonPath('summary.income_total', '900719925474099.92');
         $this->withToken($token)->postJson('/api/v1/profit/settlements', [
             'start_date' => '2026-07-08',
@@ -159,7 +207,7 @@ class ProfitSettlementTest extends TestCase
         ]);
     }
 
-    private function cash(Admin $admin, string $amount, string $createdAt, bool $eligible = true): CashEntry
+    private function cash(?Admin $admin, string $amount, string $createdAt, bool $eligible = true): CashEntry
     {
         $row = CashEntry::query()->create([
             'entry_no' => uniqid('CASH'),
@@ -167,14 +215,14 @@ class ProfitSettlementTest extends TestCase
             'cash_amount' => $amount,
             'source' => 'ledger_adjustment',
             'profit_eligible' => $eligible,
-            'created_by' => $admin->id,
+            'created_by' => $admin?->id,
         ]);
         $row->forceFill(['created_at' => $createdAt, 'updated_at' => $createdAt])->saveQuietly();
 
         return $row;
     }
 
-    private function expense(Admin $admin, string $amount, string $date): OperationExpense
+    private function expense(?Admin $admin, string $amount, string $date): OperationExpense
     {
         return OperationExpense::query()->create([
             'expense_no' => uniqid('EXP'),
@@ -182,7 +230,7 @@ class ProfitSettlementTest extends TestCase
             'amount' => $amount,
             'paid_at' => $date,
             'profit_eligible' => true,
-            'created_by' => $admin->id,
+            'created_by' => $admin?->id,
         ]);
     }
 }
