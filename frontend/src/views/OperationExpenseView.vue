@@ -9,16 +9,15 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { createOperationExpense, getOperationExpenses, type ExpenseCategory, type ExpenseSummary, type OperationExpense } from '../api/finance'
 import AttachmentUploader from '../components/attachments/AttachmentUploader.vue'
+import SafeRichTextDisplay from '../components/richtext/SafeRichTextDisplay.vue'
 import SafeRichTextEditor from '../components/richtext/SafeRichTextEditor.vue'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useAdminOptions } from '../composables/useAdminOptions'
-import { useImagePreview } from '../composables/useImagePreview'
 import { useTableColumns } from '../composables/useTableColumns'
 
 use([BarChart, DataZoomComponent, GridComponent, TooltipComponent, CanvasRenderer])
 
 const adminOptions = useAdminOptions()
-const { previewSrc, previewOpen, onSafeHtmlClick } = useImagePreview()
 const loading = ref(false)
 const submitting = ref(false)
 const modalOpen = ref(false)
@@ -210,8 +209,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); chart
         <a-descriptions-item label="操作人">{{ selected.operator_name || selected.operator_email || '-' }}</a-descriptions-item>
         <a-descriptions-item label="备注">{{ selected.remark || '-' }}</a-descriptions-item>
       </a-descriptions>
-      <div v-if="selected?.content_html" class="safeHtml" v-html="selected.content_html" @click="onSafeHtmlClick"></div>
-      <a-modal v-model:open="previewOpen" :footer="null" centered :body-style="{ textAlign: 'center', padding: '8px' }"><img :src="previewSrc" style="max-width:100%;max-height:80vh;border-radius:6px;" /></a-modal>
+      <SafeRichTextDisplay v-if="selected?.content_html" :value="selected.content_html" />
       <div class="drawerBlock"><h3>附件</h3><AttachmentUploader attachable-type="operation_expense" :attachable-id="selected?.id || null" /></div>
     </a-drawer>
   </section>

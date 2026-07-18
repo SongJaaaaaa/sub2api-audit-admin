@@ -4,6 +4,7 @@ import type { TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import { onMounted, reactive, ref } from 'vue'
 import { getLedgerAdjustments, type LedgerAdjustment, type LedgerSummary } from '../api/ledger'
+import SafeRichTextDisplay from '../components/richtext/SafeRichTextDisplay.vue'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useAdminOptions } from '../composables/useAdminOptions'
 import { useTableColumns } from '../composables/useTableColumns'
@@ -159,7 +160,9 @@ onMounted(loadItems)
         <a-descriptions-item label="调前">{{ detail.before_balance || '-' }}</a-descriptions-item>
         <a-descriptions-item label="调后">{{ detail.after_balance || '-' }}</a-descriptions-item>
         <a-descriptions-item label="原因">{{ detail.adjust_reason || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="管理员备注">{{ detail.admin_notes || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="管理员备注">
+          <SafeRichTextDisplay :value="detail.admin_notes" empty-text="-" compact />
+        </a-descriptions-item>
         <a-descriptions-item label="Sub2API 备注">{{ detail.sub2api_notes || '-' }}</a-descriptions-item>
         <a-descriptions-item label="确认时间">{{ detail.confirmed_at || '-' }}</a-descriptions-item>
       </a-descriptions>

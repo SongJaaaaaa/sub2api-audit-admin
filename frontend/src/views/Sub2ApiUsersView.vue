@@ -7,6 +7,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { createBatchGift } from '../api/ledger'
 import { getSub2BalanceHistory, getSub2Users, type Sub2BalanceHistoryItem, type Sub2User, type UserSummary } from '../api/sub2api'
 
+import SafeRichTextDisplay from '../components/richtext/SafeRichTextDisplay.vue'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useTableColumns } from '../composables/useTableColumns'
 const loading = ref(false)
@@ -413,7 +414,10 @@ onMounted(loadUsers)
                   </span>
                   <span>{{ item.operator_name || 'Sub2API' }}</span>
                 </div>
-                <div v-if="item.adjust_reason || item.notes" class="historyTimelineRemark">
+                <div v-if="item.admin_notes" class="historyTimelineRemark">
+                  <SafeRichTextDisplay :value="item.admin_notes" compact />
+                </div>
+                <div v-else-if="item.adjust_reason || item.notes" class="historyTimelineRemark">
                   {{ item.adjust_reason || item.notes }}
                 </div>
                 <div class="historyTimelineTime">{{ timeText(item) }}</div>

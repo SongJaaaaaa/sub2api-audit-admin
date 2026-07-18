@@ -6,13 +6,13 @@ import {
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import { useImagePreview } from '../composables/useImagePreview'
 import {
   createLedgerAdjustment,
   type AdjustmentRes,
 } from '../api/ledger'
 import { getSub2BalanceHistory, getSub2Users, type Sub2BalanceHistoryItem, type Sub2User } from '../api/sub2api'
 import AdjustmentForm, { type AdjustmentFormState } from '../components/ledger/AdjustmentForm.vue'
+import SafeRichTextDisplay from '../components/richtext/SafeRichTextDisplay.vue'
 
 const loading = ref(false)
 const historyLoading = ref(false)
@@ -24,7 +24,6 @@ const selected = ref<Sub2User | null>(null)
 const selectedHistory = ref<Sub2BalanceHistoryItem | null>(null)
 const keyword = ref('')
 const adjustPanel = ref<HTMLElement | null>(null)
-const { previewSrc, previewOpen, onSafeHtmlClick } = useImagePreview()
 const page = reactive({
   current: 1,
   pageSize: 10,
@@ -273,11 +272,6 @@ onMounted(loadUsers)
       </section>
     </div>
 
-    <!-- 图片放大预览 -->
-    <a-modal v-model:open="previewOpen" :footer="null" centered :body-style="{ textAlign: 'center', padding: '8px' }">
-      <img :src="previewSrc" style="max-width:100%;max-height:80vh;border-radius:6px;" />
-    </a-modal>
-
     <a-modal
       :open="!!selectedHistory"
       title="充值记录详情"
@@ -295,7 +289,7 @@ onMounted(loadUsers)
         <p><span>原因</span><strong>{{ selectedHistory.adjust_reason || selectedHistory.type || '-' }}</strong></p>
         <div v-if="selectedHistory.admin_notes" class="historyDetailNotes">
           <span>备注</span>
-          <div class="safeHtml" v-html="selectedHistory.admin_notes" @click="onSafeHtmlClick"></div>
+          <SafeRichTextDisplay :value="selectedHistory.admin_notes" compact />
         </div>
         <div v-else-if="selectedHistory.notes" class="historyDetailNotes">
           <span>Sub2API 备注</span>
