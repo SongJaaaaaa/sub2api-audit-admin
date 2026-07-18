@@ -298,10 +298,6 @@ onMounted(() => loadItems())
 .balanceEventsPage { display: grid; gap: 16px; }
 :deep(.clickableRow) { cursor: pointer; }
 :deep(.clickableRow:hover) > td { background: rgba(22, 119, 255, .06) !important; }
-.summaryGrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
-.summaryGrid section { padding: 14px 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); }
-.summaryGrid span { display: block; color: var(--text-secondary, #70798c); font-size: 12px; margin-bottom: 6px; }
-.summaryGrid strong { font-size: 21px; }
 .increment { color: #389e0d; } .decrement { color: #cf1322; }
 .filterPanel { padding: 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); }
 .filterGrid { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; }
@@ -321,11 +317,9 @@ onMounted(() => loadItems())
 .money.decrement { color: #cf1322; }
 small { display: block; margin-top: 3px; color: var(--text-secondary, #7a8395); }
 .notes { white-space: pre-wrap; word-break: break-word; }
-@media (max-width: 760px) { .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) {
   .filterGrid label { flex: 1 1 100%; max-width: none; }
   .filterGrid label > * { min-width: 0; }
   .filterActions, .filterActions button { flex: 1; }
 }
-@media (max-width: 420px) { .summaryGrid { grid-template-columns: 1fr; } }
 </style>

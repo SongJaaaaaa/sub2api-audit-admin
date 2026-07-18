@@ -315,7 +315,6 @@ class LedgerAdjustmentService
         ];
 
         if ($status === 'abnormal') {
-            $summary['amount_total'] = Money::fmt((clone $query)->sum('amount'));
             $summary['oldest_created_at'] = ChinaTime::fmt((clone $query)->min('created_at'));
             $summary['over_24h_count'] = (clone $query)
                 ->where('created_at', '<', now(config('ledger.timezone', 'Asia/Shanghai'))->subDay())

@@ -3,19 +3,24 @@ import { RedoOutlined } from '@ant-design/icons-vue'
 import type { Dayjs } from 'dayjs'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
-import * as echarts from 'echarts'
+import { BarChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent } from 'echarts/components'
+import { init, use, type ECharts } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { getLedgerAdjustments, retryLedgerAdjustment, type LedgerAdjustment, type LedgerSummary } from '../api/ledger'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useAdminOptions } from '../composables/useAdminOptions'
 import { useTableColumns } from '../composables/useTableColumns'
 
+use([BarChart, GridComponent, TooltipComponent, CanvasRenderer])
+
 const adminOptions = useAdminOptions()
 const loading = ref(false)
 const retryingId = ref<number | null>(null)
 const items = ref<LedgerAdjustment[]>([])
 const chartEl = ref<HTMLDivElement>()
-let chart: echarts.ECharts | undefined
+let chart: ECharts | undefined
 const filters = reactive({ userId: '', email: '', operator: undefined as number | undefined, dates: undefined as [Dayjs, Dayjs] | undefined, minAmount: '', maxAmount: '' })
 const summary = reactive<LedgerSummary>({ record_count: 0, user_count: 0, increment_total: '0.00', decrement_total: '0.00', net_total: '0.00', cash_total: '0.00', gift_total: '0.00', amount_total: '0.00', oldest_created_at: null, over_24h_count: 0, types: [] })
 const page = reactive({ current: 1, pageSize: 20, total: 0 })
@@ -54,7 +59,7 @@ async function loadItems() {
 function renderChart() {
   const rows = summary.types || []
   if (!chartEl.value || rows.length === 0) { chart?.dispose(); chart = undefined; return }
-  chart ||= echarts.init(chartEl.value)
+  chart ||= init(chartEl.value)
   chart.setOption({
     grid: { left: 70, right: 25, top: 15, bottom: 20 },
     tooltip: { trigger: 'axis', formatter: (data: any[]) => { const row = rows[data[0].dataIndex]; return `${row.type === 'exception' ? '异常' : '作废'}<br/>数量：${row.record_count}<br/>用户数：${row.user_count}<br/>涉及金额：${row.amount_total}` } },

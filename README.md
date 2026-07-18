@@ -21,7 +21,7 @@ sub2api-audit-admin/
   backend/             Laravel 12 API、SQLite 审计账本和自动任务
   frontend/            Vue 3、TypeScript、Ant Design Vue、ECharts
   docs/                统计口径、开发检查和部署说明
-  deploy/              Caddy、Supervisor、Laravel Scheduler 示例
+  deploy/              Caddy、Laravel Scheduler 示例
   project-management/  架构与模块进度文档
 ```
 
@@ -43,7 +43,7 @@ sub2api-audit-admin/
 cd backend
 cp .env.example .env
 php artisan key:generate
-php artisan migrate --seed
+php artisan migrate
 php artisan serve --host=127.0.0.1 --port=8010
 ```
 

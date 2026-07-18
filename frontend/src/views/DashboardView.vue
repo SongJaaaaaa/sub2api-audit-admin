@@ -520,25 +520,21 @@ onBeforeUnmount(() => {
 .chartGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 16px; margin-top: 16px; }
 .chart { width: 100%; }
 .chartWide { height: 370px; }
-.usageCharts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.usageCharts > div { min-width: 0; padding: 10px 8px 0; border-radius: 10px; background: rgba(127, 127, 127, .035); }
-.usageCharts h3 { margin: 0 0 2px 10px; font-size: 13px; font-weight: 500; color: var(--text-secondary, #687184); }
 .chartSmall { height: 315px; }
 .rankingGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
 .rankPanel { min-width: 0; }
 .rankChart { width: 100%; height: 340px; }
 .rankPanel :deep(.ant-table-cell strong) { display: block; font-weight: 600; }
 .rankPanel :deep(.ant-table-cell small) { display: block; margin-top: 2px; color: var(--text-secondary, #7a8395); }
-.money, .token { font-variant-numeric: tabular-nums; font-weight: 600; }
+.money { font-variant-numeric: tabular-nums; font-weight: 600; }
 .money { color: #d46b08; }
-.token { color: #08979c; }
 .recentPanel { margin-top: 16px; }
 @media (max-width: 1180px) {
   .kpiGrid, .alertGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .chartGrid { grid-template-columns: 1fr; }
 }
 @media (max-width: 820px) {
-  .kpiGrid, .alertGrid, .rankingGrid, .usageCharts { grid-template-columns: 1fr; }
+  .kpiGrid, .alertGrid, .rankingGrid { grid-template-columns: 1fr; }
   .headActions { align-items: stretch; }
 }
 

@@ -143,18 +143,16 @@ onMounted(loadItems)
     </a-table>
 
     <a-modal v-model:open="detailOpen" title="账目详情" :footer="null" width="680px">
-      <a-spin :spinning="false">
-        <a-descriptions v-if="detail" :column="1" bordered size="small">
-          <a-descriptions-item label="类型">赠送额度</a-descriptions-item>
-          <a-descriptions-item label="流水号">{{ detail.entry_no }}</a-descriptions-item>
-          <a-descriptions-item label="用户">{{ detail.sub2api_user_email || `用户 #${detail.sub2api_user_id}` }}</a-descriptions-item>
-          <a-descriptions-item label="账本调整 ID">{{ detail.ledger_adjustment_id || '-' }}</a-descriptions-item>
-          <a-descriptions-item label="金额"><strong class="money">{{ detail.quota_amount }}</strong></a-descriptions-item>
-          <a-descriptions-item label="来源">{{ detail.source }}</a-descriptions-item>
-          <a-descriptions-item label="备注">{{ detail.remark || '-' }}</a-descriptions-item>
-          <a-descriptions-item label="创建时间">{{ detail.created_at || '-' }}</a-descriptions-item>
-        </a-descriptions>
-      </a-spin>
+      <a-descriptions v-if="detail" :column="1" bordered size="small">
+        <a-descriptions-item label="类型">赠送额度</a-descriptions-item>
+        <a-descriptions-item label="流水号">{{ detail.entry_no }}</a-descriptions-item>
+        <a-descriptions-item label="用户">{{ detail.sub2api_user_email || `用户 #${detail.sub2api_user_id}` }}</a-descriptions-item>
+        <a-descriptions-item label="账本调整 ID">{{ detail.ledger_adjustment_id || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="金额"><strong class="money">{{ detail.quota_amount }}</strong></a-descriptions-item>
+        <a-descriptions-item label="来源">{{ detail.source }}</a-descriptions-item>
+        <a-descriptions-item label="备注">{{ detail.remark || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="创建时间">{{ detail.created_at || '-' }}</a-descriptions-item>
+      </a-descriptions>
     </a-modal>
   </section>
 </template>
@@ -168,8 +166,6 @@ onMounted(loadItems)
 .summaryGrid section { padding: 14px 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); }
 .summaryGrid span { display: block; color: var(--text-secondary, #7a8395); font-size: 13px; margin-bottom: 5px; }
 .summaryGrid strong { font-size: 22px; }
-.relatedCash { margin-top: 20px; }
-.relatedCash h3 { margin: 0 0 10px; }
 @media (max-width: 760px) { .filterBar > * { flex: 1 1 100%; width: 100% !important; } .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } :deep(.ant-descriptions-view) { overflow-x: auto; } }
 @media (max-width: 420px) { .summaryGrid { grid-template-columns: 1fr; } }
 </style>

@@ -14,11 +14,6 @@ class ChinaTime
         return ChinaDateRange::make($startDate, $endDate);
     }
 
-    public static function dayRange(string $date): ChinaDateRange
-    {
-        return ChinaDateRange::day($date);
-    }
-
     public static function fmt(mixed $val): ?string
     {
         if ($val === null || $val === '') {

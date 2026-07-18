@@ -445,7 +445,6 @@ onMounted(loadUsers)
 .compactSummary strong { color: var(--heading, #1f2937); font-variant-numeric: tabular-nums; }
 .selectedUsers { display: flex; flex-wrap: wrap; gap: 6px; max-height: 150px; overflow: auto; padding: 8px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 8px; }
 .batchScope { display: grid; gap: 10px; }
-.positive { color: #389e0d; } .negative { color: #cf1322; }
 @media (max-width: 760px) { .userFilters { width: 100%; flex-wrap: wrap; } .userFilterSelect, .lastUsedFilter, .search { width: 100%; } }
 @media (max-width: 760px) { .compactSummary { width: 100%; justify-content: space-between; } }
 </style>

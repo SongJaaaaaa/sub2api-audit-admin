@@ -8,7 +8,7 @@
 cd backend
 cp .env.example .env
 php artisan key:generate
-php artisan migrate --seed
+php artisan migrate
 php artisan serve --host=127.0.0.1 --port=8010
 ```
 
@@ -20,12 +20,6 @@ nvm use 22.22.0
 cd frontend
 corepack pnpm install
 VITE_API_PROXY_TARGET=http://127.0.0.1:8010 corepack pnpm dev --host 127.0.0.1 --port 5174
-```
-
-默认本地管理员仅用于开发环境：
-
-```text
-admin@example.com / admin123
 ```
 
 ## 2. 必跑检查

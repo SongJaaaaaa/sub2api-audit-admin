@@ -18,22 +18,6 @@ export interface FinanceSummary {
   missing_cash_count?: number
 }
 
-export interface CashEntry {
-  id: number
-  entry_no: string
-  ledger_adjustment_id: number | null
-  sub2api_user_id: number | null
-  sub2api_user_email: string | null
-  direction: 'in' | 'out'
-  cash_amount: string
-  source: string
-  remark: string | null
-  created_by: number | null
-  operator_name: string | null
-  operator_email: string | null
-  created_at: string | null
-}
-
 export interface GiftQuotaEntry {
   id: number
   entry_no: string
@@ -88,10 +72,6 @@ export interface FinanceParams {
   created_by?: number
   business_no?: string
   link_status?: 'linked' | 'unlinked' | ''
-}
-
-export function getCashEntries(params: FinanceParams) {
-  return http.get<unknown, PageRes<CashEntry, FinanceSummary>>('/finance/cash', { params })
 }
 
 export function getGiftEntries(params: FinanceParams) {

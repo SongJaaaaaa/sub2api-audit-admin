@@ -106,26 +106,6 @@ class Sub2ApiClientTest extends TestCase
         $this->assertSame('2026-07-14 10:00:00', $res['items'][0]['last_used_at']);
     }
 
-    public function test_active_balance_snapshot_excludes_admin_disabled_and_deleted_users(): void
-    {
-        $this->insertSub2ApiUser(['id' => 1001, 'balance' => '12.5']);
-        $this->insertSub2ApiUser(['id' => 1002, 'email' => 'beta@example.com', 'username' => 'beta', 'balance' => '7.5']);
-        $this->insertSub2ApiUser(['id' => 1003, 'email' => 'admin@example.com', 'role' => 'admin', 'balance' => '100']);
-        $this->insertSub2ApiUser(['id' => 1004, 'email' => 'disabled@example.com', 'status' => 'disabled', 'balance' => '100']);
-        $this->insertSub2ApiUser(['id' => 1005, 'email' => 'deleted@example.com', 'balance' => '100', 'deleted_at' => '2026-07-01 00:00:00']);
-
-        $queries = 0;
-        DB::connection('sub2api')->listen(function () use (&$queries): void {
-            $queries++;
-        });
-        $res = app(Sub2ApiReadRepository::class)->activeUserBalanceSnapshot();
-
-        $this->assertSame(1, $queries);
-        $this->assertSame(2, $res['active_user_count']);
-        $this->assertSame('20', $res['active_user_balance']);
-        $this->assertArrayHasKey('as_of', $res);
-    }
-
     public function test_remote_events_use_utc_half_open_boundaries(): void
     {
         $this->insertSub2ApiUser();
@@ -190,15 +170,15 @@ class Sub2ApiClientTest extends TestCase
     public function test_stats_wrapper_requires_success_code(): void
     {
         Http::fake([
-            'https://sub2api.test/api/v1/admin/dashboard/trend*' => Http::response([
+            'https://sub2api.test/api/v1/admin/dashboard/models*' => Http::response([
                 'code' => 1,
-                'data' => ['trend' => []],
+                'data' => ['models' => []],
             ]),
         ]);
 
         $this->expectException(Sub2ApiStatsException::class);
         $this->expectExceptionMessage('Sub2API 官方统计响应结构异常');
-        app(Sub2ApiAdminClient::class)->dashboardTrend(
+        app(Sub2ApiAdminClient::class)->dashboardModels(
             ChinaDateRange::make('2026-07-01', '2026-07-02'),
         );
     }
@@ -206,11 +186,11 @@ class Sub2ApiClientTest extends TestCase
     public function test_stats_wrapper_rejects_rows_with_missing_fields(): void
     {
         Http::fake([
-            'https://sub2api.test/api/v1/admin/dashboard/trend*' => Http::response([
+            'https://sub2api.test/api/v1/admin/dashboard/models*' => Http::response([
                 'code' => 0,
                 'data' => [
-                    'trend' => [[
-                        'date' => '2026-07-01',
+                    'models' => [[
+                        'model' => 'gpt-test',
                         'requests' => 1,
                     ]],
                 ],
@@ -219,18 +199,15 @@ class Sub2ApiClientTest extends TestCase
 
         $this->expectException(Sub2ApiStatsException::class);
         $this->expectExceptionMessage('Sub2API 官方统计响应字段异常');
-        app(Sub2ApiAdminClient::class)->dashboardTrend(
+        app(Sub2ApiAdminClient::class)->dashboardModels(
             ChinaDateRange::make('2026-07-01', '2026-07-02'),
         );
     }
 
-    public function test_admin_client_users_and_balance_history_routes_keep_working(): void
+    public function test_balance_history_route_keeps_working(): void
     {
         $this->withoutMiddleware();
         Http::fake([
-            'https://sub2api.test/api/v1/admin/users?page=1&page_size=20' => Http::response([
-                'data' => [['id' => 1001, 'email' => 'alpha@example.com']],
-            ]),
             'https://sub2api.test/api/v1/admin/users/1001' => Http::response([
                 'data' => ['id' => 1001, 'email' => 'alpha@example.com', 'balance' => '45.00'],
             ]),
@@ -247,9 +224,6 @@ class Sub2ApiClientTest extends TestCase
                 ],
             ]),
         ]);
-
-        $users = app(Sub2ApiAdminClient::class)->users(1, 20);
-        $this->assertSame(1001, $users['data'][0]['id']);
 
         $this->getJson('/api/v1/sub2api/users/1001/balance-history?page=1&page_size=8')
             ->assertOk()

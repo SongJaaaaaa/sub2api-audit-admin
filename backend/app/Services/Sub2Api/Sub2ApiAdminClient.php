@@ -14,21 +14,6 @@ use Throwable;
 
 class Sub2ApiAdminClient
 {
-    public function me(string $token): array
-    {
-        $res = $this->http(false)->withToken($token)->get('/api/v1/auth/me');
-
-        return $this->json($res);
-    }
-
-    public function users(int $page, int $pageSize): array
-    {
-        return $this->get('/api/v1/admin/users', [
-            'page' => $page,
-            'page_size' => $pageSize,
-        ]);
-    }
-
     public function user(int $id): array
     {
         return $this->get('/api/v1/admin/users/'.$id);
@@ -61,24 +46,6 @@ class Sub2ApiAdminClient
         ]);
     }
 
-    public function dashboardTrend(ChinaDateRange $range): array
-    {
-        return $this->stats('/api/v1/admin/dashboard/trend', [
-            ...$range->apiParams(),
-            'granularity' => 'day',
-        ], 'trend', [
-            'date',
-            'requests',
-            'input_tokens',
-            'output_tokens',
-            'cache_creation_tokens',
-            'cache_read_tokens',
-            'total_tokens',
-            'cost',
-            'actual_cost',
-        ]);
-    }
-
     public function dashboardModels(ChinaDateRange $range): array
     {
         return $this->stats('/api/v1/admin/dashboard/models', [
@@ -94,20 +61,6 @@ class Sub2ApiAdminClient
             'total_tokens',
             'cost',
             'actual_cost',
-        ]);
-    }
-
-    public function dashboardUsersRanking(ChinaDateRange $range, int $limit): array
-    {
-        return $this->stats('/api/v1/admin/dashboard/users-ranking', [
-            ...$range->apiParams(),
-            'limit' => $limit,
-        ], 'ranking', [
-            'user_id',
-            'email',
-            'actual_cost',
-            'requests',
-            'tokens',
         ]);
     }
 
@@ -263,21 +216,17 @@ class Sub2ApiAdminClient
             ->withHeaders(['x-api-key' => $apiKey]);
     }
 
-    private function http(bool $withKey = true): PendingRequest
+    private function http(): PendingRequest
     {
-        [$baseUrl, $apiKey, $timeout] = $this->adminConfig($withKey);
-        $http = Http::baseUrl($baseUrl)
+        [$baseUrl, $apiKey, $timeout] = $this->adminConfig();
+
+        return Http::baseUrl($baseUrl)
             ->timeout($timeout)
-            ->acceptJson();
-
-        if (! $withKey) {
-            return $http;
-        }
-
-        return $http->withHeaders(['x-api-key' => $apiKey]);
+            ->acceptJson()
+            ->withHeaders(['x-api-key' => $apiKey]);
     }
 
-    private function adminConfig(bool $withKey = true): array
+    private function adminConfig(): array
     {
         $baseUrl = rtrim((string) config('sub2api.admin_api.base_url'), '/');
         $apiKey = (string) config('sub2api.admin_api.key');
@@ -285,7 +234,7 @@ class Sub2ApiAdminClient
         if ($baseUrl === '') {
             throw new RuntimeException('缺少 SUB2API_ADMIN_API_URL');
         }
-        if ($withKey && $apiKey === '') {
+        if ($apiKey === '') {
             throw new RuntimeException('缺少 SUB2API_ADMIN_API_KEY');
         }
 

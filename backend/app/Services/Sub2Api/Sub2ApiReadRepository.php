@@ -127,27 +127,6 @@ class Sub2ApiReadRepository
         return $row ? $this->userRow($row) : null;
     }
 
-    public function activeUserBalanceSnapshot(): array
-    {
-        $row = $this->db()
-            ->table('users')
-            ->whereNull('deleted_at')
-            ->selectRaw(
-                'SUM(CASE WHEN role = ? AND status = ? THEN 1 ELSE 0 END) as active_user_count, '
-                .'SUM(CASE WHEN role = ? AND status = ? THEN balance ELSE 0 END) as active_user_balance, '
-                .'SUM(total_recharged) as total_recharged',
-                ['user', 'active', 'user', 'active'],
-            )
-            ->first();
-
-        return [
-            'active_user_count' => (int) $row->active_user_count,
-            'active_user_balance' => $this->decimal($row->active_user_balance, 8),
-            'total_recharged' => $this->decimal($row->total_recharged, 8),
-            'as_of' => now(config('ledger.timezone', 'Asia/Shanghai'))->format(ChinaTime::FORMAT),
-        ];
-    }
-
     public function findAdminAdjustmentSources(int $userId, string $idempotencyKey): array
     {
         return $this->db()

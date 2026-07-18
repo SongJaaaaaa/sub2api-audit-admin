@@ -1,14 +1,15 @@
 admin.example.com {
-  root * /var/www/sub2api-audit-admin/frontend/dist
   encode gzip zstd
-  try_files {path} /index.html
-  file_server
-}
 
-api.example.com {
-  encode gzip zstd
-  php_fastcgi unix//run/php/php8.4-fpm.sock {
-    root /var/www/sub2api-audit-admin/backend/public
+  @backend path /api/* /up
+  handle @backend {
+    root * /var/www/sub2api-audit-admin/backend/public
+    php_fastcgi unix//run/php/php8.4-fpm.sock
   }
-  file_server
+
+  handle {
+    root * /var/www/sub2api-audit-admin/frontend/dist
+    try_files {path} /index.html
+    file_server
+  }
 }

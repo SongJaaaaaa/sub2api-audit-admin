@@ -2,7 +2,10 @@
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import dayjs, { type Dayjs } from 'dayjs'
-import * as echarts from 'echarts'
+import { BarChart } from 'echarts/charts'
+import { DataZoomComponent, GridComponent, TooltipComponent } from 'echarts/components'
+import { init, use, type ECharts } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { createOperationExpense, getOperationExpenses, type ExpenseCategory, type ExpenseSummary, type OperationExpense } from '../api/finance'
 import AttachmentUploader from '../components/attachments/AttachmentUploader.vue'
@@ -11,6 +14,8 @@ import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useAdminOptions } from '../composables/useAdminOptions'
 import { useImagePreview } from '../composables/useImagePreview'
 import { useTableColumns } from '../composables/useTableColumns'
+
+use([BarChart, DataZoomComponent, GridComponent, TooltipComponent, CanvasRenderer])
 
 const adminOptions = useAdminOptions()
 const { previewSrc, previewOpen, onSafeHtmlClick } = useImagePreview()
@@ -23,7 +28,7 @@ const categories = ref<ExpenseCategory[]>([])
 const summary = reactive<ExpenseSummary>({ record_count: 0, category_count: 0, amount_total: '0.00', max_amount: '0.00', daily_average: null })
 const selected = ref<OperationExpense | null>(null)
 const chartEl = ref<HTMLDivElement>()
-let chart: echarts.ECharts | undefined
+let chart: ECharts | undefined
 const page = reactive({ current: 1, pageSize: 20, total: 0 })
 
 const categoryOptions = [
@@ -89,7 +94,7 @@ function renderChart() {
     chart = undefined
     return
   }
-  chart ||= echarts.init(chartEl.value)
+  chart ||= init(chartEl.value)
   const total = Number(summary.amount_total || 0)
   chart.setOption({
     grid: { left: 90, right: 30, top: 15, bottom: categories.value.length > 8 ? 45 : 20 },

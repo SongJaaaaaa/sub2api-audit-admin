@@ -65,16 +65,6 @@ final class ChinaDateRange
         return $this->localEndExclusive->format(ChinaTime::FORMAT);
     }
 
-    public function utcStartText(): string
-    {
-        return ChinaTime::utcText($this->utcStart);
-    }
-
-    public function utcEndExclusiveText(): string
-    {
-        return ChinaTime::utcText($this->utcEndExclusive);
-    }
-
     public function dates(): array
     {
         $dates = [];

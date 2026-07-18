@@ -9,8 +9,6 @@ class CashEntry extends Model
 {
     public const DIR_IN = 'in';
 
-    public const DIR_OUT = 'out';
-
     protected $fillable = [
         'entry_no',
         'ledger_adjustment_id',

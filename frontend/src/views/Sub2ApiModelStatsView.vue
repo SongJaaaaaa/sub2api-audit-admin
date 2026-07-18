@@ -266,9 +266,8 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userC
 @media (max-width: 640px) { .userRankChart { height: 430px; } }
 .modelLink { height: auto; padding: 0; text-align: left; white-space: normal; }
 .rankNo { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: rgba(22, 119, 255, .1); color: #1677ff; font-weight: 700; }
-.token, .money { font-variant-numeric: tabular-nums; font-weight: 600; }
+.token { font-variant-numeric: tabular-nums; font-weight: 600; }
 .token { color: #08979c; }
-.money { color: #d46b08; }
 small { display: block; margin-top: 3px; color: var(--text-secondary, #7a8395); }
 @media (max-width: 900px) {
   .modelFilters, .modelFilters :deep(.ant-picker), .modelInput, .limitSelect { width: 100%; }

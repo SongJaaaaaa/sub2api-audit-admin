@@ -19,9 +19,6 @@ class UnifiedAuthService
             abort(403, '仅 Sub2API 管理员可登录');
         }
 
-        return [
-            'identity_type' => 'admin',
-            ...$this->adminAuth->loginRemote($remote),
-        ];
+        return $this->adminAuth->loginRemote($remote);
     }
 }
