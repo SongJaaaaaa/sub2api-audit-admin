@@ -28,6 +28,7 @@ class LedgerAdjustmentController extends Controller
             'end_date' => $req->query('end_date', ''),
             'min_amount' => $req->query('min_amount', ''),
             'max_amount' => $req->query('max_amount', ''),
+            'revenue_only' => $req->boolean('revenue_only'),
         ], $page, $pageSize));
     }
 

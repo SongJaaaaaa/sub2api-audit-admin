@@ -211,6 +211,39 @@ class LedgerAdjustmentTest extends TestCase
             ->assertJsonPath('summary.gift_total', '20.00');
     }
 
+    public function test_revenue_only_excludes_gift_only_adjustments(): void
+    {
+        $admin = $this->admin();
+        foreach ([
+            [1001, '10.00', '10.00', '0.00'],
+            [1002, '20.00', '0.00', '20.00'],
+        ] as [$userId, $amount, $cash, $gift]) {
+            LedgerAdjustment::query()->create([
+                'ledger_no' => 'ADJ-'.$userId,
+                'idempotency_key' => 'key-'.$userId,
+                'sub2api_user_id' => $userId,
+                'operation' => LedgerAdjustment::OP_INCREMENT,
+                'amount' => $amount,
+                'cash_amount' => $cash,
+                'gift_quota_amount' => $gift,
+                'status' => LedgerAdjustment::STATUS_SUCCEEDED,
+                'adjust_reason' => '管理员赠送',
+                'created_by' => $admin->id,
+                'confirmed_at' => '2026-07-10 12:00:00',
+            ]);
+        }
+
+        $this->withToken($admin->createToken('admin-token')->plainTextToken)
+            ->getJson('/api/v1/ledger-adjustments?revenue_only=1')
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('summary.record_count', 1)
+            ->assertJsonPath('summary.amount_total', '10.00')
+            ->assertJsonPath('summary.cash_total', '10.00')
+            ->assertJsonPath('summary.gift_total', '0.00')
+            ->assertJsonPath('items.0.sub2api_user_id', 1001);
+    }
+
     public function test_confirm_failure_marks_exception(): void
     {
         $admin = $this->admin();

@@ -43,6 +43,7 @@ async function loadItems() {
       page: page.current,
       page_size: page.pageSize,
       status: 'succeeded',
+      revenue_only: true,
       sub2api_user_email: email.value,
       created_by: operator.value,
       start_date: dates.value?.[0].format('YYYY-MM-DD'),

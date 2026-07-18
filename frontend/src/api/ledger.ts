@@ -76,6 +76,7 @@ export function getLedgerAdjustments(params: {
   end_date?: string
   min_amount?: string
   max_amount?: string
+  revenue_only?: boolean
 }) {
   return http.get<unknown, AdjustmentListRes>('/ledger-adjustments', { params })
 }

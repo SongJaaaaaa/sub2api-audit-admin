@@ -264,6 +264,10 @@ class LedgerAdjustmentService
             $query->where('status', $status);
         }
 
+        if ($filters['revenue_only'] ?? false) {
+            $query->where('cash_amount', '>', 0);
+        }
+
         $userId = (int) ($filters['sub2api_user_id'] ?? 0);
         if ($userId > 0) {
             $query->where('sub2api_user_id', $userId);
