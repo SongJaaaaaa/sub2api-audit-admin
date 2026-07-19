@@ -6,6 +6,7 @@ import {
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   createLedgerAdjustment,
   type AdjustmentRes,
@@ -15,6 +16,7 @@ import { getSub2BalanceHistory, getSub2Users, type Sub2BalanceHistoryItem, type 
 import AdjustmentForm, { type AdjustmentFormState } from '../components/ledger/AdjustmentForm.vue'
 import SafeRichTextDisplay from '../components/richtext/SafeRichTextDisplay.vue'
 
+const route = useRoute()
 const loading = ref(false)
 const historyLoading = ref(false)
 const summaryLoading = ref(false)
@@ -42,6 +44,7 @@ const form = reactive<AdjustmentFormState>({
 })
 
 const selectedName = computed(() => selected.value?.username || selected.value?.email || '-')
+const totalQuota = computed(() => Number(userSummary.total_recharge) + Number(userSummary.total_gift))
 async function loadUsers() {
   loading.value = true
   try {
@@ -177,7 +180,27 @@ function openHistory(row: Sub2BalanceHistoryItem) {
   selectedHistory.value = row
 }
 
-onMounted(loadUsers)
+async function initPage() {
+  await loadUsers()
+  const val = Array.isArray(route.query.user_id) ? route.query.user_id[0] : route.query.user_id
+  const id = Number(val)
+  if (!id) return
+
+  const current = users.value.find(row => row.id === id)
+  if (current) return void selectUser(current)
+
+  try {
+    const res = await getSub2Users({ page: 1, page_size: 1, user_id: id })
+    if (res.items[0]) {
+      users.value = [res.items[0], ...users.value]
+      selectUser(res.items[0])
+    }
+  } catch {
+    message.error('读取指定用户失败')
+  }
+}
+
+onMounted(initPage)
 </script>
 
 <template>
@@ -241,6 +264,7 @@ onMounted(loadUsers)
                 <div class="quotaInlineStats" :class="{ loading: summaryLoading }">
                   <span>累积充值 <strong class="money">{{ moneyText(userSummary.total_recharge) }}</strong></span>
                   <span>累积赠送 <strong>{{ moneyText(userSummary.total_gift) }}</strong></span>
+                  <span>总额度 <strong>{{ moneyText(totalQuota) }}</strong></span>
                 </div>
               </div>
             </div>

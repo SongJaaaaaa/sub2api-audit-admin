@@ -34,6 +34,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('sub2api/users', [Sub2ApiDataController::class, 'users']);
         Route::get('sub2api/users/{id}/balance-history', [Sub2ApiDataController::class, 'balanceHistory']);
         Route::get('sub2api/model-stats', [Sub2ApiDataController::class, 'modelStats']);
+        Route::get('sub2api/consumption-ranking', [Sub2ApiDataController::class, 'consumptionRanking']);
         Route::get('dashboard', [DashboardController::class, 'index']);
         Route::get('balance-events', [BalanceEventController::class, 'index']);
         Route::get('balance-events/export', [BalanceEventController::class, 'export']);

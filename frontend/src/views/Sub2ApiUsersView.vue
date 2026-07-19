@@ -1,20 +1,26 @@
 <script setup lang="ts">
-import { GiftOutlined, HistoryOutlined, MinusCircleOutlined, PlusCircleOutlined } from '@ant-design/icons-vue'
+import { GiftOutlined, HistoryOutlined, ImportOutlined, MinusCircleOutlined, PlusCircleOutlined } from '@ant-design/icons-vue'
 import type { TableProps } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { createBatchGift } from '../api/ledger'
 import { getSub2BalanceHistory, getSub2Users, type Sub2BalanceHistoryItem, type Sub2User, type UserSummary } from '../api/sub2api'
 
 import SafeRichTextDisplay from '../components/richtext/SafeRichTextDisplay.vue'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useTableColumns } from '../composables/useTableColumns'
+const router = useRouter()
 const loading = ref(false)
 const historyLoading = ref(false)
 const drawerOpen = ref(false)
 const batchOpen = ref(false)
 const batchSubmitting = ref(false)
+const importOpen = ref(false)
+const importLoading = ref(false)
+const importText = ref('')
+const importedUsers = ref<Sub2User[]>([])
 const users = ref<Sub2User[]>([])
 const loaded = ref(false)
 const loadError = ref('')
@@ -27,7 +33,7 @@ const keyword = ref('')
 const userFilter = ref<'zero_balance' | 'negative_balance' | 'disabled' | ''>('')
 const balanceSort = ref<'' | 'asc' | 'desc'>('')
 const lastUsedRange = ref<[Dayjs, Dayjs] | null>(null)
-const batchMode = ref<'selected' | 'all'>('selected')
+const batchMode = ref<'selected' | 'all' | 'imported'>('selected')
 const batchProgress = ref('')
 const batchForm = reactive({ amount: '', admin_notes: '', include_revenue: false })
 const page = reactive({
@@ -52,7 +58,12 @@ const allColumns = [
 ] as const
 const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('sub2api-users-columns-v2', allColumns, 1280)
 const selectedUsers = computed(() => users.value.filter(row => selectedIds.value.includes(row.id)))
-const batchCount = computed(() => batchMode.value === 'selected' ? selectedIds.value.length : page.total)
+const batchUsers = computed(() => batchMode.value === 'imported' ? importedUsers.value : selectedUsers.value)
+const batchCount = computed(() => {
+  if (batchMode.value === 'imported') return importedUsers.value.length
+  return batchMode.value === 'selected' ? selectedIds.value.length : page.total
+})
+const actionName = computed(() => batchForm.include_revenue ? '入账' : '赠送')
 const rowSelection = computed(() => ({
   selectedRowKeys: selectedIds.value,
   onChange: (keys: (string | number)[]) => { selectedIds.value = keys.map(Number) },
@@ -150,11 +161,46 @@ function openBatchGift() {
     return
   }
   batchMode.value = selectedIds.value.length > 0 ? 'selected' : 'all'
+  importedUsers.value = []
+  resetBatchForm()
+  batchOpen.value = true
+}
+
+function resetBatchForm() {
   batchForm.amount = ''
   batchForm.admin_notes = '管理员赠送'
   batchForm.include_revenue = false
   batchProgress.value = ''
-  batchOpen.value = true
+}
+
+function openImport() {
+  importText.value = ''
+  importedUsers.value = []
+  importOpen.value = true
+}
+
+async function resolveImportedUsers() {
+  const emails = [...new Set(importText.value.split(/\s+/).map(val => val.trim().toLowerCase()).filter(Boolean))]
+  if (emails.length === 0) return void message.warning('请输入用户邮箱')
+
+  importLoading.value = true
+  try {
+    const res = await getSub2Users({ page: 1, page_size: 100, emails })
+    if (res.items.length === 0) return void message.warning('未找到匹配的 Sub2API 用户')
+
+    const found = new Set(res.items.map(row => row.email.toLowerCase()))
+    const missing = emails.filter(email => !found.has(email))
+    importedUsers.value = res.items
+    batchMode.value = 'imported'
+    resetBatchForm()
+    importOpen.value = false
+    batchOpen.value = true
+    if (missing.length > 0) message.warning(`${missing.length} 个邮箱未找到，已导入 ${res.items.length} 个用户`)
+  } catch {
+    message.error('读取导入用户失败')
+  } finally {
+    importLoading.value = false
+  }
 }
 
 async function loadAllUserIds() {
@@ -173,20 +219,22 @@ async function loadAllUserIds() {
 }
 
 async function submitBatchGift() {
-  if (batchCount.value === 0) return void message.warning('没有可赠送的用户')
-  if (!batchForm.amount || Number(batchForm.amount) <= 0) return void message.warning('请填写赠送额度')
+  if (batchCount.value === 0) return void message.warning(`没有可${actionName.value}的用户`)
+  if (!batchForm.amount || Number(batchForm.amount) <= 0) return void message.warning(`请填写${actionName.value}额度`)
 
   batchSubmitting.value = true
   let done = 0
   try {
-    const ids = batchMode.value === 'selected' ? [...selectedIds.value] : await loadAllUserIds()
+    const ids = batchMode.value === 'imported'
+      ? importedUsers.value.map(row => row.id)
+      : batchMode.value === 'selected' ? [...selectedIds.value] : await loadAllUserIds()
     let success = 0
     let failed = 0
     const size = 20
 
     for (let i = 0; i < ids.length; i += size) {
       const chunk = ids.slice(i, i + size)
-      batchProgress.value = `正在赠送：${i} / ${ids.length}`
+      batchProgress.value = `正在${actionName.value}：${i} / ${ids.length}`
       const res = await createBatchGift({
         user_ids: chunk,
         amount: batchForm.amount,
@@ -198,7 +246,7 @@ async function submitBatchGift() {
       done += chunk.length
     }
 
-    const result = `批量赠送完成：成功 ${success} 个，失败 ${failed} 个`
+    const result = `批量${actionName.value}完成：成功 ${success} 个，失败 ${failed} 个`
     if (failed > 0) {
       message.warning(result)
     } else {
@@ -208,10 +256,24 @@ async function submitBatchGift() {
     loadUsers()
   } catch (err) {
     const data = (err as { response?: { data?: { message?: string } } }).response?.data
-    const reason = data?.message || '批量赠送失败'
+    const reason = data?.message || `批量${actionName.value}失败`
     message.error(done > 0 ? `${reason}，已完成 ${done} 人，剩余操作已停止` : reason)
   } finally {
     batchSubmitting.value = false
+  }
+}
+
+function changeAction() {
+  batchForm.admin_notes = batchForm.include_revenue ? '管理员入账' : '管理员赠送'
+}
+
+function rowProps(row: Sub2User) {
+  return {
+    onClick: (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (target.closest('button, a, input, .ant-checkbox-wrapper')) return
+      router.push({ path: '/users-quota', query: { user_id: row.id } })
+    },
   }
 }
 
@@ -277,6 +339,10 @@ onMounted(loadUsers)
           enter-button
           @search="search"
         />
+        <a-button @click="openImport">
+          <template #icon><ImportOutlined /></template>
+          导入赠送用户
+        </a-button>
         <a-button type="primary" @click="openBatchGift">
           <template #icon><GiftOutlined /></template>
           批量赠送<span v-if="selectedIds.length">（{{ selectedIds.length }}）</span>
@@ -297,6 +363,7 @@ onMounted(loadUsers)
       :locale="{ emptyText: '暂无 Sub2API 用户数据' }"
       :pagination="page"
       :row-selection="rowSelection"
+      :custom-row="rowProps"
       :scroll="{ x: tableWidth }"
       @resize-column="resizeColumn"
       @change="change"
@@ -304,7 +371,7 @@ onMounted(loadUsers)
       <template #bodyCell="{ column, record }">
         <template v-if="column.dataIndex === 'email'">
           <a-tooltip title="点击复制邮箱">
-            <button type="button" class="copyEmail" @click="copyEmail(record.email)">
+            <button type="button" class="copyEmail" @click.stop="copyEmail(record.email)">
               <span>{{ record.email }}</span>
             </button>
           </a-tooltip>
@@ -324,7 +391,7 @@ onMounted(loadUsers)
           {{ record.last_used_at || '从未使用' }}
         </template>
         <template v-if="column.dataIndex === 'action'">
-          <a-button size="small" @click="openHistory(record)">
+          <a-button size="small" @click.stop="openHistory(record)">
             <template #icon><HistoryOutlined /></template>
             详情
           </a-button>
@@ -333,9 +400,29 @@ onMounted(loadUsers)
     </a-table>
 
     <a-modal
+      v-model:open="importOpen"
+      title="导入赠送用户"
+      ok-text="读取用户"
+      cancel-text="取消"
+      :confirm-loading="importLoading"
+      @ok="resolveImportedUsers"
+    >
+      <a-form layout="vertical">
+        <a-form-item label="用户邮箱">
+          <a-textarea
+            v-model:value="importText"
+            :rows="8"
+            placeholder="1ssssxxx@qq.com&#10;123123123@163.com"
+          />
+        </a-form-item>
+        <a-alert type="info" show-icon message="多个邮箱可使用空格或换行分隔" />
+      </a-form>
+    </a-modal>
+
+    <a-modal
       v-model:open="batchOpen"
-      title="批量赠送额度"
-      :ok-text="`确认赠送 ${batchCount} 人`"
+      title="批量赠送 / 入账"
+      :ok-text="`确认${actionName} ${batchCount} 人`"
       cancel-text="取消"
       :confirm-loading="batchSubmitting"
       :ok-button-props="{ disabled: batchCount === 0 }"
@@ -345,7 +432,12 @@ onMounted(loadUsers)
       @ok="submitBatchGift"
     >
       <a-form layout="vertical">
-        <a-form-item label="赠送范围">
+        <a-form-item v-if="batchMode === 'imported'" :label="`已导入 ${importedUsers.length} 人`">
+          <div class="selectedUsers">
+            <a-tag v-for="item in importedUsers" :key="item.id">{{ item.email }}</a-tag>
+          </div>
+        </a-form-item>
+        <a-form-item v-else label="操作范围">
           <a-radio-group v-model:value="batchMode" class="batchScope">
             <a-radio value="selected" :disabled="selectedIds.length === 0">已勾选用户（{{ selectedIds.length }} 人）</a-radio>
             <a-radio value="all">全部筛选结果（{{ page.total }} 人）</a-radio>
@@ -355,26 +447,26 @@ onMounted(loadUsers)
           v-if="batchMode === 'all'"
           type="warning"
           show-icon
-          :message="`将向当前筛选结果中的 ${page.total} 位用户赠送额度`"
+          :message="`将向当前筛选结果中的 ${page.total} 位用户${actionName}`"
         />
-        <a-form-item v-else :label="`已勾选 ${selectedIds.length} 人`">
+        <a-form-item v-else-if="batchMode === 'selected'" :label="`已勾选 ${selectedIds.length} 人`">
           <div class="selectedUsers">
-            <a-tag v-for="item in selectedUsers" :key="item.id">
+            <a-tag v-for="item in batchUsers" :key="item.id">
               {{ item.username || item.email || `用户 #${item.id}` }}
             </a-tag>
           </div>
         </a-form-item>
-        <a-form-item label="每人赠送额度" required>
+        <a-form-item :label="`每人${actionName}额度`" required>
           <a-input v-model:value="batchForm.amount" placeholder="0.00" />
         </a-form-item>
-        <a-form-item label="营收入账">
-          <a-radio-group v-model:value="batchForm.include_revenue" class="batchScope">
-            <a-radio :value="false">不计入营收</a-radio>
-            <a-radio :value="true">计入营收</a-radio>
+        <a-form-item label="操作类型">
+          <a-radio-group v-model:value="batchForm.include_revenue" class="batchScope" @change="changeAction">
+            <a-radio :value="false">赠送</a-radio>
+            <a-radio :value="true">入账</a-radio>
           </a-radio-group>
         </a-form-item>
         <a-form-item label="备注">
-          <a-textarea v-model:value="batchForm.admin_notes" :rows="3" placeholder="管理员赠送" />
+          <a-textarea v-model:value="batchForm.admin_notes" :rows="3" :placeholder="`管理员${actionName}`" />
         </a-form-item>
         <a-alert v-if="batchProgress" type="info" show-icon :message="batchProgress" />
       </a-form>
@@ -474,6 +566,7 @@ onMounted(loadUsers)
 .batchScope { display: grid; gap: 10px; }
 .copyEmail { display: inline-flex; max-width: 100%; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: #1677ff; cursor: pointer; }
 .copyEmail span { overflow: hidden; text-overflow: ellipsis; }
+:deep(.ant-table-tbody > tr) { cursor: pointer; }
 @media (max-width: 760px) { .userFilters { width: 100%; flex-wrap: wrap; } .userFilterSelect, .lastUsedFilter, .search { width: 100%; } }
 @media (max-width: 760px) { .compactSummary { width: 100%; justify-content: space-between; } }
 </style>

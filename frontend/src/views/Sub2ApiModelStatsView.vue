@@ -11,7 +11,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useTableColumns } from '../composables/useTableColumns'
 import {
+  getConsumptionRanking,
   getModelStats,
+  type ConsumptionRank,
   type ModelStat,
   type ModelStatsRes,
   type ModelUserRank,
@@ -20,8 +22,12 @@ import {
 use([BarChart, DataZoomComponent, GridComponent, TooltipComponent, CanvasRenderer])
 
 const loading = ref(false)
+const rankingLoading = ref(false)
 const stats = ref<ModelStatsRes | null>(null)
+const ranking = ref<ConsumptionRank[]>([])
 const statsError = ref('')
+const rankingError = ref('')
+const activeTab = ref<'models' | 'users'>('models')
 const range = ref<[Dayjs, Dayjs]>([dayjs().subtract(6, 'day'), dayjs()])
 const model = ref('')
 const limit = ref(20)
@@ -32,6 +38,8 @@ let userChart: ECharts | null = null
 const selectedModel = computed(() => stats.value?.selected_model || '')
 const modelRows = computed<ModelStat[]>(() => [...(stats.value?.models || [])].sort((a, b) => b.total_tokens - a.total_tokens))
 const userRows = computed<ModelUserRank[]>(() => [...(stats.value?.users || [])].sort((a, b) => b.total_tokens - a.total_tokens))
+const pageLoading = computed(() => activeTab.value === 'models' ? loading.value : rankingLoading.value)
+const activeError = computed(() => activeTab.value === 'models' ? statsError.value : rankingError.value)
 
 const modelColumns = [
   { title: '排名', dataIndex: 'rank', width: 72, align: 'center' },
@@ -45,6 +53,22 @@ const modelColumns = [
 ] as const
 
 const { columns: visibleModelColumns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('sub2api-model-columns', modelColumns, 1190)
+
+const rankingColumns = [
+  { title: '排名', dataIndex: 'rank', width: 72, align: 'center' },
+  { title: '用户', dataIndex: 'email', minWidth: 280 },
+  { title: '请求数', dataIndex: 'request_count', width: 150, align: 'right' },
+  { title: 'Token', dataIndex: 'total_tokens', width: 180, align: 'right' },
+  { title: '实际消费', dataIndex: 'actual_cost', width: 180, align: 'right' },
+] as const
+const {
+  columns: visibleRankingColumns,
+  visibleCols: visibleRankingCols,
+  colOptions: rankingColOptions,
+  tableWidth: rankingTableWidth,
+  resizeColumn: resizeRankingColumn,
+  resetColumns: resetRankingColumns,
+} = useTableColumns('sub2api-consumption-ranking-columns', rankingColumns, 920)
 
 async function loadStats() {
   const [start, end] = range.value
@@ -74,6 +98,37 @@ async function loadStats() {
     loading.value = false
     renderUserChart()
   }
+}
+
+async function loadRanking() {
+  const [start, end] = range.value
+  rankingLoading.value = true
+  rankingError.value = ''
+
+  try {
+    const res = await getConsumptionRanking({
+      start_date: start.format('YYYY-MM-DD'),
+      end_date: end.format('YYYY-MM-DD'),
+      limit: limit.value,
+    })
+    ranking.value = res.items
+  } catch (err) {
+    ranking.value = []
+    const data = (err as { response?: { data?: { message?: string } } }).response?.data
+    rankingError.value = data?.message || '读取消费排行失败。'
+    message.error(rankingError.value)
+  } finally {
+    rankingLoading.value = false
+  }
+}
+
+function loadData() {
+  return activeTab.value === 'models' ? loadStats() : loadRanking()
+}
+
+function changeTab(key: string | number) {
+  activeTab.value = key as 'models' | 'users'
+  loadData()
 }
 
 function renderUserChart() {
@@ -136,7 +191,11 @@ function formatToken(val: number | string | null | undefined) {
   return `${(num / base).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}${unit}`
 }
 
-onMounted(() => { window.addEventListener('resize', resizeChart); loadStats() })
+function formatMoney(val: number | string | null | undefined) {
+  return Number(val || 0).toFixed(2)
+}
+
+onMounted(() => { window.addEventListener('resize', resizeChart); loadData() })
 onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userChart?.dispose() })
 </script>
 
@@ -147,10 +206,11 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userC
         <a-range-picker
           v-model:value="range"
           :allow-clear="false"
-          :disabled="loading"
-          @change="loadStats"
+          :disabled="pageLoading"
+          @change="loadData"
         />
         <a-auto-complete
+          v-if="activeTab === 'models'"
           v-model:value="model"
           :options="modelOptions"
           allow-clear
@@ -165,33 +225,38 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userC
           <a-select-option :value="50">Top 50</a-select-option>
           <a-select-option :value="100">Top 100</a-select-option>
         </a-select>
-        <a-button type="primary" :loading="loading" @click="loadStats">
+        <a-button type="primary" :loading="pageLoading" @click="loadData">
           <template #icon><SearchOutlined /></template>
           查询
         </a-button>
-        <a-button :disabled="loading" @click="loadStats">
+        <a-button :disabled="pageLoading" @click="loadData">
           <template #icon><ReloadOutlined /></template>
         </a-button>
       </div>
     </div>
 
+    <a-tabs :active-key="activeTab" class="rankingTabs" @change="changeTab">
+      <a-tab-pane key="models" tab="模型消耗统计" />
+      <a-tab-pane key="users" tab="消费排行榜" />
+    </a-tabs>
+
     <a-alert
-      v-if="statsError"
+      v-if="activeError"
       type="error"
       show-icon
-      :message="statsError"
-      :description="stats ? '当前保留的是上一次成功查询结果。' : undefined"
+      :message="activeError"
+      :description="activeTab === 'models' && stats ? '当前保留的是上一次成功查询结果。' : undefined"
       class="statsAlert"
     />
 
-    <div v-if="stats" class="summaryGrid">
+    <div v-if="activeTab === 'models' && stats" class="summaryGrid">
       <section><span>请求总数</span><strong>{{ formatCount(stats.summary.request_count) }}</strong></section>
       <section><span>Token 总数</span><strong>{{ formatToken(stats.summary.total_tokens) }}</strong></section>
       <section><span>缓存 Token</span><strong>{{ formatToken(stats.summary.cache_tokens) }}</strong></section>
       <section><span>缓存占比</span><strong>{{ stats.summary.cache_rate.toFixed(2) }}%</strong></section>
     </div>
 
-    <a-spin :spinning="loading">
+    <a-spin v-if="activeTab === 'models'" :spinning="loading">
       <section v-if="stats && !selectedModel" class="panel">
         <div class="sectionHead">
           <div>
@@ -244,6 +309,52 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userC
 
       <a-empty v-else-if="!loading" description="暂无可展示的官方统计数据" />
     </a-spin>
+
+    <a-spin v-else :spinning="rankingLoading">
+      <section class="panel">
+        <div class="sectionHead">
+          <div><h2>Sub2API 用户消费排行</h2></div>
+          <span>返回 {{ ranking.length }} 个用户</span>
+        </div>
+        <div class="tableTools">
+          <ColumnSettings
+            v-model:value="visibleRankingCols"
+            v-model:width="rankingTableWidth"
+            :options="rankingColOptions"
+            @reset="resetRankingColumns"
+          />
+        </div>
+        <a-table
+          row-key="user_id"
+          :columns="visibleRankingColumns"
+          :data-source="ranking"
+          :pagination="false"
+          :scroll="{ x: rankingTableWidth }"
+          :locale="{ emptyText: '所选日期内暂无用户消费数据' }"
+          size="middle"
+          @resize-column="resizeRankingColumn"
+        >
+          <template #bodyCell="{ column, record, index }">
+            <template v-if="column.dataIndex === 'rank'">
+              <span class="rankNo">{{ index + 1 }}</span>
+            </template>
+            <template v-else-if="column.dataIndex === 'email'">
+              <strong>{{ record.email || `用户 #${record.user_id}` }}</strong>
+              <small>ID: {{ record.user_id }}</small>
+            </template>
+            <template v-else-if="column.dataIndex === 'request_count'">
+              {{ formatCount(record.request_count) }}
+            </template>
+            <template v-else-if="column.dataIndex === 'total_tokens'">
+              <span class="token">{{ formatToken(record.total_tokens) }}</span>
+            </template>
+            <template v-else-if="column.dataIndex === 'actual_cost'">
+              <strong class="cost">{{ formatMoney(record.actual_cost) }}</strong>
+            </template>
+          </template>
+        </a-table>
+      </section>
+    </a-spin>
   </section>
 </template>
 
@@ -259,6 +370,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userC
 .modelInput { width: min(360px, 42vw); }
 .limitSelect { width: 104px; }
 .statsAlert { margin-bottom: 0; }
+.rankingTabs { margin-bottom: -16px; }
 .panel { min-width: 0; padding: 18px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 14px; background: var(--card-bg, #fff); box-shadow: 0 8px 24px rgba(30, 42, 70, .05); }
 .sectionHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 15px; }
 .sectionHead h2 { margin: 0; font-size: 18px; }
@@ -269,6 +381,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userC
 .rankNo { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: rgba(22, 119, 255, .1); color: #1677ff; font-weight: 700; }
 .token { font-variant-numeric: tabular-nums; font-weight: 600; }
 .token { color: #08979c; }
+.cost { color: #cf1322; font-variant-numeric: tabular-nums; }
 small { display: block; margin-top: 3px; color: var(--text-secondary, #7a8395); }
 @media (max-width: 900px) {
   .modelFilters, .modelFilters :deep(.ant-picker), .modelInput, .limitSelect { width: 100%; }

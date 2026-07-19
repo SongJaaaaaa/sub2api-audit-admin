@@ -3,12 +3,16 @@
 namespace App\Services\Stats;
 
 use App\Services\Sub2Api\Sub2ApiAdminClient;
+use App\Services\Sub2Api\Sub2ApiReadRepository;
 use App\Support\ChinaDateRange;
 use Illuminate\Support\Collection;
 
 class ModelStatsService
 {
-    public function __construct(private readonly Sub2ApiAdminClient $client) {}
+    public function __construct(
+        private readonly Sub2ApiAdminClient $client,
+        private readonly Sub2ApiReadRepository $repo,
+    ) {}
 
     public function data(ChinaDateRange $range, ?string $model, int $limit): array
     {
@@ -42,6 +46,18 @@ class ModelStatsService
             'summary' => $summary,
             'models' => $models,
             'users' => $users,
+        ];
+    }
+
+    public function consumptionRanking(ChinaDateRange $range, int $limit): array
+    {
+        return [
+            'range' => [
+                'start_date' => $range->startDate,
+                'end_date' => $range->endDate,
+                'timezone' => $range->timezone,
+            ],
+            'items' => $this->repo->consumptionRanking($range, $limit),
         ];
     }
 

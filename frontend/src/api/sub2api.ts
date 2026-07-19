@@ -108,6 +108,19 @@ export interface ModelStatsRes {
   users: ModelUserRank[]
 }
 
+export interface ConsumptionRank {
+  user_id: number
+  email: string | null
+  request_count: number
+  total_tokens: number
+  actual_cost: string
+}
+
+export interface ConsumptionRankingRes {
+  range: ModelStatsRes['range']
+  items: ConsumptionRank[]
+}
+
 export function getSub2Users(params: {
   page: number
   page_size: number
@@ -117,6 +130,8 @@ export function getSub2Users(params: {
   last_used_end?: string
   sort_by?: 'balance'
   sort_order?: 'asc' | 'desc'
+  user_id?: number
+  emails?: string[]
 }) {
   return http.get<unknown, UserListRes>('/sub2api/users', { params })
 }
@@ -135,4 +150,12 @@ export function getModelStats(params: {
   limit?: number
 }) {
   return http.get<unknown, ModelStatsRes>('/sub2api/model-stats', { params })
+}
+
+export function getConsumptionRanking(params: {
+  start_date?: string
+  end_date?: string
+  limit?: number
+}) {
+  return http.get<unknown, ConsumptionRankingRes>('/sub2api/consumption-ranking', { params })
 }

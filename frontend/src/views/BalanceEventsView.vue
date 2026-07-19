@@ -273,7 +273,7 @@ onMounted(() => loadItems())
 .filterGrid label :deep(.ant-picker), .filterGrid label :deep(.ant-select) { width: 100%; }
 .filterDate { flex: 1 1 520px; }
 .dateQuickFilter { display: flex; gap: 8px; }
-.dateQuickFilter :deep(.ant-picker) { flex: 1; min-width: 240px; }
+.dateQuickFilter :deep(.ant-picker) { flex: 0 0 240px; width: 240px; min-width: 240px; }
 .filterType { flex: 0 0 130px; }
 .filterId { flex: 0 0 130px; }
 .filterGrow { flex: 1 1 230px; max-width: 340px; }
@@ -291,7 +291,7 @@ small { display: block; margin-top: 3px; color: var(--text-secondary, #7a8395); 
 @media (max-width: 760px) {
   .filterGrid label { flex: 1 1 100%; max-width: none; }
   .dateQuickFilter { flex-direction: column; }
-  .dateQuickFilter :deep(.ant-picker) { min-width: 0; }
+  .dateQuickFilter :deep(.ant-picker) { flex: 1; width: 100%; min-width: 0; }
   .filterActions, .filterActions button { flex: 1; }
   .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

@@ -46,6 +46,11 @@ trait Sub2ApiTestDatabase
         Schema::connection('sub2api')->create('usage_logs', function (Blueprint $table): void {
             $table->id();
             $table->unsignedBigInteger('user_id')->index();
+            $table->unsignedBigInteger('input_tokens')->default(0);
+            $table->unsignedBigInteger('output_tokens')->default(0);
+            $table->unsignedBigInteger('cache_creation_tokens')->default(0);
+            $table->unsignedBigInteger('cache_read_tokens')->default(0);
+            $table->decimal('actual_cost', 20, 10)->default(0);
             $table->timestamp('created_at');
         });
 

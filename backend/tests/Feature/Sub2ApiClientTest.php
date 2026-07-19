@@ -106,6 +106,25 @@ class Sub2ApiClientTest extends TestCase
         $this->assertSame('2026-07-14 10:00:00', $res['items'][0]['last_used_at']);
     }
 
+    public function test_users_can_filter_by_exact_id_and_emails(): void
+    {
+        $this->insertSub2ApiUser(['id' => 1001, 'email' => 'alpha@example.com']);
+        $this->insertSub2ApiUser(['id' => 1002, 'email' => 'beta@example.com']);
+        $this->insertSub2ApiUser(['id' => 1003, 'email' => 'gamma@example.com']);
+        $this->withoutMiddleware();
+
+        $this->getJson('/api/v1/sub2api/users?user_id=1002')
+            ->assertOk()
+            ->assertJsonCount(1, 'items')
+            ->assertJsonPath('items.0.email', 'beta@example.com');
+
+        $this->getJson('/api/v1/sub2api/users?emails[]=alpha%40example.com&emails[]=gamma%40example.com')
+            ->assertOk()
+            ->assertJsonCount(2, 'items')
+            ->assertJsonPath('items.0.email', 'gamma@example.com')
+            ->assertJsonPath('items.1.email', 'alpha@example.com');
+    }
+
     public function test_users_can_sort_balance_on_the_server(): void
     {
         $this->insertSub2ApiUser(['id' => 1001, 'balance' => '20.00']);

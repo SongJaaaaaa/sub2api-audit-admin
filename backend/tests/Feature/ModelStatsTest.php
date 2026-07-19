@@ -6,12 +6,15 @@ use App\Models\Admin;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Tests\Support\Sub2ApiTestDatabase;
 use Tests\TestCase;
 
 class ModelStatsTest extends TestCase
 {
     use RefreshDatabase;
+    use Sub2ApiTestDatabase;
 
     protected function setUp(): void
     {
@@ -20,11 +23,13 @@ class ModelStatsTest extends TestCase
         CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-10 12:00:00', 'Asia/Shanghai'));
         config()->set('sub2api.admin_api.base_url', 'https://sub2api.test');
         config()->set('sub2api.admin_api.key', 'test-key');
+        $this->setUpSub2ApiDatabase();
     }
 
     protected function tearDown(): void
     {
         CarbonImmutable::setTestNow();
+        $this->tearDownSub2ApiDatabase();
 
         parent::tearDown();
     }
@@ -126,6 +131,38 @@ class ModelStatsTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_consumption_ranking_uses_actual_cost_order(): void
+    {
+        foreach ([1001, 1002, 1003] as $id) {
+            $this->insertSub2ApiUser([
+                'id' => $id,
+                'email' => 'user'.$id.'@example.com',
+            ]);
+        }
+        DB::connection('sub2api')->table('usage_logs')->insert([
+            $this->usageRow(1001, '2.5', '2026-06-30 15:59:59'),
+            $this->usageRow(1001, '2.5', '2026-06-30 16:00:00'),
+            $this->usageRow(1002, '4.25', '2026-07-01 00:00:00'),
+            $this->usageRow(1002, '4.5', '2026-07-08 15:59:59'),
+            $this->usageRow(1003, '4.2', '2026-07-08 15:59:59'),
+            $this->usageRow(1003, '99', '2026-07-09 16:00:00'),
+        ]);
+
+        $this->withToken($this->token())
+            ->getJson('/api/v1/sub2api/consumption-ranking?start_date=2026-07-01&end_date=2026-07-09&limit=2')
+            ->assertOk()
+            ->assertJsonPath('range.start_date', '2026-07-01')
+            ->assertJsonPath('range.end_date', '2026-07-09')
+            ->assertJsonCount(2, 'items')
+            ->assertJsonPath('items.0.user_id', 1002)
+            ->assertJsonPath('items.0.actual_cost', '8.75')
+            ->assertJsonPath('items.1.user_id', 1003)
+            ->assertJsonPath('items.1.request_count', 1)
+            ->assertJsonPath('items.1.total_tokens', 100);
+
+        Http::assertNothingSent();
+    }
+
     public function test_invalid_official_model_shape_returns_stable_502(): void
     {
         Http::fake([
@@ -198,6 +235,19 @@ class ModelStatsTest extends TestCase
             'total_tokens' => $tokens,
             'cost' => '3.5',
             'actual_cost' => '3.1',
+        ];
+    }
+
+    private function usageRow(int $id, string $cost, string $createdAt): array
+    {
+        return [
+            'user_id' => $id,
+            'input_tokens' => 10,
+            'output_tokens' => 20,
+            'cache_creation_tokens' => 30,
+            'cache_read_tokens' => 40,
+            'actual_cost' => $cost,
+            'created_at' => $createdAt,
         ];
     }
 }

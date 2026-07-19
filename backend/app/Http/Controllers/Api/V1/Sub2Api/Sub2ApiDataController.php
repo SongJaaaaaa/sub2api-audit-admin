@@ -38,11 +38,16 @@ class Sub2ApiDataController extends Controller
             'last_used_end' => $end ?: null,
             'sort_by' => $req->query('sort_by') ?: null,
             'sort_order' => $req->query('sort_order') ?: null,
+            'user_id' => $req->query('user_id') ?: null,
+            'emails' => $req->query('emails', []),
         ], [
             'last_used_start' => ['nullable', 'date_format:Y-m-d'],
             'last_used_end' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:last_used_start'],
             'sort_by' => ['nullable', Rule::in(['balance'])],
             'sort_order' => ['nullable', Rule::in(['asc', 'desc'])],
+            'user_id' => ['nullable', 'integer', 'min:1'],
+            'emails' => ['array', 'max:100'],
+            'emails.*' => ['string', 'email'],
         ])->validate();
 
         return response()->json($repo->users([
@@ -52,6 +57,8 @@ class Sub2ApiDataController extends Controller
             'last_used_end' => $dates['last_used_end'] ?? '',
             'sort_by' => $dates['sort_by'] ?? '',
             'sort_order' => $dates['sort_order'] ?? '',
+            'user_id' => $dates['user_id'] ?? null,
+            'emails' => $dates['emails'] ?? [],
         ], $page, $pageSize));
     }
 
@@ -88,6 +95,40 @@ class Sub2ApiDataController extends Controller
         return response()->json($service->data(
             ChinaDateRange::make($data['start_date'], $data['end_date']),
             $data['model'] ?? null,
+            (int) $data['limit'],
+        ));
+    }
+
+    public function consumptionRanking(Request $req, ModelStatsService $service): JsonResponse
+    {
+        $start = trim((string) $req->query('start_date', ''));
+        $end = trim((string) $req->query('end_date', ''));
+
+        if (($start === '') !== ($end === '')) {
+            throw ValidationException::withMessages([
+                'start_date' => ['start_date 和 end_date 必须同时提供'],
+                'end_date' => ['start_date 和 end_date 必须同时提供'],
+            ]);
+        }
+
+        if ($start === '') {
+            $today = now(config('ledger.timezone', 'Asia/Shanghai'))->toDateString();
+            $start = $today;
+            $end = $today;
+        }
+
+        $data = Validator::make([
+            'start_date' => $start,
+            'end_date' => $end,
+            'limit' => $req->query('limit', 20),
+        ], [
+            'start_date' => ['required', 'date_format:Y-m-d'],
+            'end_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:start_date'],
+            'limit' => ['required', 'integer', 'min:1', 'max:100'],
+        ])->validate();
+
+        return response()->json($service->consumptionRanking(
+            ChinaDateRange::make($data['start_date'], $data['end_date']),
             (int) $data['limit'],
         ));
     }

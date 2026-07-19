@@ -47,6 +47,16 @@ class Sub2ApiReadRepository
             });
         }
 
+        $userId = (int) ($filters['user_id'] ?? 0);
+        if ($userId > 0) {
+            $query->where('id', $userId);
+        }
+
+        $emails = $filters['emails'] ?? [];
+        if ($emails !== []) {
+            $query->whereIn('email', $emails);
+        }
+
         $userFilter = trim((string) ($filters['user_filter'] ?? ''));
         if ($userFilter === 'zero_balance') {
             $query->where('balance', 0);
@@ -130,6 +140,37 @@ class Sub2ApiReadRepository
             ->first();
 
         return $row ? $this->userRow($row) : null;
+    }
+
+    public function consumptionRanking(ChinaDateRange $range, int $limit): array
+    {
+        [$start, $end] = $this->remoteBounds($range->utcStart, $range->utcEndExclusive);
+
+        return $this->db()
+            ->table('usage_logs as ul')
+            ->leftJoin('users as u', 'u.id', '=', 'ul.user_id')
+            ->select(['ul.user_id', 'u.email'])
+            ->selectRaw('COUNT(*) as requests')
+            ->selectRaw(
+                'COALESCE(SUM(COALESCE(ul.input_tokens, 0) + COALESCE(ul.output_tokens, 0) '
+                .'+ COALESCE(ul.cache_creation_tokens, 0) + COALESCE(ul.cache_read_tokens, 0)), 0) as tokens',
+            )
+            ->selectRaw('COALESCE(SUM(ul.actual_cost), 0) as actual_cost')
+            ->whereNotNull('ul.user_id')
+            ->where('ul.created_at', '>=', $start)
+            ->where('ul.created_at', '<', $end)
+            ->groupBy('ul.user_id', 'u.email')
+            ->orderByDesc('actual_cost')
+            ->limit($limit)
+            ->get()
+            ->map(fn ($row): array => [
+                'user_id' => (int) $row->user_id,
+                'email' => $row->email,
+                'request_count' => (int) $row->requests,
+                'total_tokens' => (int) $row->tokens,
+                'actual_cost' => $this->decimal($row->actual_cost, 10),
+            ])
+            ->all();
     }
 
     public function findAdminAdjustmentSources(int $userId, string $idempotencyKey): array
