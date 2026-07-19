@@ -36,9 +36,8 @@ const allColumns = [
   { title: '发生日期', dataIndex: 'paid_at', width: 120 },
   { title: '操作人', dataIndex: 'operator_name', width: 140 },
   { title: '创建时间', dataIndex: 'created_at', width: 180 },
-  { title: '操作', dataIndex: 'action', fixed: 'right', width: 90 },
 ] as const
-const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('operation-expense-columns', allColumns, 1260)
+const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('operation-expense-columns', allColumns, 800)
 
 async function loadItems() {
   loading.value = true
@@ -90,6 +89,9 @@ async function submit() {
   } catch { message.error('保存支出失败') } finally { submitting.value = false }
 }
 function openDetail(row: OperationExpense) { selected.value = row; drawerOpen.value = true }
+function rowProps(row: OperationExpense) {
+  return { class: 'clickableRow', onClick: () => openDetail(row) }
+}
 function signedExpense(value: string | number) {
   const amount = Number(value || 0)
   return amount === 0 ? '0.00' : `-${Math.abs(amount).toFixed(2)}`
@@ -117,15 +119,14 @@ onMounted(loadItems)
       <section><span>支出合计</span><strong class="money expenseMoney">{{ signedExpense(summary.amount_total) }}</strong></section>
       <section><span>支出笔数</span><strong>{{ summary.record_count }}</strong></section>
       <section><span>最大单笔支出</span><strong class="money expenseMoney">{{ signedExpense(summary.max_amount) }}</strong></section>
+      <div class="summaryTools"><ColumnSettings v-model:value="visibleCols" v-model:width="tableWidth" :options="colOptions" @reset="resetColumns" /></div>
       <section v-if="summary.daily_average !== null"><span>日均支出</span><strong class="money expenseMoney">{{ signedExpense(summary.daily_average) }}</strong></section>
     </div>
 
-    <div class="tableTools"><ColumnSettings v-model:value="visibleCols" v-model:width="tableWidth" :options="colOptions" @reset="resetColumns" /></div>
-    <a-table row-key="id" :columns="columns" :data-source="items" :loading="loading" :pagination="page" :scroll="{ x: tableWidth }" :locale="{ emptyText: '暂无支出记录' }" @resize-column="resizeColumn" @change="change">
+    <a-table row-key="id" :custom-row="rowProps" :columns="columns" :data-source="items" :loading="loading" :pagination="page" :scroll="{ x: tableWidth }" :locale="{ emptyText: '暂无支出记录' }" @resize-column="resizeColumn" @change="change">
       <template #bodyCell="{ column, record }">
         <template v-if="column.dataIndex === 'amount'"><span class="money expenseMoney">{{ signedExpense(record.amount) }}</span></template>
         <template v-else-if="column.dataIndex === 'operator_name'">{{ record.operator_name || record.operator_email || '-' }}</template>
-        <template v-else-if="column.dataIndex === 'action'"><a-button size="small" @click="openDetail(record)">详情</a-button></template>
       </template>
     </a-table>
 
@@ -155,11 +156,14 @@ onMounted(loadItems)
 .filterAmount { flex: 0 0 130px; }.filterLg { flex: 0 0 220px; }.filterDate { flex: 0 0 250px; }.filterGrow { flex: 1 1 200px; max-width: 320px; }
 .summaryGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .summaryGrid section { padding: 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 8px; background: var(--card-bg, #fff); }
+.summaryTools { display: flex; justify-content: flex-end; align-items: flex-start; }
 .summaryGrid span { display: block; color: var(--text-secondary, #7a8395); margin-bottom: 6px; font-size: 13px; }
 .summaryGrid strong { font-size: 23px; }
 .expenseMoney { color: #cf1322; }
 .detailNotes { margin-top: 18px; }
 .detailNotes h3 { margin: 0 0 8px; }
+:deep(.clickableRow) { cursor: pointer; }
+:deep(.clickableRow:hover) > td { background: rgba(22, 119, 255, .06) !important; }
 @media (max-width: 760px) { .expenseFilterBar > * { flex: 1 1 100%; width: 100% !important; max-width: none; } .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 420px) { .summaryGrid { grid-template-columns: 1fr; } }
 </style>

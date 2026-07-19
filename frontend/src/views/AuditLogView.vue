@@ -234,10 +234,6 @@ onMounted(loadItems)
 
 <template>
   <section class="page">
-    <div class="pageHead pageHeadActionsOnly">
-      <a-button @click="loadItems">刷新</a-button>
-    </div>
-
     <div class="filterBar">
       <a-select v-model:value="filters.action" class="filterAction" placeholder="操作类型" allow-clear><a-select-option value="">全部操作</a-select-option><a-select-option v-for="(label, key) in actionLabels" :key="key" :value="key">{{ label }}</a-select-option></a-select>
       <a-select v-model:value="filters.admin_id" class="filterLg" placeholder="操作人" allow-clear><a-select-option v-for="row in adminOptions" :key="row.id" :value="row.id">{{ row.name }}（{{ row.email }}）</a-select-option></a-select>

@@ -91,7 +91,6 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resize); chart?.dis
 
 <template>
   <section class="page">
-    <div class="pageHead pageHeadActionsOnly"><a-button @click="loadItems">刷新</a-button></div>
     <div class="filterBar">
       <a-input v-model:value="filters.userId" class="filterId" placeholder="用户 ID" allow-clear />
       <a-input v-model:value="filters.email" class="filterLg" placeholder="用户邮箱" allow-clear />
