@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { DownloadOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import { DownloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import { onMounted, reactive, ref } from 'vue'
 import {
-  exportFinanceHistory,
+  exportFinanceHistoryExcel,
   getFinanceHistory,
   type FinanceHistoryItem,
   type FinanceHistoryParams,
@@ -86,16 +86,16 @@ async function loadItems(reset = false) {
   }
 }
 
-async function downloadCsv() {
+async function downloadExcel() {
   exporting.value = true
   try {
-    const blob = await exportFinanceHistory(params(false))
+    const blob = await exportFinanceHistoryExcel(params(false))
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     const start = dateRange.value?.[0].format('YYYY-MM-DD') || 'all'
     const end = dateRange.value?.[1].format('YYYY-MM-DD') || 'all'
     link.href = url
-    link.download = `finance-history-${start}-${end}.csv`
+    link.download = `finance-history-${start}-${end}.xlsx`
     document.body.appendChild(link)
     link.click()
     link.remove()
@@ -172,13 +172,6 @@ onMounted(() => loadItems())
 
 <template>
   <section class="page historyPage">
-    <div class="pageHead pageHeadActionsOnly">
-      <div class="headActions">
-        <a-button :loading="exporting" @click="downloadCsv"><template #icon><DownloadOutlined /></template>导出当前筛选 CSV</a-button>
-        <a-button :loading="loading" @click="loadItems()"><template #icon><ReloadOutlined /></template></a-button>
-      </div>
-    </div>
-
     <section class="filterPanel">
       <div class="filterGrid">
         <label class="filterDate">
@@ -207,6 +200,7 @@ onMounted(() => loadItems())
           <a-select v-model:value="operator" allow-clear placeholder="全部操作人" :options="adminOptions.map(row => ({ label: `${row.name}（${row.email}）`, value: row.id }))" />
         </label>
         <div class="filterActions">
+          <a-button :loading="exporting" @click="downloadExcel"><template #icon><DownloadOutlined /></template>导出 Excel</a-button>
           <a-button type="primary" :loading="loading" @click="loadItems(true)"><template #icon><SearchOutlined /></template>查询</a-button>
           <a-button @click="resetFilters">重置</a-button>
         </div>

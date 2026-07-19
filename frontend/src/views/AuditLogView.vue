@@ -134,6 +134,9 @@ const skipFields = new Set(['content_html', 'admin_notes'])
 
 function renderFieldValue(key: string, val: unknown): string {
   if (val === null || val === undefined || val === '') return '-'
+  if (key === 'sub2api_notes') {
+    return String(val).replace(/\[sub2api-audit[^\]]*\]\s*/g, '').trim() || '-'
+  }
   const trans = valueTranslations[key]
   if (trans && typeof val === 'string' && trans[val]) return trans[val]
   if (key === 'size' && typeof val === 'number') {

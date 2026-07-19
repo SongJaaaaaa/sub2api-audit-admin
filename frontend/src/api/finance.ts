@@ -34,6 +34,22 @@ export interface GiftQuotaEntry {
   created_at: string | null
 }
 
+export interface CashEntry {
+  id: number
+  entry_no: string
+  ledger_adjustment_id: number | null
+  sub2api_user_id: number | null
+  sub2api_user_email: string | null
+  direction: 'in'
+  cash_amount: string
+  source: string
+  remark: string | null
+  created_by: number | null
+  operator_name: string | null
+  operator_email: string | null
+  created_at: string | null
+}
+
 export interface ExpenseSummary {
   record_count: number
   category_count: number
@@ -122,6 +138,10 @@ export function getGiftEntries(params: FinanceParams) {
   return http.get<unknown, PageRes<GiftQuotaEntry, FinanceSummary>>('/finance/gifts', { params })
 }
 
+export function getCashEntries(params: FinanceParams) {
+  return http.get<unknown, PageRes<CashEntry, FinanceSummary>>('/finance/cash', { params })
+}
+
 export function getUserFinanceSummary(userId: number) {
   return http.get<unknown, UserFinanceSummary>(`/finance/users/${userId}/summary`)
 }
@@ -154,7 +174,7 @@ export function getFinanceHistory(params: FinanceHistoryParams) {
   return http.get<unknown, PageRes<FinanceHistoryItem, FinanceHistorySummary> & { summary: FinanceHistorySummary }>('/finance/history', { params })
 }
 
-export function exportFinanceHistory(params: FinanceHistoryParams) {
+export function exportFinanceHistoryExcel(params: FinanceHistoryParams) {
   return http.get<unknown, Blob>('/finance/history/export', {
     params,
     responseType: 'blob',

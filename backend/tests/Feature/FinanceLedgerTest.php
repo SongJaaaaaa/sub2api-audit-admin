@@ -4,14 +4,32 @@ namespace Tests\Feature;
 
 use App\Models\Admin;
 use App\Models\LedgerAdjustment;
+use App\Support\Sub2ApiNoteTag;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Tests\Support\Sub2ApiTestDatabase;
 use Tests\TestCase;
+use ZipArchive;
 
 class FinanceLedgerTest extends TestCase
 {
     use RefreshDatabase;
+    use Sub2ApiTestDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->setUpSub2ApiDatabase();
+    }
+
+    protected function tearDown(): void
+    {
+        $this->tearDownSub2ApiDatabase();
+
+        parent::tearDown();
+    }
 
     public function test_success_adjustment_writes_cash_and_gift_ledgers(): void
     {
@@ -220,17 +238,76 @@ class FinanceLedgerTest extends TestCase
             ->assertJsonPath('total', 1)
             ->assertJsonPath('items.0.bill_no', 'GIFT-HISTORY');
 
-        $csv = $this->withToken($token)
+        $excel = $this->withToken($token)
             ->get('/api/v1/finance/history/export?start_date=2026-07-10&end_date=2026-07-12')
             ->assertOk()
-            ->assertDownload('finance-history-2026-07-10-2026-07-12.csv')
-            ->streamedContent();
-        $this->assertSame("\xEF\xBB\xBF", substr($csv, 0, 3));
-        $this->assertStringContainsString('业务日期,类型,账单号,用户ID,用户邮箱,分类,金额,操作人,备注,创建时间', $csv);
-        $this->assertStringContainsString('EXP-HISTORY', $csv);
-        $this->assertStringContainsString('GIFT-HISTORY', $csv);
-        $this->assertStringContainsString('CASH-HISTORY', $csv);
-        $this->assertSame(4, substr_count(trim($csv), "\n") + 1);
+            ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            ->assertDownload('finance-history-2026-07-10-2026-07-12.xlsx');
+        $zip = new ZipArchive;
+        $this->assertTrue($zip->open($excel->baseResponse->getFile()->getPathname()) === true);
+        $sheet = $zip->getFromName('xl/worksheets/sheet1.xml');
+        $zip->close();
+        $this->assertIsString($sheet);
+        $this->assertStringContainsString('业务日期', $sheet);
+        $this->assertStringContainsString('EXP-HISTORY', $sheet);
+        $this->assertStringContainsString('GIFT-HISTORY', $sheet);
+        $this->assertStringContainsString('CASH-HISTORY', $sheet);
+    }
+
+    public function test_external_sub2api_increment_is_recorded_as_income_once(): void
+    {
+        $admin = $this->admin();
+        $this->insertSub2ApiUser(['id' => 1001, 'email' => 'external@example.com']);
+        DB::connection('sub2api')->table('redeem_codes')->insert([
+            [
+                'id' => 501,
+                'type' => 'admin_balance',
+                'value' => '12.50',
+                'status' => 'used',
+                'used_by' => 1001,
+                'used_at' => '2026-07-10 02:00:00',
+                'notes' => '外部后台调整',
+                'created_at' => '2026-07-10 02:00:00',
+            ],
+            [
+                'id' => 502,
+                'type' => 'admin_balance',
+                'value' => '-3.00',
+                'status' => 'used',
+                'used_by' => 1001,
+                'used_at' => '2026-07-10 03:00:00',
+                'notes' => '外部后台扣减',
+                'created_at' => '2026-07-10 03:00:00',
+            ],
+            [
+                'id' => 503,
+                'type' => 'admin_balance',
+                'value' => '8.00',
+                'status' => 'used',
+                'used_by' => 1001,
+                'used_at' => '2026-07-10 04:00:00',
+                'notes' => Sub2ApiNoteTag::make('ADJ-ORPHAN', 'orphan-key'),
+                'created_at' => '2026-07-10 04:00:00',
+            ],
+        ]);
+        $token = $admin->createToken('admin-token')->plainTextToken;
+        $url = '/api/v1/finance/cash?start_date=2026-07-10&end_date=2026-07-10';
+
+        $this->withToken($token)->getJson($url)
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('items.0.entry_no', 'SUB2EXT501')
+            ->assertJsonPath('items.0.cash_amount', '12.50')
+            ->assertJsonPath('items.0.remark', 'sub2api外部调整')
+            ->assertJsonPath('summary.amount_total', '12.50');
+        $this->withToken($token)->getJson($url)->assertOk()->assertJsonPath('total', 1);
+
+        $this->assertDatabaseHas('cash_entries', [
+            'entry_no' => 'SUB2EXT501',
+            'source' => 'sub2api_external_adjustment',
+            'profit_eligible' => true,
+        ]);
+        $this->assertDatabaseCount('cash_entries', 1);
     }
 
     public function test_correction_adjustment_does_not_write_finance_ledgers(): void
@@ -280,6 +357,10 @@ class FinanceLedgerTest extends TestCase
 
         $this->assertDatabaseCount('cash_entries', 0);
         $this->assertDatabaseHas('gift_quota_entries', ['sub2api_user_id' => 1001, 'quota_amount' => '10.00']);
+        $this->withToken($admin->createToken('income-list')->plainTextToken)
+            ->getJson('/api/v1/finance/cash')
+            ->assertOk()
+            ->assertJsonPath('total', 0);
     }
 
     public function test_batch_gift_does_not_record_revenue_by_default(): void
@@ -327,6 +408,11 @@ class FinanceLedgerTest extends TestCase
             'profit_eligible' => true,
         ]);
         $this->assertDatabaseCount('gift_quota_entries', 0);
+        $this->withToken($admin->createToken('income-list')->plainTextToken)
+            ->getJson('/api/v1/finance/cash')
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('items.0.cash_amount', '10.00');
     }
 
     public function test_batch_gift_rejects_invalid_revenue_flag(): void

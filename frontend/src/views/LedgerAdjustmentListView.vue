@@ -5,42 +5,37 @@ import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import { onMounted, reactive, ref } from 'vue'
 import {
-  getLedgerAdjustments,
-  type LedgerAdjustment,
-  type LedgerSummary,
-} from '../api/ledger'
-import SafeRichTextDisplay from '../components/richtext/SafeRichTextDisplay.vue'
+  getCashEntries,
+  type CashEntry,
+  type FinanceSummary,
+} from '../api/finance'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useAdminOptions } from '../composables/useAdminOptions'
 import { useTableColumns } from '../composables/useTableColumns'
 
 const adminOptions = useAdminOptions()
 const loading = ref(false)
-const items = ref<LedgerAdjustment[]>([])
+const items = ref<CashEntry[]>([])
 const detailOpen = ref(false)
-const detail = ref<LedgerAdjustment | null>(null)
+const detail = ref<CashEntry | null>(null)
 const email = ref('')
 const operator = ref<number | undefined>()
 const dates = ref<[Dayjs, Dayjs] | null>([dayjs(), dayjs()])
 const dateMode = ref<'day' | 'week' | 'month' | ''>('day')
-const summary = reactive<LedgerSummary>({ record_count: 0, user_count: 0, increment_total: '0.00', decrement_total: '0.00', net_total: '0.00', cash_total: '0.00', gift_total: '0.00' })
+const summary = reactive<FinanceSummary>({ record_count: 0, user_count: 0, amount_total: '0.00', linked_count: 0, unlinked_count: 0 })
 const page = reactive({ current: 1, pageSize: 20, total: 0 })
 
 const allColumns = [
-  { title: '业务单号', dataIndex: 'ledger_no', width: 180 },
+  { title: '收入单号', dataIndex: 'entry_no', width: 180 },
   { title: '用户ID', dataIndex: 'sub2api_user_id', width: 100 },
   { title: '邮箱', dataIndex: 'sub2api_user_email', width: 220 },
   { title: '操作人', dataIndex: 'operator_name', width: 180 },
-  { title: '方向', dataIndex: 'operation', width: 90 },
-  { title: '额度', dataIndex: 'amount', align: 'right', width: 120 },
-  { title: '现金', dataIndex: 'cash_amount', align: 'right', width: 120 },
-  { title: '赠送', dataIndex: 'gift_quota_amount', align: 'right', width: 120 },
-  { title: '调前', dataIndex: 'before_balance', align: 'right', width: 120 },
-  { title: '调后', dataIndex: 'after_balance', align: 'right', width: 120 },
-  { title: '原因', dataIndex: 'adjust_reason', width: 120 },
-  { title: '确认时间', dataIndex: 'confirmed_at', width: 180 },
+  { title: '收入金额', dataIndex: 'cash_amount', align: 'right', width: 130 },
+  { title: '来源', dataIndex: 'source', width: 160 },
+  { title: '备注', dataIndex: 'remark', width: 180 },
+  { title: '记录时间', dataIndex: 'created_at', width: 180 },
 ] as const
-const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('ledger-adjustment-columns', allColumns, 1580)
+const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('income-entry-columns', allColumns, 1250)
 
 function filterParams() {
   return {
@@ -54,10 +49,9 @@ function filterParams() {
 async function loadItems() {
   loading.value = true
   try {
-    const res = await getLedgerAdjustments({
+    const res = await getCashEntries({
       page: page.current,
       page_size: page.pageSize,
-      status: 'succeeded',
       ...filterParams(),
     })
     items.value = res.items
@@ -101,7 +95,7 @@ function changeDates() {
   dateMode.value = ''
 }
 
-function rowProps(row: LedgerAdjustment) {
+function rowProps(row: CashEntry) {
   return {
     class: 'clickableRow',
     onClick: () => {
@@ -111,11 +105,14 @@ function rowProps(row: LedgerAdjustment) {
   }
 }
 
-function signedMoney(value: string | number, mode: 'positive' | 'negative' | 'auto') {
+function signedMoney(value: string | number) {
   const amount = Number(value || 0)
   if (amount === 0) return '0.00'
-  const sign = mode === 'negative' ? '-' : mode === 'positive' ? '+' : amount > 0 ? '+' : '-'
-  return `${sign}${Math.abs(amount).toFixed(2)}`
+  return `+${Math.abs(amount).toFixed(2)}`
+}
+
+function sourceLabel(source: string) {
+  return source === 'sub2api_external_adjustment' ? 'Sub2API 外部调整' : '本系统入账'
 }
 
 onMounted(loadItems)
@@ -147,10 +144,10 @@ onMounted(loadItems)
     </div>
 
     <div class="summaryGrid">
-      <section><span>现金入账</span><strong class="positive">{{ signedMoney(summary.cash_total, 'positive') }}</strong></section>
-      <section><span>赠送额度</span><strong class="positive">{{ signedMoney(summary.gift_total, 'positive') }}</strong></section>
-      <section><span>净调整金额</span><strong :class="Number(summary.net_total) > 0 ? 'positive' : Number(summary.net_total) < 0 ? 'negative' : ''">{{ signedMoney(summary.net_total, 'auto') }}</strong></section>
-      <section><span>调减金额</span><strong class="negative">{{ signedMoney(summary.decrement_total, 'negative') }}</strong></section>
+      <section><span>收入合计</span><strong class="positive">{{ signedMoney(summary.amount_total) }}</strong></section>
+      <section><span>收入笔数</span><strong>{{ summary.record_count }}</strong></section>
+      <section><span>收入用户</span><strong>{{ summary.user_count }}</strong></section>
+      <section><span>Sub2API 外部调整</span><strong>{{ summary.unlinked_count }}</strong></section>
     </div>
 
     <a-table
@@ -169,38 +166,21 @@ onMounted(loadItems)
         <template v-if="column.dataIndex === 'operator_name'">
           <span>{{ record.operator_name || record.operator_email || '-' }}</span>
         </template>
-        <template v-else-if="column.dataIndex === 'operation'">
-          <a-tag :color="record.operation === 'increment' ? 'green' : 'orange'">{{ record.operation === 'increment' ? '增加' : '扣减' }}</a-tag>
-        </template>
-        <template v-else-if="column.dataIndex === 'amount'">
-          <span class="money" :class="record.operation === 'increment' ? 'positive' : 'negative'">{{ signedMoney(record.amount, record.operation === 'increment' ? 'positive' : 'negative') }}</span>
-        </template>
-        <template v-else-if="['cash_amount', 'gift_quota_amount'].includes(column.dataIndex as string)">
-          <span class="money positive">{{ signedMoney(record[column.dataIndex], 'positive') }}</span>
-        </template>
-        <template v-else-if="['before_balance', 'after_balance'].includes(column.dataIndex as string)">
-          <span class="money">{{ record[column.dataIndex] || '-' }}</span>
-        </template>
+        <template v-else-if="column.dataIndex === 'cash_amount'"><span class="money positive">{{ signedMoney(record.cash_amount) }}</span></template>
+        <template v-else-if="column.dataIndex === 'source'"><a-tag :color="record.source === 'sub2api_external_adjustment' ? 'blue' : 'green'">{{ sourceLabel(record.source) }}</a-tag></template>
+        <template v-else-if="column.dataIndex === 'remark'">{{ record.remark || '-' }}</template>
       </template>
     </a-table>
 
     <a-drawer v-model:open="detailOpen" title="收入详情" width="640">
       <a-descriptions v-if="detail" :column="1" bordered size="small">
-        <a-descriptions-item label="业务单号">{{ detail.ledger_no }}</a-descriptions-item>
+        <a-descriptions-item label="收入单号">{{ detail.entry_no }}</a-descriptions-item>
         <a-descriptions-item label="用户">{{ detail.sub2api_user_email || `用户 #${detail.sub2api_user_id}` }}</a-descriptions-item>
         <a-descriptions-item label="操作人">{{ detail.operator_name || detail.operator_email || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="方向">
-          <a-tag :color="detail.operation === 'increment' ? 'green' : 'orange'">{{ detail.operation === 'increment' ? '增加' : '扣减' }}</a-tag>
-        </a-descriptions-item>
-        <a-descriptions-item label="额度"><strong class="money" :class="detail.operation === 'increment' ? 'positive' : 'negative'">{{ signedMoney(detail.amount, detail.operation === 'increment' ? 'positive' : 'negative') }}</strong></a-descriptions-item>
-        <a-descriptions-item label="现金"><span class="positive">{{ signedMoney(detail.cash_amount, 'positive') }}</span></a-descriptions-item>
-        <a-descriptions-item label="赠送"><span class="positive">{{ signedMoney(detail.gift_quota_amount, 'positive') }}</span></a-descriptions-item>
-        <a-descriptions-item label="调前">{{ detail.before_balance || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="调后">{{ detail.after_balance || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="原因">{{ detail.adjust_reason || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="管理员备注"><SafeRichTextDisplay :value="detail.admin_notes" empty-text="-" compact /></a-descriptions-item>
-        <a-descriptions-item label="Sub2API 备注">{{ detail.sub2api_notes || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="确认时间">{{ detail.confirmed_at || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="收入金额"><strong class="positive">{{ signedMoney(detail.cash_amount) }}</strong></a-descriptions-item>
+        <a-descriptions-item label="来源">{{ sourceLabel(detail.source) }}</a-descriptions-item>
+        <a-descriptions-item label="备注">{{ detail.remark || '-' }}</a-descriptions-item>
+        <a-descriptions-item label="记录时间">{{ detail.created_at || '-' }}</a-descriptions-item>
       </a-descriptions>
     </a-drawer>
   </section>
@@ -218,7 +198,6 @@ onMounted(loadItems)
 .summaryGrid span { display: block; margin-bottom: 6px; color: var(--text-secondary, #7a8395); font-size: 13px; }
 .summaryGrid strong { font-size: 24px; }
 .positive { color: #389e0d; }
-.negative { color: #cf1322; }
 @media (max-width: 700px) {
   .filterItem, .dateFilter { width: 100%; }
   .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

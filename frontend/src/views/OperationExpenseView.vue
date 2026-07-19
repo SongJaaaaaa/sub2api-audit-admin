@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PlusOutlined } from '@ant-design/icons-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import dayjs, { type Dayjs } from 'dayjs'
@@ -153,10 +154,6 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); chart
 
 <template>
   <section class="page">
-    <div class="pageHead pageHeadActionsOnly">
-      <a-button type="primary" @click="openCreate">新增支出</a-button>
-    </div>
-
     <div class="expenseFilterBar">
       <a-select v-model:value="filters.category" class="filterSm" placeholder="全部分类" allow-clear>
         <a-select-option value="">全部分类</a-select-option>
@@ -171,6 +168,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); chart
       <a-input v-model:value="filters.keyword" class="filterGrow" placeholder="备注关键词" allow-clear @press-enter="search" />
       <a-button type="primary" @click="search">查询</a-button>
       <a-button @click="resetFilters">重置</a-button>
+      <a-button type="primary" @click="openCreate"><template #icon><PlusOutlined /></template>新增支出</a-button>
     </div>
 
     <div class="summaryGrid">

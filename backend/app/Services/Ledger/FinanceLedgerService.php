@@ -8,15 +8,22 @@ use App\Models\GiftQuotaEntry;
 use App\Models\LedgerAdjustment;
 use App\Models\OperationExpense;
 use App\Services\Audit\AuditLogService;
+use App\Services\Sub2Api\Sub2ApiReadRepository;
+use App\Support\ChinaDateRange;
 use App\Support\ChinaTime;
 use App\Support\Money;
 use App\Support\SafeHtml;
+use App\Support\Sub2ApiNoteTag;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class FinanceLedgerService
 {
-    public function __construct(private readonly AuditLogService $audit) {}
+    public function __construct(
+        private readonly AuditLogService $audit,
+        private readonly Sub2ApiReadRepository $read,
+    ) {}
 
     public function recordAdjustment(?Admin $admin, LedgerAdjustment $adj): void
     {
@@ -70,6 +77,10 @@ class FinanceLedgerService
 
     public function cash(array $filters, int $page, int $pageSize): array
     {
+        $today = now(config('ledger.timezone', 'Asia/Shanghai'))->toDateString();
+        $start = trim((string) ($filters['start_date'] ?? '')) ?: $today;
+        $end = trim((string) ($filters['end_date'] ?? '')) ?: $start;
+        $this->syncExternalIncome($start, $end);
         $query = CashEntry::query();
         $this->filterEntry($query, $filters);
         $summary = [
@@ -95,6 +106,51 @@ class FinanceLedgerService
             'operator_email' => $row->creator?->email,
             'created_at' => ChinaTime::fmt($row->created_at),
         ], $summary);
+    }
+
+    public function syncExternalIncome(string $start, string $end): int
+    {
+        $range = ChinaDateRange::make($start, $end);
+        $events = collect($this->read->adminAdjustmentEvents($range->utcStart, $range->utcEndExclusive));
+        $sourceIds = $events->pluck('remote_event_id')->all();
+        $keys = $events
+            ->map(fn (array $row): ?string => Sub2ApiNoteTag::idempotencyKey($row['notes'] ?? null))
+            ->filter()
+            ->values()
+            ->all();
+        $adjs = LedgerAdjustment::query()
+            ->whereIn('sub2api_source_id', $sourceIds)
+            ->orWhereIn('idempotency_key', $keys)
+            ->get();
+        $bySource = $adjs->whereNotNull('sub2api_source_id')->keyBy('sub2api_source_id');
+        $byPair = $adjs->whereNull('sub2api_source_id')
+            ->keyBy(fn (LedgerAdjustment $row): string => $row->sub2api_user_id.':'.$row->idempotency_key);
+        $created = 0;
+
+        foreach ($events as $event) {
+            $tag = Sub2ApiNoteTag::parse($event['notes'] ?? null);
+            $linked = $bySource->has($event['remote_event_id'])
+                || ($tag['idempotency_key'] && $byPair->has($event['sub2api_user_id'].':'.$tag['idempotency_key']));
+            if ((float) $event['value'] <= 0 || $linked || $tag['is_audit']) {
+                continue;
+            }
+
+            $time = ChinaTime::fmtUtc($event['event_at']);
+            $created += DB::table('cash_entries')->insertOrIgnore([
+                'entry_no' => 'SUB2EXT'.$event['remote_event_id'],
+                'sub2api_user_id' => $event['sub2api_user_id'],
+                'sub2api_user_email' => $event['user_email'],
+                'direction' => CashEntry::DIR_IN,
+                'cash_amount' => Money::fmt($event['value']),
+                'source' => 'sub2api_external_adjustment',
+                'remark' => 'sub2api外部调整',
+                'profit_eligible' => true,
+                'created_at' => $time,
+                'updated_at' => $time,
+            ]);
+        }
+
+        return $created;
     }
 
     public function gifts(array $filters, int $page, int $pageSize): array

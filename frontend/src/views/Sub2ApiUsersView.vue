@@ -557,16 +557,17 @@ onMounted(loadUsers)
 
 <style scoped>
 .loadAlert { margin-bottom: 14px; }
-.userFilters { display: flex; gap: 10px; align-items: center; }
-.userFilterSelect { width: 150px; }
-.lastUsedFilter { width: 250px; }
-.compactSummary { display: inline-flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 8px; background: var(--card-bg, #fff); color: var(--text-secondary, #7a8395); font-size: 12px; }
+.userFilters { display: flex; width: 100%; gap: 10px; align-items: center; flex-wrap: nowrap; overflow-x: auto; }
+.userFilterSelect { flex: 0 0 140px; width: 140px; }
+.lastUsedFilter { flex: 0 0 230px; width: 230px; }
+.search { flex: 0 1 190px; width: 190px; min-width: 160px; }
+.userFilters > button { flex: 0 0 auto; }
+.compactSummary { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 8px; background: var(--card-bg, #fff); color: var(--text-secondary, #7a8395); font-size: 12px; }
 .compactSummary strong { color: var(--heading, #1f2937); font-variant-numeric: tabular-nums; }
 .selectedUsers { display: flex; flex-wrap: wrap; gap: 6px; max-height: 150px; overflow: auto; padding: 8px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 8px; }
 .batchScope { display: grid; gap: 10px; }
 .copyEmail { display: inline-flex; max-width: 100%; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: #1677ff; cursor: pointer; }
 .copyEmail span { overflow: hidden; text-overflow: ellipsis; }
 :deep(.ant-table-tbody > tr) { cursor: pointer; }
-@media (max-width: 760px) { .userFilters { width: 100%; flex-wrap: wrap; } .userFilterSelect, .lastUsedFilter, .search { width: 100%; } }
-@media (max-width: 760px) { .compactSummary { width: 100%; justify-content: space-between; } }
+@media (max-width: 760px) { .userFilters { padding-bottom: 4px; } }
 </style>
