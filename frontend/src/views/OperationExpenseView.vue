@@ -58,7 +58,7 @@ const allColumns = [
   { title: '创建时间', dataIndex: 'created_at', width: 180 },
   { title: '操作', dataIndex: 'action', fixed: 'right', width: 90 },
 ] as const
-const { columns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('operation-expense-columns', allColumns, 1260)
+const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('operation-expense-columns', allColumns, 1260)
 
 async function loadItems() {
   loading.value = true
@@ -185,7 +185,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); chart
     <a-empty v-else-if="!loading" description="当前筛选条件下暂无分类统计" />
 
     <div class="tableTools"><ColumnSettings v-model:value="visibleCols" v-model:width="tableWidth" :options="colOptions" @reset="resetColumns" /></div>
-    <a-table row-key="id" :columns="columns" :data-source="items" :loading="loading" :pagination="page" :scroll="{ x: tableWidth }" :locale="{ emptyText: '暂无支出记录' }" @change="change">
+    <a-table row-key="id" :columns="columns" :data-source="items" :loading="loading" :pagination="page" :scroll="{ x: tableWidth }" :locale="{ emptyText: '暂无支出记录' }" @resize-column="resizeColumn" @change="change">
       <template #bodyCell="{ column, record }">
         <template v-if="column.dataIndex === 'amount'"><span class="money expenseMoney">{{ signedExpense(record.amount) }}</span></template>
         <template v-else-if="column.dataIndex === 'operator_name'">{{ record.operator_name || record.operator_email || '-' }}</template>

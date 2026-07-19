@@ -52,6 +52,58 @@ class FinanceLedgerTest extends TestCase
             ->assertJsonPath('summary.missing_cash_count', 0);
     }
 
+    public function test_user_finance_summary_uses_local_recharge_and_gift_ledgers(): void
+    {
+        $admin = $this->admin();
+        $now = now();
+        DB::table('cash_entries')->insert([
+            [
+                'entry_no' => 'CASH-SUMMARY-1',
+                'sub2api_user_id' => 1001,
+                'direction' => 'in',
+                'cash_amount' => '80.00',
+                'source' => 'ledger_adjustment',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                'entry_no' => 'CASH-SUMMARY-2',
+                'sub2api_user_id' => 1002,
+                'direction' => 'in',
+                'cash_amount' => '999.00',
+                'source' => 'ledger_adjustment',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+        ]);
+        DB::table('gift_quota_entries')->insert([
+            [
+                'entry_no' => 'GIFT-SUMMARY-1',
+                'sub2api_user_id' => 1001,
+                'quota_amount' => '20.00',
+                'source' => 'ledger_adjustment',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                'entry_no' => 'GIFT-SUMMARY-2',
+                'sub2api_user_id' => 1001,
+                'quota_amount' => '5.00',
+                'source' => 'ledger_adjustment',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+        ]);
+
+        $this->withToken($admin->createToken('admin-token')->plainTextToken)
+            ->getJson('/api/v1/finance/users/1001/summary')
+            ->assertOk()
+            ->assertExactJson([
+                'total_recharge' => '80.00',
+                'total_gift' => '25.00',
+            ]);
+    }
+
     public function test_operation_expense_filters_rich_text(): void
     {
         $admin = $this->admin();

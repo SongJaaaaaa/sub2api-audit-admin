@@ -193,6 +193,7 @@ onMounted(loadItems)
       :pagination="page"
       :scroll="{ x: mainTable.tableWidth.value }"
       :locale="{ emptyText: '暂无对账批次' }"
+      @resize-column="mainTable.resizeColumn"
       @change="change"
     >
       <template #bodyCell="{ column, record }">
@@ -255,6 +256,7 @@ onMounted(loadItems)
           :pagination="false"
           :scroll="{ x: diffTable.tableWidth.value }"
           :locale="{ emptyText: '该批次没有差异' }"
+          @resize-column="diffTable.resizeColumn"
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.dataIndex === 'type'">

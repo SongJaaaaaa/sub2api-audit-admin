@@ -44,7 +44,7 @@ const modelColumns = [
   { title: '总 Token', dataIndex: 'total_tokens', width: 160, align: 'right' },
 ] as const
 
-const { columns: visibleModelColumns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('sub2api-model-columns', modelColumns, 1190)
+const { columns: visibleModelColumns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('sub2api-model-columns', modelColumns, 1190)
 
 async function loadStats() {
   const [start, end] = range.value
@@ -209,6 +209,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userC
           :scroll="{ x: tableWidth }"
           :locale="{ emptyText: '所选日期内暂无官方模型统计' }"
           size="middle"
+          @resize-column="resizeColumn"
         >
           <template #bodyCell="{ column, record, index }">
             <template v-if="column.dataIndex === 'rank'">

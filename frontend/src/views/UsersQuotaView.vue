@@ -10,18 +10,21 @@ import {
   createLedgerAdjustment,
   type AdjustmentRes,
 } from '../api/ledger'
+import { getUserFinanceSummary, type UserFinanceSummary } from '../api/finance'
 import { getSub2BalanceHistory, getSub2Users, type Sub2BalanceHistoryItem, type Sub2User } from '../api/sub2api'
 import AdjustmentForm, { type AdjustmentFormState } from '../components/ledger/AdjustmentForm.vue'
 import SafeRichTextDisplay from '../components/richtext/SafeRichTextDisplay.vue'
 
 const loading = ref(false)
 const historyLoading = ref(false)
+const summaryLoading = ref(false)
 const submitting = ref(false)
 const formKey = ref(0)
 const users = ref<Sub2User[]>([])
 const history = ref<Sub2BalanceHistoryItem[]>([])
 const selected = ref<Sub2User | null>(null)
 const selectedHistory = ref<Sub2BalanceHistoryItem | null>(null)
+const userSummary = reactive<UserFinanceSummary>({ total_recharge: '0.00', total_gift: '0.00' })
 const keyword = ref('')
 const adjustPanel = ref<HTMLElement | null>(null)
 const page = reactive({
@@ -85,8 +88,21 @@ async function selectUser(row: Sub2User) {
   selected.value = row
   resetForm()
   loadHistory(row.id)
+  loadUserSummary(row.id)
   await nextTick()
   adjustPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+async function loadUserSummary(id: number) {
+  summaryLoading.value = true
+  try {
+    Object.assign(userSummary, await getUserFinanceSummary(id))
+  } catch {
+    Object.assign(userSummary, { total_recharge: '0.00', total_gift: '0.00' })
+    message.error('读取用户累计账务失败')
+  } finally {
+    summaryLoading.value = false
+  }
 }
 
 async function loadHistory(id: number) {
@@ -127,6 +143,7 @@ async function submitAdjust() {
     resetForm()
     loadUsers()
     loadHistory(selected.value.id)
+    loadUserSummary(selected.value.id)
   } catch (err) {
     const data = (err as { response?: { data?: AdjustmentRes } }).response?.data
     message.error(data?.message || '充值未确认成功')
@@ -221,9 +238,9 @@ onMounted(loadUsers)
               <div>
                 <h2>{{ selectedName }}</h2>
                 <p>{{ selected.email }} · ID: {{ selected.id }}</p>
-                <div class="quotaInlineStats">
-                  <span>API 可用余额 <strong class="money">{{ moneyText(selected.balance) }}</strong></span>
-                  <span>Sub2API 累计充值字段 <strong>{{ moneyText(selected.total_recharged) }}</strong></span>
+                <div class="quotaInlineStats" :class="{ loading: summaryLoading }">
+                  <span>累积充值 <strong class="money">{{ moneyText(userSummary.total_recharge) }}</strong></span>
+                  <span>累积赠送 <strong>{{ moneyText(userSummary.total_gift) }}</strong></span>
                 </div>
               </div>
             </div>

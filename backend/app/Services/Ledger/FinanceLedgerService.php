@@ -55,6 +55,19 @@ class FinanceLedgerService
         }
     }
 
+    public function userSummary(int $userId): array
+    {
+        return [
+            'total_recharge' => Money::fmt(CashEntry::query()
+                ->where('sub2api_user_id', $userId)
+                ->where('direction', CashEntry::DIR_IN)
+                ->sum('cash_amount')),
+            'total_gift' => Money::fmt(GiftQuotaEntry::query()
+                ->where('sub2api_user_id', $userId)
+                ->sum('quota_amount')),
+        ];
+    }
+
     public function cash(array $filters, int $page, int $pageSize): array
     {
         $query = CashEntry::query();

@@ -133,6 +133,7 @@ onMounted(loadItems)
       :pagination="page"
       :scroll="{ x: giftTable.tableWidth.value }"
       :locale="{ emptyText: '暂无赠送额度记录' }"
+      @resize-column="giftTable.resizeColumn"
       @change="change"
     >
       <template #bodyCell="{ column, record }">

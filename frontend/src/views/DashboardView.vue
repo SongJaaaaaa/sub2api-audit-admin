@@ -67,7 +67,7 @@ const recentColumns = [
   { title: '远端事件', dataIndex: 'source', width: 110 },
   { title: '原因', dataIndex: 'adjust_reason', minWidth: 160 },
 ] as const
-const { columns: visibleRecentColumns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('dashboard-recent-columns', recentColumns, 1050)
+const { columns: visibleRecentColumns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('dashboard-recent-columns', recentColumns, 1050)
 
 
 const alertTotal = computed(() => {
@@ -472,7 +472,7 @@ onBeforeUnmount(() => {
             <RouterLink to="/ledger">全部记录</RouterLink>
           </div>
           <div class="tableTools"><ColumnSettings v-model:value="visibleCols" v-model:width="tableWidth" :options="colOptions" @reset="resetColumns" /></div>
-          <a-table row-key="id" size="small" :columns="visibleRecentColumns" :data-source="stats.recent_adjustments" :pagination="false" :scroll="{ x: tableWidth }" :locale="{ emptyText: '所选范围暂无调额记录' }">
+          <a-table row-key="id" size="small" :columns="visibleRecentColumns" :data-source="stats.recent_adjustments" :pagination="false" :scroll="{ x: tableWidth }" :locale="{ emptyText: '所选范围暂无调额记录' }" @resize-column="resizeColumn">
             <template #bodyCell="{ column, record }">
               <template v-if="column.dataIndex === 'user'">{{ record.sub2api_user_email || `用户 #${record.sub2api_user_id}` }}</template>
               <template v-else-if="column.dataIndex === 'operation'">{{ directionText(record.operation) }}</template>

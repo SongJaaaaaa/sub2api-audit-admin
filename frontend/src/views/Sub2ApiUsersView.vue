@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CopyOutlined, GiftOutlined, HistoryOutlined, MinusCircleOutlined, PlusCircleOutlined } from '@ant-design/icons-vue'
+import { GiftOutlined, HistoryOutlined, MinusCircleOutlined, PlusCircleOutlined } from '@ant-design/icons-vue'
 import type { TableProps } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
@@ -40,18 +40,17 @@ const page = reactive({
 })
 
 const allColumns = [
-  { title: 'ID', dataIndex: 'id', width: 90 },
-  { title: '邮箱', dataIndex: 'email', width: 220 },
-  { title: '用户名', dataIndex: 'username', width: 140 },
+  { title: 'ID', dataIndex: 'id', width: 90, defaultHidden: true },
+  { title: '邮箱', dataIndex: 'email', width: 320 },
   { title: '角色', dataIndex: 'role', width: 100 },
   { title: '余额', dataIndex: 'balance', align: 'right', width: 120, sorter: true },
-  { title: 'Sub2API 累计充值字段', dataIndex: 'total_recharged', align: 'right', width: 190 },
+  { title: 'Sub2API 累计充值字段', dataIndex: 'total_recharged', align: 'right', width: 190, defaultHidden: true },
   { title: '状态', dataIndex: 'status', width: 110 },
   { title: '近期使用时间', dataIndex: 'last_used_at', width: 180 },
   { title: '创建时间', dataIndex: 'created_at', width: 180 },
   { title: '操作', dataIndex: 'action', fixed: 'right', width: 90 },
 ] as const
-const { columns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('sub2api-users-columns', allColumns, 1480)
+const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('sub2api-users-columns-v2', allColumns, 1280)
 const selectedUsers = computed(() => users.value.filter(row => selectedIds.value.includes(row.id)))
 const batchCount = computed(() => batchMode.value === 'selected' ? selectedIds.value.length : page.total)
 const rowSelection = computed(() => ({
@@ -299,6 +298,7 @@ onMounted(loadUsers)
       :pagination="page"
       :row-selection="rowSelection"
       :scroll="{ x: tableWidth }"
+      @resize-column="resizeColumn"
       @change="change"
     >
       <template #bodyCell="{ column, record }">
@@ -306,7 +306,6 @@ onMounted(loadUsers)
           <a-tooltip title="点击复制邮箱">
             <button type="button" class="copyEmail" @click="copyEmail(record.email)">
               <span>{{ record.email }}</span>
-              <CopyOutlined />
             </button>
           </a-tooltip>
         </template>

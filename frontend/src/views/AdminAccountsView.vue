@@ -19,7 +19,7 @@ const allColumns = [
   { title: '状态', dataIndex: 'status', width: 110 },
   { title: '创建时间', dataIndex: 'created_at', width: 180 },
 ] as const
-const { columns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('admin-account-columns', allColumns, 800)
+const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('admin-account-columns', allColumns, 800)
 
 async function loadItems() {
   loading.value = true
@@ -92,6 +92,7 @@ onMounted(loadItems)
       :pagination="page"
       :scroll="{ x: tableWidth }"
       :locale="{ emptyText: '暂无管理员账号' }"
+      @resize-column="resizeColumn"
       @change="change"
     >
       <template #bodyCell="{ column, record }">

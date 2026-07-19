@@ -20,7 +20,6 @@ export const router = createRouter({
         { path: 'users-quota', name: 'users-quota', component: () => import('../views/UsersQuotaView.vue') },
         { path: 'ledger', name: 'ledger', component: () => import('../views/LedgerAdjustmentListView.vue') },
         { path: 'balance-events', name: 'balance-events', component: () => import('../views/BalanceEventsView.vue') },
-        { path: 'gift-quota', name: 'gift', component: () => import('../views/GiftQuotaListView.vue') },
         { path: 'operation-expense', name: 'expense', component: () => import('../views/OperationExpenseView.vue') },
         { path: 'profit', name: 'profit', component: () => import('../views/ProfitView.vue') },
         { path: 'reconcile', name: 'reconcile', component: () => import('../views/ReconcileView.vue') },

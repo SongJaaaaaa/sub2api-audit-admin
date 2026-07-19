@@ -49,7 +49,7 @@ const allColumns = [
   { title: '备注', dataIndex: 'remark', width: 220 },
   { title: '创建时间', dataIndex: 'created_at', width: 180 },
 ] as const
-const { columns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('finance-history-columns', allColumns, 1440)
+const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('finance-history-columns', allColumns, 1440)
 
 function params(withPage = true): FinanceHistoryParams {
   const val: FinanceHistoryParams = {
@@ -205,6 +205,7 @@ onMounted(() => loadItems())
       :pagination="page"
       :scroll="{ x: tableWidth }"
       :locale="{ emptyText: '当前筛选范围暂无账单' }"
+      @resize-column="resizeColumn"
       @change="changePage"
     >
       <template #bodyCell="{ column, record }">

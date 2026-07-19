@@ -12,6 +12,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FinanceLedgerController extends Controller
 {
+    public function userSummary(int $id, FinanceLedgerService $service): JsonResponse
+    {
+        return response()->json($service->userSummary($id));
+    }
+
     public function cash(Request $req, FinanceLedgerService $service): JsonResponse
     {
         return response()->json($service->cash($this->filters($req), $this->page($req), $this->pageSize($req)));

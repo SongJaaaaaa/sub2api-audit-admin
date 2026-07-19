@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
+import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import { onMounted, reactive, ref } from 'vue'
 import {
   getLedgerAdjustments,
-  getLedgerUserStats,
   type LedgerAdjustment,
-  type LedgerStatsGranularity,
   type LedgerSummary,
-  type LedgerUserStat,
 } from '../api/ledger'
 import SafeRichTextDisplay from '../components/richtext/SafeRichTextDisplay.vue'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
@@ -18,18 +16,15 @@ import { useTableColumns } from '../composables/useTableColumns'
 
 const adminOptions = useAdminOptions()
 const loading = ref(false)
-const statsLoading = ref(false)
 const items = ref<LedgerAdjustment[]>([])
-const userStats = ref<LedgerUserStat[]>([])
 const detailOpen = ref(false)
 const detail = ref<LedgerAdjustment | null>(null)
 const email = ref('')
 const operator = ref<number | undefined>()
-const dates = ref<[Dayjs, Dayjs] | undefined>()
-const granularity = ref<LedgerStatsGranularity>('day')
+const dates = ref<[Dayjs, Dayjs]>([dayjs(), dayjs()])
+const dateMode = ref<'day' | 'week' | 'month' | ''>('day')
 const summary = reactive<LedgerSummary>({ record_count: 0, user_count: 0, increment_total: '0.00', decrement_total: '0.00', net_total: '0.00', cash_total: '0.00', gift_total: '0.00' })
 const page = reactive({ current: 1, pageSize: 20, total: 0 })
-const statsPage = reactive({ current: 1, pageSize: 20, total: 0 })
 
 const allColumns = [
   { title: '业务单号', dataIndex: 'ledger_no', width: 180 },
@@ -45,18 +40,7 @@ const allColumns = [
   { title: '原因', dataIndex: 'adjust_reason', width: 120 },
   { title: '确认时间', dataIndex: 'confirmed_at', width: 180 },
 ] as const
-const statsColumns = [
-  { title: '周期', dataIndex: 'period', width: 190, fixed: 'left' },
-  { title: '用户 ID', dataIndex: 'sub2api_user_id', width: 100 },
-  { title: '邮箱', dataIndex: 'sub2api_user_email', width: 220 },
-  { title: '笔数', dataIndex: 'record_count', align: 'right', width: 90 },
-  { title: '现金收入', dataIndex: 'cash_total', align: 'right', width: 120 },
-  { title: '赠送', dataIndex: 'gift_total', align: 'right', width: 120 },
-  { title: '调增', dataIndex: 'increment_total', align: 'right', width: 120 },
-  { title: '调减', dataIndex: 'decrement_total', align: 'right', width: 120 },
-  { title: '净调整', dataIndex: 'net_total', align: 'right', width: 120 },
-] as const
-const { columns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('ledger-adjustment-columns', allColumns, 1580)
+const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('ledger-adjustment-columns', allColumns, 1580)
 
 function filterParams() {
   return {
@@ -86,35 +70,16 @@ async function loadItems() {
   }
 }
 
-async function loadUserStats() {
-  statsLoading.value = true
-  try {
-    const res = await getLedgerUserStats({
-      granularity: granularity.value,
-      page: statsPage.current,
-      page_size: statsPage.pageSize,
-      ...filterParams(),
-    })
-    userStats.value = res.items
-    statsPage.total = res.total
-  } catch {
-    message.error('读取用户收入统计失败')
-  } finally {
-    statsLoading.value = false
-  }
-}
-
 function search() {
   page.current = 1
-  statsPage.current = 1
   loadItems()
-  loadUserStats()
 }
 
 function resetFilters() {
   email.value = ''
   operator.value = undefined
-  dates.value = undefined
+  dateMode.value = 'day'
+  dates.value = [dayjs(), dayjs()]
   search()
 }
 
@@ -124,15 +89,16 @@ function change(pager: TablePaginationConfig) {
   loadItems()
 }
 
-function changeStats(pager: TablePaginationConfig) {
-  statsPage.current = pager.current || 1
-  statsPage.pageSize = pager.pageSize || 20
-  loadUserStats()
+function changeDateMode(mode: 'day' | 'week' | 'month') {
+  dateMode.value = mode
+  const now = dayjs()
+  const start = mode === 'week' ? now.startOf('week') : mode === 'month' ? now.startOf('month') : now
+  dates.value = [start, now]
+  search()
 }
 
-function changeGranularity() {
-  statsPage.current = 1
-  loadUserStats()
+function changeDates() {
+  dateMode.value = ''
 }
 
 function rowProps(row: LedgerAdjustment) {
@@ -145,12 +111,6 @@ function rowProps(row: LedgerAdjustment) {
   }
 }
 
-function periodText(row: LedgerUserStat) {
-  if (granularity.value === 'month') return row.period_start.slice(0, 7)
-  if (granularity.value === 'week') return `${row.period_start} 至 ${row.period_end}`
-  return row.period_start
-}
-
 function signedMoney(value: string | number, mode: 'positive' | 'negative' | 'auto') {
   const amount = Number(value || 0)
   if (amount === 0) return '0.00'
@@ -158,10 +118,7 @@ function signedMoney(value: string | number, mode: 'positive' | 'negative' | 'au
   return `${sign}${Math.abs(amount).toFixed(2)}`
 }
 
-onMounted(() => {
-  loadItems()
-  loadUserStats()
-})
+onMounted(loadItems)
 </script>
 
 <template>
@@ -179,7 +136,12 @@ onMounted(() => {
         :options="adminOptions.map(row => ({ label: `${row.name}（${row.email}）`, value: row.id }))"
         allow-clear
       />
-      <a-range-picker v-model:value="dates" class="dateFilter" />
+      <a-segmented
+        :value="dateMode"
+        :options="[{ label: '今日', value: 'day' }, { label: '本周', value: 'week' }, { label: '本月', value: 'month' }]"
+        @change="changeDateMode"
+      />
+      <a-range-picker v-model:value="dates" class="dateFilter" @change="changeDates" />
       <a-button type="primary" @click="search">查询</a-button>
       <a-button @click="resetFilters">重置</a-button>
     </div>
@@ -191,41 +153,6 @@ onMounted(() => {
       <section><span>调减金额</span><strong class="negative">{{ signedMoney(summary.decrement_total, 'negative') }}</strong></section>
     </div>
 
-    <section class="userStatsSection">
-      <div class="statsHead">
-        <h2>用户周期统计</h2>
-        <a-segmented
-          v-model:value="granularity"
-          :options="[{ label: '日', value: 'day' }, { label: '周', value: 'week' }, { label: '月', value: 'month' }]"
-          @change="changeGranularity"
-        />
-      </div>
-      <a-table
-        :row-key="(row: LedgerUserStat) => `${row.period_start}-${row.sub2api_user_id}`"
-        :columns="statsColumns"
-        :data-source="userStats"
-        :loading="statsLoading"
-        :pagination="statsPage"
-        :scroll="{ x: 1180 }"
-        :locale="{ emptyText: '暂无用户收入统计' }"
-        size="small"
-        @change="changeStats"
-      >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.dataIndex === 'period'">{{ periodText(record) }}</template>
-          <template v-else-if="['cash_total', 'gift_total', 'increment_total'].includes(column.dataIndex as string)">
-            <span class="money positive">{{ signedMoney(record[column.dataIndex], 'positive') }}</span>
-          </template>
-          <template v-else-if="column.dataIndex === 'decrement_total'">
-            <span class="money negative">{{ signedMoney(record.decrement_total, 'negative') }}</span>
-          </template>
-          <template v-else-if="column.dataIndex === 'net_total'">
-            <span class="money" :class="Number(record.net_total) > 0 ? 'positive' : Number(record.net_total) < 0 ? 'negative' : ''">{{ signedMoney(record.net_total, 'auto') }}</span>
-          </template>
-        </template>
-      </a-table>
-    </section>
-
     <a-table
       row-key="id"
       :custom-row="rowProps"
@@ -235,6 +162,7 @@ onMounted(() => {
       :locale="{ emptyText: '暂无符合条件的收入记录' }"
       :pagination="page"
       :scroll="{ x: tableWidth }"
+      @resize-column="resizeColumn"
       @change="change"
     >
       <template #bodyCell="{ column, record }">
@@ -289,9 +217,6 @@ onMounted(() => {
 .summaryGrid section { padding: 16px 18px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 8px; background: var(--card-bg, #fff); }
 .summaryGrid span { display: block; margin-bottom: 6px; color: var(--text-secondary, #7a8395); font-size: 13px; }
 .summaryGrid strong { font-size: 24px; }
-.userStatsSection { margin-bottom: 18px; }
-.statsHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-.statsHead h2 { margin: 0; font-size: 16px; }
 .positive { color: #389e0d; }
 .negative { color: #cf1322; }
 @media (max-width: 700px) {

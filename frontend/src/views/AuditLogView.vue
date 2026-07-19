@@ -177,7 +177,7 @@ const allColumns = [
   { title: '时间', dataIndex: 'created_at', width: 180 },
   { title: '详情', dataIndex: 'detail', fixed: 'right', width: 80 },
 ] as const
-const { columns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('audit-log-columns', allColumns, 1050)
+const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('audit-log-columns', allColumns, 1050)
 
 async function loadItems() {
   loading.value = true
@@ -264,6 +264,7 @@ onMounted(loadItems)
       :pagination="page"
       :scroll="{ x: tableWidth }"
       :locale="{ emptyText: '暂无审计日志' }"
+      @resize-column="resizeColumn"
       @change="change"
     >
       <template #bodyCell="{ column, record }">

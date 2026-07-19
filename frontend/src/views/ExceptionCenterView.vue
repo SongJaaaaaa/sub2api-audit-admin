@@ -38,7 +38,7 @@ const allColumns = [
   { title: '创建时间', dataIndex: 'created_at', width: 180 },
   { title: '操作', dataIndex: 'action', fixed: 'right', width: 90 },
 ] as const
-const { columns, visibleCols, colOptions, tableWidth, resetColumns } = useTableColumns('exception-center-columns', allColumns, 1540)
+const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('exception-center-columns', allColumns, 1540)
 
 async function loadItems() {
   loading.value = true
@@ -110,7 +110,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resize); chart?.dis
     </div>
     <div v-if="summary.types?.length" class="chartCard"><h3>异常类型分布</h3><div ref="chartEl" class="chart"></div></div>
     <div class="tableTools"><ColumnSettings v-model:value="visibleCols" v-model:width="tableWidth" :options="colOptions" @reset="resetColumns" /></div>
-    <a-table row-key="id" :columns="columns" :data-source="items" :loading="loading" :pagination="page" :scroll="{ x: tableWidth }" :locale="{ emptyText: '暂无异常记录' }" @change="change">
+    <a-table row-key="id" :columns="columns" :data-source="items" :loading="loading" :pagination="page" :scroll="{ x: tableWidth }" :locale="{ emptyText: '暂无异常记录' }" @resize-column="resizeColumn" @change="change">
       <template #bodyCell="{ column, record }">
         <template v-if="column.dataIndex === 'status'"><a-tag :color="record.status === 'exception' ? 'red' : 'orange'">{{ record.status === 'exception' ? '异常' : '作废' }}</a-tag></template>
         <template v-else-if="column.dataIndex === 'operation'">{{ record.operation === 'increment' ? '增加' : '扣减' }}</template>

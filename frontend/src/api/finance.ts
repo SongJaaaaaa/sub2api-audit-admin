@@ -101,6 +101,11 @@ export interface FinanceHistoryParams {
   keyword?: string
 }
 
+export interface UserFinanceSummary {
+  total_recharge: string
+  total_gift: string
+}
+
 export interface FinanceParams {
   page: number
   page_size: number
@@ -115,6 +120,10 @@ export interface FinanceParams {
 
 export function getGiftEntries(params: FinanceParams) {
   return http.get<unknown, PageRes<GiftQuotaEntry, FinanceSummary>>('/finance/gifts', { params })
+}
+
+export function getUserFinanceSummary(userId: number) {
+  return http.get<unknown, UserFinanceSummary>(`/finance/users/${userId}/summary`)
 }
 
 export function getOperationExpenses(params: {

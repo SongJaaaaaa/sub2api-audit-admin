@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { CheckOutlined, EyeOutlined, SearchOutlined, UndoOutlined } from '@ant-design/icons-vue'
-import type { TablePaginationConfig } from 'ant-design-vue'
+import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import { message, Modal } from 'ant-design-vue'
 import dayjs, { type Dayjs } from 'dayjs'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
   createProfitSettlement,
   getProfitDetails,
@@ -45,6 +45,16 @@ const batchOpen = ref(false)
 const batchLoading = ref(false)
 const selectedBatch = ref<ProfitSettlement | null>(null)
 const batchItems = ref<ProfitSettlementItem[]>([])
+const columnWidths = ref<Record<string, number>>(readColumnWidths())
+
+interface ResizableColumn {
+  title?: unknown
+  dataIndex?: unknown
+  key?: unknown
+  width?: number
+  children?: ResizableColumn[]
+  [key: string]: unknown
+}
 
 const pendingCount = computed(() => pendingSummary.income_count + pendingSummary.expense_count)
 const canSettle = computed(() => !loading.value && pendingCount.value > 0)
@@ -53,7 +63,7 @@ const expenseOwners = computed(() => owners.value.filter(owner => owner.expense_
 const tableWidth = computed(() => 475 + (incomeOwners.value.length + expenseOwners.value.length) * 140)
 const batchIncome = computed(() => batchItems.value.filter(row => row.item_type === 'cash_entry'))
 const batchExpenses = computed(() => batchItems.value.filter(row => row.item_type === 'operation_expense'))
-const profitColumns = computed(() => [
+const profitColumns = computed(() => resizableColumns([
   { title: '日期', dataIndex: 'biz_date', key: 'biz_date', fixed: 'left', width: 110 },
   {
     title: '收入',
@@ -82,23 +92,23 @@ const profitColumns = computed(() => [
     ],
   },
   { title: '净利润', dataIndex: 'profit_total', key: 'profit_total', width: 125, align: 'right' },
-])
+], 'summary'))
 
-const incomeColumns = [
+const incomeRawColumns: ResizableColumn[] = [
   { title: '流水号', dataIndex: 'entry_no', width: 190 },
   { title: '管理员', dataIndex: 'owner_name', width: 130 },
   { title: '用户', dataIndex: 'sub2api_user_email', width: 220 },
   { title: '入账金额', dataIndex: 'amount', align: 'right', width: 120 },
   { title: '时间', dataIndex: 'created_at', width: 180 },
 ]
-const expenseColumns = [
+const expenseRawColumns: ResizableColumn[] = [
   { title: '单号', dataIndex: 'expense_no', width: 190 },
   { title: '管理员', dataIndex: 'owner_name', width: 130 },
   { title: '分类', dataIndex: 'category', width: 120 },
   { title: '支出金额', dataIndex: 'amount', align: 'right', width: 120 },
   { title: '备注', dataIndex: 'remark', width: 220 },
 ]
-const historyColumns = [
+const historyRawColumns: ResizableColumn[] = [
   { title: '批次号', dataIndex: 'batch_no', width: 210 },
   { title: '日期范围', dataIndex: 'date_range', width: 220 },
   { title: '收入', dataIndex: 'income_total', align: 'right', width: 120 },
@@ -110,13 +120,55 @@ const historyColumns = [
   { title: '确认时间', dataIndex: 'created_at', width: 180 },
   { title: '操作', dataIndex: 'action', fixed: 'right', width: 150 },
 ]
-const batchColumns = [
+const batchRawColumns: ResizableColumn[] = [
   { title: '日期', dataIndex: 'biz_date', width: 110 },
   { title: '单号', dataIndex: 'reference_no', width: 200 },
   { title: '管理员', dataIndex: 'owner_name', width: 130 },
   { title: '说明', dataIndex: 'description', width: 260 },
   { title: '金额', dataIndex: 'amount', align: 'right', width: 120 },
 ]
+const incomeColumns = computed(() => resizableColumns(incomeRawColumns, 'income'))
+const expenseColumns = computed(() => resizableColumns(expenseRawColumns, 'expense'))
+const historyColumns = computed(() => resizableColumns(historyRawColumns, 'history'))
+const batchColumns = computed(() => resizableColumns(batchRawColumns, 'batch'))
+
+watch(columnWidths, value => localStorage.setItem('profit-column-widths', JSON.stringify(value)), { deep: true })
+
+function resizableColumns(columns: ResizableColumn[], scope: string): TableColumnsType {
+  return columns.map(column => {
+    const key = columnKey(column)
+    return {
+      ...column,
+      width: columnWidths.value[`${scope}:${key}`] || column.width,
+      resizable: !!column.width,
+      children: column.children ? resizableColumns(column.children, scope) : undefined,
+    }
+  }) as TableColumnsType
+}
+
+function resizeColumn(scope: string, width: number, column: TableColumnsType[number]) {
+  const key = columnKey(column as ResizableColumn)
+  columnWidths.value = { ...columnWidths.value, [`${scope}:${key}`]: Math.max(60, Math.round(width)) }
+}
+
+function columnKey(column: ResizableColumn) {
+  return String(column.key || column.dataIndex || column.title || '')
+}
+
+const resizeSummaryColumn = (width: number, column: TableColumnsType[number]) => resizeColumn('summary', width, column)
+const resizeHistoryColumn = (width: number, column: TableColumnsType[number]) => resizeColumn('history', width, column)
+const resizeIncomeColumn = (width: number, column: TableColumnsType[number]) => resizeColumn('income', width, column)
+const resizeExpenseColumn = (width: number, column: TableColumnsType[number]) => resizeColumn('expense', width, column)
+const resizeBatchColumn = (width: number, column: TableColumnsType[number]) => resizeColumn('batch', width, column)
+
+function readColumnWidths(): Record<string, number> {
+  try {
+    const value = JSON.parse(localStorage.getItem('profit-column-widths') || '{}')
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  } catch {
+    return {}
+  }
+}
 
 function params() {
   if (!dates.value) return null
@@ -275,6 +327,7 @@ onMounted(() => Promise.all([loadSummary(), loadSettlements()]))
           :pagination="false"
           :scroll="{ x: tableWidth }"
           :locale="{ emptyText: '当前日期范围暂无收支流水' }"
+          @resize-column="resizeSummaryColumn"
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.dataIndex === 'income_total' || column.dataIndex === 'expense_total'">
@@ -335,6 +388,7 @@ onMounted(() => Promise.all([loadSummary(), loadSettlements()]))
           :loading="historyLoading"
           :pagination="historyPage"
           :scroll="{ x: 1450 }"
+          @resize-column="resizeHistoryColumn"
           @change="historyChange"
         >
           <template #bodyCell="{ column, record }">
@@ -366,13 +420,13 @@ onMounted(() => Promise.all([loadSummary(), loadSettlements()]))
       <a-spin :spinning="detailLoading">
         <section class="detailSection">
           <h3>收入明细</h3>
-          <a-table row-key="id" :columns="incomeColumns" :data-source="incomeDetails" :pagination="false" :scroll="{ x: 840 }" size="small">
+          <a-table row-key="id" :columns="incomeColumns" :data-source="incomeDetails" :pagination="false" :scroll="{ x: 840 }" size="small" @resize-column="resizeIncomeColumn">
             <template #bodyCell="{ column, record }"><template v-if="column.dataIndex === 'amount'"><span class="money">{{ record.amount }}</span></template></template>
           </a-table>
         </section>
         <section class="detailSection">
           <h3>支出明细</h3>
-          <a-table row-key="id" :columns="expenseColumns" :data-source="expenseDetails" :pagination="false" :scroll="{ x: 780 }" size="small">
+          <a-table row-key="id" :columns="expenseColumns" :data-source="expenseDetails" :pagination="false" :scroll="{ x: 780 }" size="small" @resize-column="resizeExpenseColumn">
             <template #bodyCell="{ column, record }"><template v-if="column.dataIndex === 'amount'"><span class="money">{{ record.amount }}</span></template></template>
           </a-table>
         </section>
@@ -381,8 +435,8 @@ onMounted(() => Promise.all([loadSummary(), loadSettlements()]))
 
     <a-drawer v-model:open="batchOpen" :title="`分账明细 · ${selectedBatch?.batch_no || ''}`" width="920">
       <a-spin :spinning="batchLoading">
-        <section class="detailSection"><h3>收入明细</h3><a-table row-key="id" :columns="batchColumns" :data-source="batchIncome" :pagination="false" :scroll="{ x: 820 }" size="small" /></section>
-        <section class="detailSection"><h3>支出明细</h3><a-table row-key="id" :columns="batchColumns" :data-source="batchExpenses" :pagination="false" :scroll="{ x: 820 }" size="small" /></section>
+        <section class="detailSection"><h3>收入明细</h3><a-table row-key="id" :columns="batchColumns" :data-source="batchIncome" :pagination="false" :scroll="{ x: 820 }" size="small" @resize-column="resizeBatchColumn" /></section>
+        <section class="detailSection"><h3>支出明细</h3><a-table row-key="id" :columns="batchColumns" :data-source="batchExpenses" :pagination="false" :scroll="{ x: 820 }" size="small" @resize-column="resizeBatchColumn" /></section>
       </a-spin>
     </a-drawer>
   </section>

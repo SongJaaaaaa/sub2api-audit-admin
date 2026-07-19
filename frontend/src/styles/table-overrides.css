@@ -20,3 +20,4 @@
 .page .ant-table-container { width: 100%; }
 .page .ant-table-content { overflow-x: auto !important; }
 .page .ant-table-body { overflow-x: auto !important; }
+.page .ant-table-thead > tr > th { text-align: center !important; }
