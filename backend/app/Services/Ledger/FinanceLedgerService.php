@@ -81,7 +81,7 @@ class FinanceLedgerService
         $start = trim((string) ($filters['start_date'] ?? '')) ?: $today;
         $end = trim((string) ($filters['end_date'] ?? '')) ?: $start;
         $this->syncExternalIncome($start, $end);
-        $query = CashEntry::query();
+        $query = CashEntry::query()->with('adjustment:id,admin_notes');
         $this->filterEntry($query, $filters);
         $summary = [
             'record_count' => (clone $query)->count(),
@@ -91,7 +91,32 @@ class FinanceLedgerService
             'unlinked_count' => (clone $query)->whereNull('ledger_adjustment_id')->count(),
         ];
 
-        return $this->page($query, $page, $pageSize, fn (CashEntry $row): array => [
+        return $this->page($query, $page, $pageSize, fn (CashEntry $row): array => $this->cashRow($row), $summary);
+    }
+
+    public function createIncome(Admin $admin, array $data): CashEntry
+    {
+        $income = CashEntry::query()->create([
+            'entry_no' => $this->no('CASH'),
+            'direction' => CashEntry::DIR_IN,
+            'cash_amount' => Money::fmt($data['amount']),
+            'received_at' => $data['received_at'],
+            'source' => 'manual_income',
+            'content_html' => SafeHtml::clean($data['content_html'] ?? null),
+            'profit_eligible' => true,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->audit->record($admin, 'cash_entry.create', 'cash_entry', $income->id, null, $this->cashRow($income));
+
+        return $income;
+    }
+
+    public function cashRow(CashEntry $row): array
+    {
+        $row->loadMissing(['creator:id,name,email', 'adjustment:id,admin_notes']);
+
+        return [
             'id' => $row->id,
             'entry_no' => $row->entry_no,
             'ledger_adjustment_id' => $row->ledger_adjustment_id,
@@ -99,13 +124,15 @@ class FinanceLedgerService
             'sub2api_user_email' => $row->sub2api_user_email,
             'direction' => $row->direction,
             'cash_amount' => $row->cash_amount,
+            'received_at' => $row->received_at?->format('Y-m-d') ?? substr((string) $row->created_at, 0, 10),
             'source' => $row->source,
             'remark' => $row->remark,
+            'content_html' => $row->content_html ?: $row->adjustment?->admin_notes,
             'created_by' => $row->created_by,
             'operator_name' => $row->creator?->name,
             'operator_email' => $row->creator?->email,
             'created_at' => ChinaTime::fmt($row->created_at),
-        ], $summary);
+        ];
     }
 
     public function syncExternalIncome(string $start, string $end): int
@@ -262,7 +289,7 @@ class FinanceLedgerService
     {
         $expense = OperationExpense::query()->create([
             'expense_no' => $this->no('EXP'),
-            'category' => $data['category'],
+            'category' => $data['category'] ?? '其他',
             'amount' => Money::fmt($data['amount']),
             'paid_at' => $data['paid_at'],
             'remark' => $data['remark'] ?? null,
@@ -316,13 +343,14 @@ class FinanceLedgerService
         if ($businessNo !== '') {
             $query->where('entry_no', 'like', '%'.$businessNo.'%');
         }
+        $date = DB::raw('COALESCE(received_at, DATE(created_at))');
         $startDate = trim((string) ($filters['start_date'] ?? ''));
         if ($startDate !== '') {
-            $query->where('created_at', '>=', $startDate.' 00:00:00');
+            $query->where($date, '>=', $startDate);
         }
         $endDate = trim((string) ($filters['end_date'] ?? ''));
         if ($endDate !== '') {
-            $query->where('created_at', '<', date('Y-m-d 00:00:00', strtotime($endDate.' +1 day')));
+            $query->where($date, '<=', $endDate);
         }
         $linkStatus = trim((string) ($filters['link_status'] ?? ''));
         if ($linkStatus === 'linked') {

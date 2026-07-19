@@ -1,15 +1,19 @@
 <script setup lang="ts">
+import { PlusOutlined } from '@ant-design/icons-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import { onMounted, reactive, ref } from 'vue'
 import {
+  createIncome,
   getCashEntries,
   type CashEntry,
   type FinanceSummary,
 } from '../api/finance'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
+import SafeRichTextDisplay from '../components/richtext/SafeRichTextDisplay.vue'
+import SafeRichTextEditor from '../components/richtext/SafeRichTextEditor.vue'
 import { useAdminOptions } from '../composables/useAdminOptions'
 import { useTableColumns } from '../composables/useTableColumns'
 
@@ -18,12 +22,15 @@ const loading = ref(false)
 const items = ref<CashEntry[]>([])
 const detailOpen = ref(false)
 const detail = ref<CashEntry | null>(null)
+const modalOpen = ref(false)
+const submitting = ref(false)
 const email = ref('')
 const operator = ref<number | undefined>()
 const dates = ref<[Dayjs, Dayjs] | null>([dayjs(), dayjs()])
 const dateMode = ref<'day' | 'week' | 'month' | ''>('day')
 const summary = reactive<FinanceSummary>({ record_count: 0, user_count: 0, amount_total: '0.00', linked_count: 0, unlinked_count: 0 })
 const page = reactive({ current: 1, pageSize: 20, total: 0 })
+const form = reactive({ amount: '', received_at: dayjs().format('YYYY-MM-DD'), content_html: '' })
 
 const allColumns = [
   { title: '收入单号', dataIndex: 'entry_no', width: 180 },
@@ -31,6 +38,7 @@ const allColumns = [
   { title: '邮箱', dataIndex: 'sub2api_user_email', width: 220 },
   { title: '操作人', dataIndex: 'operator_name', width: 180 },
   { title: '收入金额', dataIndex: 'cash_amount', align: 'right', width: 130 },
+  { title: '收入日期', dataIndex: 'received_at', width: 120 },
   { title: '来源', dataIndex: 'source', width: 160 },
   { title: '备注', dataIndex: 'remark', width: 180 },
   { title: '记录时间', dataIndex: 'created_at', width: 180 },
@@ -112,7 +120,31 @@ function signedMoney(value: string | number) {
 }
 
 function sourceLabel(source: string) {
-  return source === 'sub2api_external_adjustment' ? 'Sub2API 外部调整' : '本系统入账'
+  if (source === 'sub2api_external_adjustment') return 'Sub2API 外部调整'
+  if (source === 'manual_income') return '手工收入'
+  return '本系统入账'
+}
+
+function openCreate() {
+  Object.assign(form, { amount: '', received_at: dayjs().format('YYYY-MM-DD'), content_html: '' })
+  modalOpen.value = true
+}
+
+async function submit() {
+  if (!form.amount) return void message.warning('请填写金额')
+  submitting.value = true
+  try {
+    const res = await createIncome(form)
+    message.success(res.message)
+    modalOpen.value = false
+    detail.value = res.income
+    detailOpen.value = true
+    loadItems()
+  } catch {
+    message.error('保存收入失败')
+  } finally {
+    submitting.value = false
+  }
 }
 
 onMounted(loadItems)
@@ -141,6 +173,7 @@ onMounted(loadItems)
       <a-range-picker v-model:value="dates" class="dateFilter" @change="changeDates" />
       <a-button type="primary" @click="search">查询</a-button>
       <a-button @click="resetFilters">重置</a-button>
+      <a-button type="primary" @click="openCreate"><template #icon><PlusOutlined /></template>新增收入</a-button>
     </div>
 
     <div class="summaryGrid">
@@ -178,11 +211,24 @@ onMounted(loadItems)
         <a-descriptions-item label="用户">{{ detail.sub2api_user_email || `用户 #${detail.sub2api_user_id}` }}</a-descriptions-item>
         <a-descriptions-item label="操作人">{{ detail.operator_name || detail.operator_email || '-' }}</a-descriptions-item>
         <a-descriptions-item label="收入金额"><strong class="positive">{{ signedMoney(detail.cash_amount) }}</strong></a-descriptions-item>
+        <a-descriptions-item label="收入日期">{{ detail.received_at || '-' }}</a-descriptions-item>
         <a-descriptions-item label="来源">{{ sourceLabel(detail.source) }}</a-descriptions-item>
-        <a-descriptions-item label="备注">{{ detail.remark || '-' }}</a-descriptions-item>
+        <a-descriptions-item v-if="!detail.content_html" label="备注">{{ detail.remark || '-' }}</a-descriptions-item>
         <a-descriptions-item label="记录时间">{{ detail.created_at || '-' }}</a-descriptions-item>
       </a-descriptions>
+      <div v-if="detail?.content_html" class="detailNotes">
+        <h3>备注</h3>
+        <SafeRichTextDisplay :value="detail.content_html" />
+      </div>
     </a-drawer>
+
+    <a-modal v-model:open="modalOpen" title="新增收入" :confirm-loading="submitting" ok-text="保存" cancel-text="取消" @ok="submit">
+      <a-form layout="vertical">
+        <a-form-item label="金额" required><a-input v-model:value="form.amount" placeholder="0.00" /></a-form-item>
+        <a-form-item label="收入日期" required><a-date-picker v-model:value="form.received_at" value-format="YYYY-MM-DD" class="fullField" /></a-form-item>
+        <a-form-item label="备注"><SafeRichTextEditor v-model:value="form.content_html" /></a-form-item>
+      </a-form>
+    </a-modal>
   </section>
 </template>
 
@@ -198,6 +244,8 @@ onMounted(loadItems)
 .summaryGrid span { display: block; margin-bottom: 6px; color: var(--text-secondary, #7a8395); font-size: 13px; }
 .summaryGrid strong { font-size: 24px; }
 .positive { color: #389e0d; }
+.detailNotes { margin-top: 18px; }
+.detailNotes h3 { margin: 0 0 8px; }
 @media (max-width: 700px) {
   .filterItem, .dateFilter { width: 100%; }
   .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

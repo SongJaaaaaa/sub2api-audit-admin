@@ -88,12 +88,12 @@ class FinanceHistoryService
         $query = DB::table('cash_entries as row')
             ->leftJoin('admins as admin', 'admin.id', '=', 'row.created_by')
             ->selectRaw("'income' as type")
-            ->selectRaw('row.id as source_id, row.entry_no as bill_no, DATE(row.created_at) as biz_date')
+            ->selectRaw('row.id as source_id, row.entry_no as bill_no, COALESCE(row.received_at, DATE(row.created_at)) as biz_date')
             ->selectRaw('row.sub2api_user_id, row.sub2api_user_email, NULL as category')
             ->selectRaw('row.cash_amount as amount, row.created_by, admin.name as operator_name, admin.email as operator_email')
             ->selectRaw('row.remark, row.created_at');
 
-        $this->commonFilters($query, $filters, 'row.created_at', 'row');
+        $this->commonFilters($query, $filters, DB::raw('COALESCE(row.received_at, DATE(row.created_at))'), 'row', true);
 
         return $query;
     }
@@ -123,21 +123,21 @@ class FinanceHistoryService
             ->selectRaw('row.amount, row.created_by, admin.name as operator_name, admin.email as operator_email')
             ->selectRaw('row.remark, row.created_at');
 
-        $this->commonFilters($query, $filters, 'row.paid_at', 'row', true);
+        $this->commonFilters($query, $filters, 'row.paid_at', 'row', true, true);
 
         return $query;
     }
 
-    private function commonFilters(Builder $query, array $filters, string $dateColumn, string $alias, bool $expense = false): void
+    private function commonFilters(Builder $query, array $filters, mixed $dateColumn, string $alias, bool $dateOnly = false, bool $expense = false): void
     {
         $startDate = trim((string) ($filters['start_date'] ?? ''));
         if ($startDate !== '') {
-            $query->where($dateColumn, '>=', $expense ? $startDate : $startDate.' 00:00:00');
+            $query->where($dateColumn, '>=', $dateOnly ? $startDate : $startDate.' 00:00:00');
         }
 
         $endDate = trim((string) ($filters['end_date'] ?? ''));
         if ($endDate !== '') {
-            $query->where($dateColumn, $expense ? '<=' : '<', $expense
+            $query->where($dateColumn, $dateOnly ? '<=' : '<', $dateOnly
                 ? $endDate
                 : date('Y-m-d 00:00:00', strtotime($endDate.' +1 day')));
         }

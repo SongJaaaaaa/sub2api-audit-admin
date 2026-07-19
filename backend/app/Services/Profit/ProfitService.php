@@ -22,8 +22,8 @@ class ProfitService
     {
         $range = ChinaTime::range($startDate, $endDate);
         $income = $this->incomeQuery($startDate, $endDate)
-            ->selectRaw('DATE(created_at) as biz_date, created_by as owner_id, COUNT(*) as record_count, SUM(cash_amount) as amount_total')
-            ->groupByRaw('DATE(created_at), created_by')
+            ->selectRaw('COALESCE(received_at, DATE(created_at)) as biz_date, created_by as owner_id, COUNT(*) as record_count, SUM(cash_amount) as amount_total')
+            ->groupByRaw('COALESCE(received_at, DATE(created_at)), created_by')
             ->get();
         $expenses = $this->expenseQuery($startDate, $endDate)
             ->selectRaw('paid_at as biz_date, created_by as owner_id, COUNT(*) as record_count, SUM(amount) as amount_total')
@@ -134,7 +134,7 @@ class ProfitService
                 'owner_admin_id' => $row->created_by,
                 'owner_name' => $this->ownerName($row->creator),
                 'remark' => $row->remark,
-                'biz_date' => substr((string) $row->created_at, 0, 10),
+                'biz_date' => $row->received_at?->format('Y-m-d') ?? substr((string) $row->created_at, 0, 10),
                 'created_at' => ChinaTime::fmt($row->created_at),
             ])->all();
         $expenses = $this->expenseQuery($date, $date)->with('creator:id,name,email')->orderBy('id')->get()
@@ -181,7 +181,7 @@ class ProfitService
                 $batch->items()->create([
                     'item_type' => ProfitSettlementItem::TYPE_INCOME,
                     'item_id' => $row->id,
-                    'biz_date' => substr((string) $row->created_at, 0, 10),
+                    'biz_date' => $row->received_at?->format('Y-m-d') ?? substr((string) $row->created_at, 0, 10),
                     'owner_admin_id' => $row->created_by,
                     'owner_name' => $this->ownerName($row->creator),
                     'reference_no' => $row->entry_no,
@@ -305,12 +305,12 @@ class ProfitService
 
     private function incomeQuery(string $startDate, string $endDate): Builder
     {
-        $range = ChinaTime::range($startDate, $endDate);
+        ChinaTime::range($startDate, $endDate);
 
         return CashEntry::query()
             ->where('profit_eligible', true)
-            ->where('created_at', '>=', $range->localStartText())
-            ->where('created_at', '<', $range->localEndExclusiveText());
+            ->where(DB::raw('COALESCE(received_at, DATE(created_at))'), '>=', $startDate)
+            ->where(DB::raw('COALESCE(received_at, DATE(created_at))'), '<=', $endDate);
     }
 
     private function expenseQuery(string $startDate, string $endDate): Builder

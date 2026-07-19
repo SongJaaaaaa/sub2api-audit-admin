@@ -69,7 +69,7 @@ const profitColumns = computed(() => resizableColumns([
     title: '收入',
     children: [
       ...incomeOwners.value.map(owner => ({
-        title: `${owner.name}入账`,
+        title: owner.id === 0 ? 'sub2api调整' : `${owner.name}入账`,
         key: `income-${owner.id}`,
         width: 140,
         align: 'right',

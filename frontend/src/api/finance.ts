@@ -42,8 +42,10 @@ export interface CashEntry {
   sub2api_user_email: string | null
   direction: 'in'
   cash_amount: string
+  received_at: string
   source: string
   remark: string | null
+  content_html: string | null
   created_by: number | null
   operator_name: string | null
   operator_email: string | null
@@ -56,12 +58,6 @@ export interface ExpenseSummary {
   amount_total: string
   max_amount: string
   daily_average: string | null
-}
-
-export interface ExpenseCategory {
-  category: string
-  record_count: number
-  amount_total: string
 }
 
 export interface OperationExpense {
@@ -142,6 +138,14 @@ export function getCashEntries(params: FinanceParams) {
   return http.get<unknown, PageRes<CashEntry, FinanceSummary>>('/finance/cash', { params })
 }
 
+export function createIncome(data: {
+  amount: string
+  received_at: string
+  content_html?: string
+}) {
+  return http.post<unknown, { income: CashEntry; message: string }>('/finance/cash', data)
+}
+
 export function getUserFinanceSummary(userId: number) {
   return http.get<unknown, UserFinanceSummary>(`/finance/users/${userId}/summary`)
 }
@@ -149,7 +153,6 @@ export function getUserFinanceSummary(userId: number) {
 export function getOperationExpenses(params: {
   page: number
   page_size: number
-  category?: string
   from?: string
   to?: string
   created_by?: number
@@ -157,14 +160,12 @@ export function getOperationExpenses(params: {
   max_amount?: string
   keyword?: string
 }) {
-  return http.get<unknown, PageRes<OperationExpense, ExpenseSummary> & { categories: ExpenseCategory[] }>('/finance/expenses', { params })
+  return http.get<unknown, PageRes<OperationExpense, ExpenseSummary>>('/finance/expenses', { params })
 }
 
 export function createOperationExpense(data: {
-  category: string
   amount: string
   paid_at: string
-  remark?: string
   content_html?: string
 }) {
   return http.post<unknown, { expense: OperationExpense; message: string }>('/finance/expenses', data)

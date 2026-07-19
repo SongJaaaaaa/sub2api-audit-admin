@@ -16,8 +16,10 @@ class CashEntry extends Model
         'sub2api_user_email',
         'direction',
         'cash_amount',
+        'received_at',
         'source',
         'remark',
+        'content_html',
         'profit_eligible',
         'profit_settlement_id',
         'created_by',
@@ -27,6 +29,7 @@ class CashEntry extends Model
     {
         return [
             'cash_amount' => 'decimal:2',
+            'received_at' => 'date:Y-m-d',
             'profit_eligible' => 'boolean',
             'profit_settlement_id' => 'integer',
         ];
@@ -35,5 +38,10 @@ class CashEntry extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(Admin::class, 'created_by');
+    }
+
+    public function adjustment(): BelongsTo
+    {
+        return $this->belongsTo(LedgerAdjustment::class, 'ledger_adjustment_id');
     }
 }

@@ -23,6 +23,19 @@ class FinanceLedgerController extends Controller
         return response()->json($service->cash($this->filters($req), $this->page($req), $this->pageSize($req)));
     }
 
+    public function storeIncome(Request $req, FinanceLedgerService $service): JsonResponse
+    {
+        $data = $req->validate([
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'received_at' => ['required', 'date_format:Y-m-d'],
+            'content_html' => ['nullable', 'string', 'max:10000000'],
+        ]);
+
+        $row = $service->createIncome($req->user(), $data);
+
+        return response()->json(['income' => $service->cashRow($row), 'message' => '收入已记录'], 201);
+    }
+
     public function gifts(Request $req, FinanceLedgerService $service): JsonResponse
     {
         return response()->json($service->gifts($this->filters($req), $this->page($req), $this->pageSize($req)));
@@ -44,7 +57,7 @@ class FinanceLedgerController extends Controller
     public function storeExpense(Request $req, FinanceLedgerService $service): JsonResponse
     {
         $data = $req->validate([
-            'category' => ['required', 'string', 'max:80'],
+            'category' => ['nullable', 'string', 'max:80'],
             'amount' => ['required', 'numeric', 'gt:0'],
             'paid_at' => ['required', 'date_format:Y-m-d'],
             'remark' => ['nullable', 'string', 'max:500'],

@@ -47,6 +47,7 @@ class FinanceLedgerTest extends TestCase
             'cash_amount' => '100.00',
             'gift_quota_amount' => '20.00',
             'adjust_reason' => '充值',
+            'admin_notes' => '<p>到账凭证</p><img src="data:image/png;base64,AAAA">',
         ])->assertCreated();
 
         $this->assertDatabaseHas('cash_entries', ['sub2api_user_id' => 1001, 'cash_amount' => '100.00', 'profit_eligible' => true]);
@@ -55,6 +56,7 @@ class FinanceLedgerTest extends TestCase
         $this->withToken($token)->getJson('/api/v1/finance/cash?page_size=1')
             ->assertOk()
             ->assertJsonPath('items.0.cash_amount', '100.00')
+            ->assertJsonPath('items.0.content_html', '<p>到账凭证</p><img src="data:image/png;base64,AAAA">')
             ->assertJsonPath('summary.record_count', 1)
             ->assertJsonPath('summary.user_count', 1)
             ->assertJsonPath('summary.amount_total', '100.00')
@@ -178,6 +180,47 @@ class FinanceLedgerTest extends TestCase
         ])->assertCreated();
 
         $this->assertSame($html, $response->json('expense.content_html'));
+    }
+
+    public function test_manual_income_and_simplified_expense_use_rich_text_notes(): void
+    {
+        $admin = $this->admin();
+        $token = $admin->createToken('admin-token')->plainTextToken;
+
+        $this->withToken($token)->postJson('/api/v1/finance/cash', [
+            'amount' => '88.50',
+            'received_at' => '2026-07-08',
+            'content_html' => '<p onclick="bad()">手工收入</p><script>alert(1)</script>',
+        ])->assertCreated()
+            ->assertJsonPath('income.cash_amount', '88.50')
+            ->assertJsonPath('income.received_at', '2026-07-08')
+            ->assertJsonPath('income.source', 'manual_income')
+            ->assertJsonPath('income.content_html', '<p>手工收入</p>');
+
+        $this->withToken($token)->postJson('/api/v1/finance/expenses', [
+            'amount' => '20.00',
+            'paid_at' => '2026-07-08',
+            'content_html' => '<p>域名续费</p>',
+        ])->assertCreated()
+            ->assertJsonPath('expense.category', '其他')
+            ->assertJsonPath('expense.remark', null)
+            ->assertJsonPath('expense.content_html', '<p>域名续费</p>');
+
+        $this->withToken($token)->getJson('/api/v1/finance/cash?start_date=2026-07-08&end_date=2026-07-08')
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('items.0.received_at', '2026-07-08');
+
+        $this->withToken($token)->getJson('/api/v1/finance/history?start_date=2026-07-08&end_date=2026-07-08')
+            ->assertOk()
+            ->assertJsonPath('summary.income_total', '88.50')
+            ->assertJsonPath('summary.expense_total', '20.00');
+
+        $this->withToken($token)->getJson('/api/v1/profit/summary?start_date=2026-07-08&end_date=2026-07-08')
+            ->assertOk()
+            ->assertJsonPath('summary.income_total', '88.50')
+            ->assertJsonPath('summary.expense_total', '20.00')
+            ->assertJsonPath('summary.profit_total', '68.50');
     }
 
     public function test_history_lists_and_summarizes_every_local_bill(): void
