@@ -2,6 +2,7 @@
 import { DownloadOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
+import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import { onMounted, reactive, ref } from 'vue'
 import {
@@ -21,6 +22,7 @@ const loading = ref(false)
 const exporting = ref(false)
 const items = ref<FinanceHistoryItem[]>([])
 const dateRange = ref<[Dayjs, Dayjs] | null>(null)
+const dateMode = ref<'day' | 'week' | 'month' | ''>('')
 const detailOpen = ref(false)
 const detail = ref<FinanceHistoryItem | null>(null)
 const type = ref<FinanceHistoryType | undefined>()
@@ -107,11 +109,24 @@ async function downloadCsv() {
 
 function resetFilters() {
   dateRange.value = null
+  dateMode.value = ''
   type.value = undefined
   userId.value = ''
   keyword.value = ''
   operator.value = undefined
   loadItems(true)
+}
+
+function changeDateMode(mode: 'day' | 'week' | 'month') {
+  dateMode.value = mode
+  const now = dayjs()
+  const start = mode === 'week' ? now.startOf('week') : mode === 'month' ? now.startOf('month') : now
+  dateRange.value = [start, now]
+  loadItems(true)
+}
+
+function changeDates() {
+  dateMode.value = ''
 }
 
 function changePage(pager: TablePaginationConfig) {
@@ -166,7 +181,17 @@ onMounted(() => loadItems())
 
     <section class="filterPanel">
       <div class="filterGrid">
-        <label class="filterDate"><span>时间</span><a-range-picker v-model:value="dateRange" /></label>
+        <label class="filterDate">
+          <span>时间</span>
+          <div class="dateQuickFilter">
+            <a-segmented
+              :value="dateMode"
+              :options="[{ label: '今日', value: 'day' }, { label: '本周', value: 'week' }, { label: '本月', value: 'month' }]"
+              @change="changeDateMode"
+            />
+            <a-range-picker v-model:value="dateRange" @change="changeDates" />
+          </div>
+        </label>
         <label class="filterType">
           <span>类型</span>
           <a-select v-model:value="type" allow-clear placeholder="全部类型">
@@ -246,7 +271,9 @@ onMounted(() => loadItems())
 .filterGrid label { display: grid; gap: 6px; min-width: 0; }
 .filterGrid label > span { color: var(--text-secondary, #70798c); font-size: 12px; }
 .filterGrid label :deep(.ant-picker), .filterGrid label :deep(.ant-select) { width: 100%; }
-.filterDate { flex: 0 0 250px; }
+.filterDate { flex: 1 1 520px; }
+.dateQuickFilter { display: flex; gap: 8px; }
+.dateQuickFilter :deep(.ant-picker) { flex: 1; min-width: 240px; }
 .filterType { flex: 0 0 130px; }
 .filterId { flex: 0 0 130px; }
 .filterGrow { flex: 1 1 230px; max-width: 340px; }
@@ -263,6 +290,8 @@ onMounted(() => loadItems())
 small { display: block; margin-top: 3px; color: var(--text-secondary, #7a8395); }
 @media (max-width: 760px) {
   .filterGrid label { flex: 1 1 100%; max-width: none; }
+  .dateQuickFilter { flex-direction: column; }
+  .dateQuickFilter :deep(.ant-picker) { min-width: 0; }
   .filterActions, .filterActions button { flex: 1; }
   .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

@@ -21,7 +21,7 @@ const detailOpen = ref(false)
 const detail = ref<LedgerAdjustment | null>(null)
 const email = ref('')
 const operator = ref<number | undefined>()
-const dates = ref<[Dayjs, Dayjs]>([dayjs(), dayjs()])
+const dates = ref<[Dayjs, Dayjs] | null>([dayjs(), dayjs()])
 const dateMode = ref<'day' | 'week' | 'month' | ''>('day')
 const summary = reactive<LedgerSummary>({ record_count: 0, user_count: 0, increment_total: '0.00', decrement_total: '0.00', net_total: '0.00', cash_total: '0.00', gift_total: '0.00' })
 const page = reactive({ current: 1, pageSize: 20, total: 0 })
@@ -78,8 +78,8 @@ function search() {
 function resetFilters() {
   email.value = ''
   operator.value = undefined
-  dateMode.value = 'day'
-  dates.value = [dayjs(), dayjs()]
+  dateMode.value = ''
+  dates.value = null
   search()
 }
 

@@ -22,11 +22,14 @@ export function useTableColumns<T extends TableColumn>(storageKey: string, allCo
   })))
   const columns = computed(() => allColumns
     .filter(column => visibleCols.value.includes(columnKey(column)))
-    .map(column => ({
-      ...column,
-      width: widths.value[columnKey(column)] || column.width,
-      resizable: column.resizable !== false,
-    })))
+    .map((column) => {
+      const width = widths.value[columnKey(column)] || column.width
+      return {
+        ...column,
+        width,
+        resizable: column.resizable !== false && Number.isFinite(Number(width)),
+      }
+    }))
 
   watch(visibleCols, value => localStorage.setItem(`${storageKey}:cols`, JSON.stringify(value)), { deep: true })
   watch(tableWidth, value => localStorage.setItem(`${storageKey}:width`, String(value)))
