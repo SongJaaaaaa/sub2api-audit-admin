@@ -32,6 +32,27 @@ class LedgerAdjustmentController extends Controller
         ], $page, $pageSize));
     }
 
+    public function userStats(Request $req, LedgerAdjustmentService $service): JsonResponse
+    {
+        $data = $req->validate([
+            'granularity' => ['nullable', Rule::in(['day', 'week', 'month'])],
+            'sub2api_user_email' => ['nullable', 'string', 'max:255'],
+            'created_by' => ['nullable', 'integer', 'min:1'],
+            'start_date' => ['nullable', 'date_format:Y-m-d'],
+            'end_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:start_date'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'page_size' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        return response()->json($service->userStats([
+            'status' => LedgerAdjustment::STATUS_SUCCEEDED,
+            'sub2api_user_email' => $data['sub2api_user_email'] ?? '',
+            'created_by' => $data['created_by'] ?? 0,
+            'start_date' => $data['start_date'] ?? '',
+            'end_date' => $data['end_date'] ?? '',
+        ], $data['granularity'] ?? 'day', (int) ($data['page'] ?? 1), (int) ($data['page_size'] ?? 20)));
+    }
+
     public function store(Request $req, LedgerAdjustmentService $service): JsonResponse
     {
         $data = $req->validate([

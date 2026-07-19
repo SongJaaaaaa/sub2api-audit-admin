@@ -39,6 +39,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('balance-events/export', [BalanceEventController::class, 'export']);
 
         Route::get('ledger-adjustments', [LedgerAdjustmentController::class, 'index']);
+        Route::get('ledger-adjustments/user-stats', [LedgerAdjustmentController::class, 'userStats']);
         Route::post('ledger-adjustments', [LedgerAdjustmentController::class, 'store']);
         Route::post('ledger-adjustments/batch-gift', [LedgerAdjustmentController::class, 'batchGift']);
         Route::post('ledger-adjustments/{adjustment}/retry', [LedgerAdjustmentController::class, 'retry']);
@@ -46,6 +47,8 @@ Route::prefix('v1')->group(function (): void {
         Route::get('finance/gifts', [FinanceLedgerController::class, 'gifts']);
         Route::get('finance/expenses', [FinanceLedgerController::class, 'expenses']);
         Route::post('finance/expenses', [FinanceLedgerController::class, 'storeExpense']);
+        Route::get('finance/history', [FinanceLedgerController::class, 'history']);
+        Route::get('finance/history/export', [FinanceLedgerController::class, 'exportHistory']);
         Route::get('profit/summary', [ProfitController::class, 'summary']);
         Route::get('profit/details', [ProfitController::class, 'details']);
         Route::get('profit/settlements', [ProfitController::class, 'index']);

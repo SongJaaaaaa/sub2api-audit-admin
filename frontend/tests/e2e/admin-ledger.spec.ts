@@ -26,6 +26,8 @@ test('admin can login and open core business pages', async ({ page }) => {
           gift_total: '0.00',
         },
       }
+    } else if (path.endsWith('/ledger-adjustments/user-stats')) {
+      body = { ...body as object, granularity: 'day' }
     } else if (path.endsWith('/finance/gifts')) {
       body = {
         ...body as object,
@@ -36,6 +38,11 @@ test('admin can login and open core business pages', async ({ page }) => {
         ...body as object,
         categories: [],
         summary: { record_count: 0, category_count: 0, amount_total: '0.00', max_amount: '0.00', daily_average: null },
+      }
+    } else if (path.endsWith('/finance/history')) {
+      body = {
+        ...body as object,
+        summary: { record_count: 0, income_count: 0, expense_count: 0, gift_count: 0, income_total: '0.00', expense_total: '0.00', gift_total: '0.00' },
       }
     } else if (path.endsWith('/profit/summary')) {
       body = {
@@ -88,9 +95,10 @@ test('admin can login and open core business pages', async ({ page }) => {
   await expect(page.getByRole('button', { name: '刷新' })).toBeVisible()
 
   const pages = [
-    { path: '/ledger', title: '入账记录' },
+    { path: '/ledger', title: '收入' },
+    { path: '/balance-events', title: '历史账' },
     { path: '/gift-quota', title: '赠送额度' },
-    { path: '/operation-expense', title: '经营账' },
+    { path: '/operation-expense', title: '支出' },
     { path: '/profit', title: '利润统计' },
     { path: '/reconcile', title: '调额对账中心' },
     { path: '/audit-log', title: '操作审计' },

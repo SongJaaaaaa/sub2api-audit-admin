@@ -115,6 +115,8 @@ export function getSub2Users(params: {
   user_filter?: 'zero_balance' | 'negative_balance' | 'disabled' | ''
   last_used_start?: string
   last_used_end?: string
+  sort_by?: 'balance'
+  sort_order?: 'asc' | 'desc'
 }) {
   return http.get<unknown, UserListRes>('/sub2api/users', { params })
 }

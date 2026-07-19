@@ -81,7 +81,7 @@ async function loadItems() {
     await nextTick()
     renderChart()
   } catch {
-    message.error('读取经营账失败')
+    message.error('读取支出失败')
   } finally {
     loading.value = false
   }
@@ -103,7 +103,7 @@ function renderChart() {
         const i = rows[0].dataIndex
         const row = categories.value[i]
         const rate = total > 0 ? (Number(row.amount_total) / total * 100).toFixed(2) : '0.00'
-        return `${row.category}<br/>金额：${row.amount_total}<br/>笔数：${row.record_count}<br/>占比：${rate}%`
+        return `${row.category}<br/>金额：${signedExpense(row.amount_total)}<br/>笔数：${row.record_count}<br/>占比：${rate}%`
       },
     },
     xAxis: { type: 'value' },
@@ -139,9 +139,13 @@ async function submit() {
     selected.value = res.expense
     drawerOpen.value = true
     loadItems()
-  } catch { message.error('保存经营账失败') } finally { submitting.value = false }
+  } catch { message.error('保存支出失败') } finally { submitting.value = false }
 }
 function openDetail(row: OperationExpense) { selected.value = row; drawerOpen.value = true }
+function signedExpense(value: string | number) {
+  const amount = Number(value || 0)
+  return amount === 0 ? '0.00' : `-${Math.abs(amount).toFixed(2)}`
+}
 
 onMounted(() => { loadItems(); window.addEventListener('resize', resizeChart) })
 onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); chart?.dispose() })
@@ -150,7 +154,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); chart
 <template>
   <section class="page">
     <div class="pageHead pageHeadActionsOnly">
-      <a-button type="primary" @click="openCreate">新增经营账</a-button>
+      <a-button type="primary" @click="openCreate">新增支出</a-button>
     </div>
 
     <div class="expenseFilterBar">
@@ -170,26 +174,26 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); chart
     </div>
 
     <div class="summaryGrid">
-      <section><span>支出合计</span><strong class="money">{{ summary.amount_total }}</strong></section>
+      <section><span>支出合计</span><strong class="money expenseMoney">{{ signedExpense(summary.amount_total) }}</strong></section>
       <section><span>支出笔数</span><strong>{{ summary.record_count }}</strong></section>
       <section><span>分类数</span><strong>{{ summary.category_count }}</strong></section>
-      <section><span>最大单笔支出</span><strong class="money">{{ summary.max_amount }}</strong></section>
-      <section v-if="summary.daily_average !== null"><span>日均支出</span><strong class="money">{{ summary.daily_average }}</strong></section>
+      <section><span>最大单笔支出</span><strong class="money expenseMoney">{{ signedExpense(summary.max_amount) }}</strong></section>
+      <section v-if="summary.daily_average !== null"><span>日均支出</span><strong class="money expenseMoney">{{ signedExpense(summary.daily_average) }}</strong></section>
     </div>
 
     <div v-if="categories.length" class="chartCard"><h3>支出分类分布</h3><div ref="chartEl" class="categoryChart"></div></div>
     <a-empty v-else-if="!loading" description="当前筛选条件下暂无分类统计" />
 
     <div class="tableTools"><ColumnSettings v-model:value="visibleCols" v-model:width="tableWidth" :options="colOptions" @reset="resetColumns" /></div>
-    <a-table row-key="id" :columns="columns" :data-source="items" :loading="loading" :pagination="page" :scroll="{ x: tableWidth }" :locale="{ emptyText: '暂无经营账记录' }" @change="change">
+    <a-table row-key="id" :columns="columns" :data-source="items" :loading="loading" :pagination="page" :scroll="{ x: tableWidth }" :locale="{ emptyText: '暂无支出记录' }" @change="change">
       <template #bodyCell="{ column, record }">
-        <template v-if="column.dataIndex === 'amount'"><span class="money">{{ record.amount }}</span></template>
+        <template v-if="column.dataIndex === 'amount'"><span class="money expenseMoney">{{ signedExpense(record.amount) }}</span></template>
         <template v-else-if="column.dataIndex === 'operator_name'">{{ record.operator_name || record.operator_email || '-' }}</template>
         <template v-else-if="column.dataIndex === 'action'"><a-button size="small" @click="openDetail(record)">详情</a-button></template>
       </template>
     </a-table>
 
-    <a-modal v-model:open="modalOpen" title="新增经营账" :confirm-loading="submitting" ok-text="保存" cancel-text="取消" @ok="submit">
+    <a-modal v-model:open="modalOpen" title="新增支出" :confirm-loading="submitting" ok-text="保存" cancel-text="取消" @ok="submit">
       <a-form layout="vertical">
         <a-form-item label="分类" required><a-select v-model:value="form.category" placeholder="请选择分类"><a-select-option v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</a-select-option></a-select></a-form-item>
         <a-form-item v-if="isCustomCategory" label="自定义分类" required><a-input v-model:value="form.customCategory" placeholder="请填写分类名称" /></a-form-item>
@@ -200,11 +204,11 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); chart
       </a-form>
     </a-modal>
 
-    <a-drawer v-model:open="drawerOpen" title="经营账详情" width="520">
+    <a-drawer v-model:open="drawerOpen" title="支出详情" width="520">
       <a-descriptions v-if="selected" :column="1" bordered size="small">
         <a-descriptions-item label="单号">{{ selected.expense_no }}</a-descriptions-item>
         <a-descriptions-item label="分类">{{ selected.category }}</a-descriptions-item>
-        <a-descriptions-item label="金额"><span class="money">{{ selected.amount }}</span></a-descriptions-item>
+        <a-descriptions-item label="金额"><span class="money expenseMoney">{{ signedExpense(selected.amount) }}</span></a-descriptions-item>
         <a-descriptions-item label="日期">{{ selected.paid_at }}</a-descriptions-item>
         <a-descriptions-item label="操作人">{{ selected.operator_name || selected.operator_email || '-' }}</a-descriptions-item>
         <a-descriptions-item label="备注">{{ selected.remark || '-' }}</a-descriptions-item>
@@ -222,6 +226,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); chart
 .summaryGrid section, .chartCard { padding: 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); }
 .summaryGrid span { display: block; color: var(--text-secondary, #7a8395); margin-bottom: 6px; font-size: 13px; }
 .summaryGrid strong { font-size: 23px; }
+.expenseMoney { color: #cf1322; }
 .chartCard { margin-bottom: 14px; }
 .chartCard h3 { margin: 0 0 8px; }
 .categoryChart { height: 320px; }

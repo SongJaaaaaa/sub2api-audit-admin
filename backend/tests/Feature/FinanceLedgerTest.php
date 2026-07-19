@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Admin;
 use App\Models\LedgerAdjustment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -107,6 +108,77 @@ class FinanceLedgerTest extends TestCase
         ])->assertCreated();
 
         $this->assertSame($html, $response->json('expense.content_html'));
+    }
+
+    public function test_history_lists_and_summarizes_every_local_bill(): void
+    {
+        $admin = $this->admin();
+        $token = $admin->createToken('admin-token')->plainTextToken;
+        DB::table('cash_entries')->insert([
+            'entry_no' => 'CASH-HISTORY',
+            'sub2api_user_id' => 1001,
+            'sub2api_user_email' => 'alpha@example.com',
+            'direction' => 'in',
+            'cash_amount' => '100.00',
+            'source' => 'ledger_adjustment',
+            'remark' => '现金收入',
+            'created_by' => $admin->id,
+            'created_at' => '2026-07-10 10:00:00',
+            'updated_at' => '2026-07-10 10:00:00',
+        ]);
+        DB::table('gift_quota_entries')->insert([
+            'entry_no' => 'GIFT-HISTORY',
+            'sub2api_user_id' => 1001,
+            'sub2api_user_email' => 'alpha@example.com',
+            'quota_amount' => '20.00',
+            'source' => 'ledger_adjustment',
+            'remark' => '赠送额度',
+            'created_by' => $admin->id,
+            'created_at' => '2026-07-11 10:00:00',
+            'updated_at' => '2026-07-11 10:00:00',
+        ]);
+        DB::table('operation_expenses')->insert([
+            'expense_no' => 'EXP-HISTORY',
+            'category' => '服务器',
+            'amount' => '30.00',
+            'paid_at' => '2026-07-12',
+            'remark' => '服务器月费',
+            'created_by' => $admin->id,
+            'created_at' => '2026-07-09 10:00:00',
+            'updated_at' => '2026-07-09 10:00:00',
+        ]);
+
+        $this->withToken($token)
+            ->getJson('/api/v1/finance/history?page_size=2')
+            ->assertOk()
+            ->assertJsonPath('total', 3)
+            ->assertJsonCount(2, 'items')
+            ->assertJsonPath('items.0.bill_no', 'EXP-HISTORY')
+            ->assertJsonPath('items.1.bill_no', 'GIFT-HISTORY')
+            ->assertJsonPath('summary.record_count', 3)
+            ->assertJsonPath('summary.income_count', 1)
+            ->assertJsonPath('summary.expense_count', 1)
+            ->assertJsonPath('summary.gift_count', 1)
+            ->assertJsonPath('summary.income_total', '100.00')
+            ->assertJsonPath('summary.expense_total', '30.00')
+            ->assertJsonPath('summary.gift_total', '20.00');
+        $this->withToken($token)
+            ->getJson('/api/v1/finance/history?type=gift&keyword=alpha')
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('items.0.bill_no', 'GIFT-HISTORY');
+
+        $csv = $this->withToken($token)
+            ->get('/api/v1/finance/history/export?start_date=2026-07-10&end_date=2026-07-12')
+            ->assertOk()
+            ->assertDownload('finance-history-2026-07-10-2026-07-12.csv')
+            ->streamedContent();
+        $this->assertSame("\xEF\xBB\xBF", substr($csv, 0, 3));
+        $this->assertStringContainsString('业务日期,类型,账单号,用户ID,用户邮箱,分类,金额,操作人,备注,创建时间', $csv);
+        $this->assertStringContainsString('EXP-HISTORY', $csv);
+        $this->assertStringContainsString('GIFT-HISTORY', $csv);
+        $this->assertStringContainsString('CASH-HISTORY', $csv);
+        $this->assertSame(4, substr_count(trim($csv), "\n") + 1);
     }
 
     public function test_correction_adjustment_does_not_write_finance_ledgers(): void

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { theme as antdTheme } from 'ant-design-vue'
+import zhCN from 'ant-design-vue/es/locale/zh_CN'
 import { NConfigProvider, darkTheme } from 'naive-ui'
 import { computed, onMounted } from 'vue'
 import { RouterView } from 'vue-router'
@@ -23,7 +24,7 @@ onMounted(themeStore.initTheme)
 
 <template>
   <n-config-provider :theme="naiveTheme" class="appProvider">
-    <a-config-provider :theme="themeCfg">
+    <a-config-provider :locale="zhCN" :theme="themeCfg">
       <RouterView />
     </a-config-provider>
   </n-config-provider>

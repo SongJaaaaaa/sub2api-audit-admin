@@ -617,6 +617,11 @@
   line-height: 1.7;
 }
 
+.richBodyDragging {
+  background: var(--surface2);
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
 .richBody:empty::before {
   color: var(--muted);
   content: attr(data-placeholder);

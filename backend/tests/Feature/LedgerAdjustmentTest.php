@@ -244,6 +244,57 @@ class LedgerAdjustmentTest extends TestCase
             ->assertJsonPath('items.0.sub2api_user_id', 1001);
     }
 
+    public function test_user_stats_group_by_china_day_week_and_month(): void
+    {
+        $admin = $this->admin();
+        foreach ([
+            [1001, 'alpha@example.com', LedgerAdjustment::OP_INCREMENT, '100.00', '80.00', '20.00', '2026-07-12 12:00:00'],
+            [1001, 'alpha@example.com', LedgerAdjustment::OP_DECREMENT, '30.00', '0.00', '0.00', '2026-07-13 09:00:00'],
+            [1002, 'beta@example.com', LedgerAdjustment::OP_INCREMENT, '50.00', '0.00', '50.00', '2026-07-13 10:00:00'],
+            [1001, 'alpha@example.com', LedgerAdjustment::OP_INCREMENT, '20.00', '20.00', '0.00', '2026-08-01 10:00:00'],
+        ] as $index => [$userId, $email, $operation, $amount, $cash, $gift, $time]) {
+            LedgerAdjustment::query()->create([
+                'ledger_no' => 'STAT-'.$index,
+                'idempotency_key' => 'stat-key-'.$index,
+                'sub2api_user_id' => $userId,
+                'sub2api_user_email' => $email,
+                'operation' => $operation,
+                'amount' => $amount,
+                'cash_amount' => $cash,
+                'gift_quota_amount' => $gift,
+                'status' => LedgerAdjustment::STATUS_SUCCEEDED,
+                'adjust_reason' => '测试',
+                'created_by' => $admin->id,
+                'confirmed_at' => $time,
+            ]);
+        }
+        $token = $admin->createToken('admin-token')->plainTextToken;
+
+        $this->withToken($token)
+            ->getJson('/api/v1/ledger-adjustments/user-stats?granularity=week&sub2api_user_email=alpha&start_date=2026-07-12&end_date=2026-07-31')
+            ->assertOk()
+            ->assertJsonPath('total', 2)
+            ->assertJsonPath('items.0.period_start', '2026-07-13')
+            ->assertJsonPath('items.0.period_end', '2026-07-19')
+            ->assertJsonPath('items.0.decrement_total', '30.00')
+            ->assertJsonPath('items.0.net_total', '-30.00')
+            ->assertJsonPath('items.1.period_start', '2026-07-06')
+            ->assertJsonPath('items.1.cash_total', '80.00')
+            ->assertJsonPath('items.1.gift_total', '20.00');
+        $this->withToken($token)
+            ->getJson('/api/v1/ledger-adjustments/user-stats?granularity=month&sub2api_user_email=alpha&page_size=1')
+            ->assertOk()
+            ->assertJsonPath('total', 2)
+            ->assertJsonPath('items.0.period_start', '2026-08-01')
+            ->assertJsonPath('items.0.period_end', '2026-08-31');
+        $this->withToken($token)
+            ->getJson('/api/v1/ledger-adjustments/user-stats?granularity=day&start_date=2026-07-13&end_date=2026-07-13')
+            ->assertOk()
+            ->assertJsonPath('total', 2)
+            ->assertJsonPath('items.0.period_start', '2026-07-13')
+            ->assertJsonPath('items.1.sub2api_user_id', 1002);
+    }
+
     public function test_confirm_failure_marks_exception(): void
     {
         $admin = $this->admin();

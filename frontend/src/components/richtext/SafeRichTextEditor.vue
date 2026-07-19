@@ -21,7 +21,9 @@ const emit = defineEmits<{
 const editor = ref<HTMLElement | null>(null)
 const previewSrc = ref('')
 const previewOpen = ref(false)
+const isDragging = ref(false)
 const maxImageSize = 2 * 1024 * 1024
+let dragDepth = 0
 
 watch(
   () => props.value,
@@ -63,25 +65,87 @@ function onEditorClick(e: MouseEvent) {
   }
 }
 
-async function beforeUpload(file: File) {
-  if (!file.type.startsWith('image/')) {
+function validImages(files: File[]) {
+  const images = files.filter((file) => file.type.startsWith('image/'))
+  if (images.length !== files.length) {
     message.warning('只支持上传图片')
-    return false
   }
-  if (file.size > maxImageSize) {
+  if (images.some((file) => file.size > maxImageSize)) {
     message.warning('图片不能超过 2MB')
-    return false
   }
 
-  const reader = new FileReader()
-  reader.onload = () => {
-    editor.value?.focus()
-    document.execCommand('insertImage', false, String(reader.result || ''))
+  return images.filter((file) => file.size <= maxImageSize)
+}
+
+function readImage(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
+
+async function insertImages(files: File[], range?: Range | null) {
+  const images = validImages(files)
+  if (!images.length) return
+
+  try {
+    const sources = await Promise.all(images.map(readImage))
+    if (!editor.value) return
+
+    editor.value.focus()
+    if (range && editor.value.contains(range.commonAncestorContainer)) {
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+    }
+    sources.forEach((src) => document.execCommand('insertImage', false, src))
     sync()
+  } catch (err) {
+    console.error('读取富文本图片失败', err)
+    message.error('图片读取失败')
   }
-  reader.readAsDataURL(file)
+}
 
+function beforeUpload(file: File) {
+  void insertImages([file])
   return false
+}
+
+function hasFiles(e: DragEvent) {
+  return Array.from(e.dataTransfer?.types || []).includes('Files')
+}
+
+function onDragEnter(e: DragEvent) {
+  if (!hasFiles(e)) return
+  e.preventDefault()
+  dragDepth += 1
+  isDragging.value = true
+}
+
+function onDragOver(e: DragEvent) {
+  if (!hasFiles(e)) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+}
+
+function onDragLeave() {
+  if (!isDragging.value) return
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (!dragDepth) isDragging.value = false
+}
+
+function onDrop(e: DragEvent) {
+  dragDepth = 0
+  isDragging.value = false
+
+  const files = Array.from(e.dataTransfer?.files || [])
+  if (!files.length) return
+
+  e.preventDefault()
+  const range = document.caretRangeFromPoint(e.clientX, e.clientY)
+  void insertImages(files, range)
 }
 </script>
 
@@ -100,11 +164,16 @@ async function beforeUpload(file: File) {
     <div
       ref="editor"
       class="richBody"
+      :class="{ richBodyDragging: isDragging }"
       contenteditable="true"
       data-placeholder="可输入备注、调整字体样式，也可插入图片..."
       @input="sync"
       @blur="sync"
       @click="onEditorClick"
+      @dragenter="onDragEnter"
+      @dragover="onDragOver"
+      @dragleave="onDragLeave"
+      @drop="onDrop"
     ></div>
 
     <!-- 编辑器内图片放大预览 -->

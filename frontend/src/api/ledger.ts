@@ -53,6 +53,29 @@ export interface AdjustmentRes {
   message: string
 }
 
+export type LedgerStatsGranularity = 'day' | 'week' | 'month'
+
+export interface LedgerUserStat {
+  period_start: string
+  period_end: string
+  sub2api_user_id: number
+  sub2api_user_email: string | null
+  record_count: number
+  cash_total: string
+  gift_total: string
+  increment_total: string
+  decrement_total: string
+  net_total: string
+}
+
+export interface LedgerUserStatsRes {
+  items: LedgerUserStat[]
+  total: number
+  page: number
+  page_size: number
+  granularity: LedgerStatsGranularity
+}
+
 export interface BatchGiftRes {
   items: Array<{
     user_id: number
@@ -91,6 +114,18 @@ export function createLedgerAdjustment(data: {
   admin_notes?: string
 }) {
   return http.post<unknown, AdjustmentRes>('/ledger-adjustments', data)
+}
+
+export function getLedgerUserStats(params: {
+  granularity: LedgerStatsGranularity
+  sub2api_user_email?: string
+  created_by?: number
+  start_date?: string
+  end_date?: string
+  page: number
+  page_size: number
+}) {
+  return http.get<unknown, LedgerUserStatsRes>('/ledger-adjustments/user-stats', { params })
 }
 
 export function retryLedgerAdjustment(id: number) {

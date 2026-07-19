@@ -14,6 +14,7 @@ use App\Support\Sub2ApiNoteTag;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class Sub2ApiDataController extends Controller
@@ -35,9 +36,13 @@ class Sub2ApiDataController extends Controller
         $dates = Validator::make([
             'last_used_start' => $start ?: null,
             'last_used_end' => $end ?: null,
+            'sort_by' => $req->query('sort_by') ?: null,
+            'sort_order' => $req->query('sort_order') ?: null,
         ], [
             'last_used_start' => ['nullable', 'date_format:Y-m-d'],
             'last_used_end' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:last_used_start'],
+            'sort_by' => ['nullable', Rule::in(['balance'])],
+            'sort_order' => ['nullable', Rule::in(['asc', 'desc'])],
         ])->validate();
 
         return response()->json($repo->users([
@@ -45,6 +50,8 @@ class Sub2ApiDataController extends Controller
             'user_filter' => $req->query('user_filter', ''),
             'last_used_start' => $dates['last_used_start'] ?? '',
             'last_used_end' => $dates['last_used_end'] ?? '',
+            'sort_by' => $dates['sort_by'] ?? '',
+            'sort_order' => $dates['sort_order'] ?? '',
         ], $page, $pageSize));
     }
 

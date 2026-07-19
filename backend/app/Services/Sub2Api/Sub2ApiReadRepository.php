@@ -88,10 +88,15 @@ class Sub2ApiReadRepository
             'negative_balance_count' => (int) $stats->negative_balance_count,
             'zero_balance_count' => (int) $stats->zero_balance_count,
         ];
-        $rows = $query
-            ->orderByDesc('id')
-            ->forPage($page, $pageSize)
-            ->get();
+        $sortBy = (string) ($filters['sort_by'] ?? '');
+        $sortOrder = (string) ($filters['sort_order'] ?? '');
+        if ($sortBy === 'balance' && in_array($sortOrder, ['asc', 'desc'], true)) {
+            $query->orderBy('balance', $sortOrder)->orderByDesc('id');
+        } else {
+            $query->orderByDesc('id');
+        }
+
+        $rows = $query->forPage($page, $pageSize)->get();
         $items = $rows
             ->map(fn ($row): array => $this->userRow($row, $row->last_used_at))
             ->all();

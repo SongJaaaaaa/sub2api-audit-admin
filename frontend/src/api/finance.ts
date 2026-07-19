@@ -62,6 +62,45 @@ export interface OperationExpense {
   created_at: string | null
 }
 
+export type FinanceHistoryType = 'income' | 'expense' | 'gift'
+
+export interface FinanceHistoryItem {
+  type: FinanceHistoryType
+  source_id: number
+  bill_no: string
+  biz_date: string
+  sub2api_user_id: number | null
+  sub2api_user_email: string | null
+  category: string | null
+  amount: string
+  created_by: number | null
+  operator_name: string | null
+  operator_email: string | null
+  remark: string | null
+  created_at: string | null
+}
+
+export interface FinanceHistorySummary {
+  record_count: number
+  income_count: number
+  expense_count: number
+  gift_count: number
+  income_total: string
+  expense_total: string
+  gift_total: string
+}
+
+export interface FinanceHistoryParams {
+  page?: number
+  page_size?: number
+  type?: FinanceHistoryType
+  start_date?: string
+  end_date?: string
+  sub2api_user_id?: number | string
+  created_by?: number
+  keyword?: string
+}
+
 export interface FinanceParams {
   page: number
   page_size: number
@@ -100,4 +139,15 @@ export function createOperationExpense(data: {
   content_html?: string
 }) {
   return http.post<unknown, { expense: OperationExpense; message: string }>('/finance/expenses', data)
+}
+
+export function getFinanceHistory(params: FinanceHistoryParams) {
+  return http.get<unknown, PageRes<FinanceHistoryItem, FinanceHistorySummary> & { summary: FinanceHistorySummary }>('/finance/history', { params })
+}
+
+export function exportFinanceHistory(params: FinanceHistoryParams) {
+  return http.get<unknown, Blob>('/finance/history/export', {
+    params,
+    responseType: 'blob',
+  })
 }

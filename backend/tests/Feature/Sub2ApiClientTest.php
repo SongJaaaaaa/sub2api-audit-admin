@@ -106,6 +106,26 @@ class Sub2ApiClientTest extends TestCase
         $this->assertSame('2026-07-14 10:00:00', $res['items'][0]['last_used_at']);
     }
 
+    public function test_users_can_sort_balance_on_the_server(): void
+    {
+        $this->insertSub2ApiUser(['id' => 1001, 'balance' => '20.00']);
+        $this->insertSub2ApiUser(['id' => 1002, 'email' => 'beta@example.com', 'balance' => '-5.00']);
+        $this->insertSub2ApiUser(['id' => 1003, 'email' => 'gamma@example.com', 'balance' => '10.00']);
+        $this->withoutMiddleware();
+
+        $this->getJson('/api/v1/sub2api/users?sort_by=balance&sort_order=asc&page_size=2')
+            ->assertOk()
+            ->assertJsonPath('items.0.id', 1002)
+            ->assertJsonPath('items.1.id', 1003)
+            ->assertJsonPath('summary.balance_total', '25');
+        $this->getJson('/api/v1/sub2api/users?sort_by=balance&sort_order=desc&page=2&page_size=2')
+            ->assertOk()
+            ->assertJsonPath('items.0.id', 1002);
+        $this->getJson('/api/v1/sub2api/users?page_size=1')
+            ->assertOk()
+            ->assertJsonPath('items.0.id', 1003);
+    }
+
     public function test_remote_events_use_utc_half_open_boundaries(): void
     {
         $this->insertSub2ApiUser();

@@ -11,6 +11,7 @@ use App\Support\ChinaTime;
 use App\Support\Money;
 use App\Support\SafeHtml;
 use App\Support\Sub2ApiNoteTag;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Throwable;
@@ -353,6 +354,80 @@ class LedgerAdjustmentService
         ];
     }
 
+    public function userStats(array $filters, string $granularity, int $page, int $pageSize): array
+    {
+        $query = LedgerAdjustment::query()->where('status', LedgerAdjustment::STATUS_SUCCEEDED);
+        $email = trim((string) ($filters['sub2api_user_email'] ?? ''));
+        if ($email !== '') {
+            $query->where('sub2api_user_email', 'like', '%'.$email.'%');
+        }
+
+        $createdBy = (int) ($filters['created_by'] ?? 0);
+        if ($createdBy > 0) {
+            $query->where('created_by', $createdBy);
+        }
+
+        $startDate = trim((string) ($filters['start_date'] ?? ''));
+        if ($startDate !== '') {
+            $query->where('confirmed_at', '>=', $startDate.' 00:00:00');
+        }
+
+        $endDate = trim((string) ($filters['end_date'] ?? ''));
+        if ($endDate !== '') {
+            $query->where('confirmed_at', '<', date('Y-m-d 00:00:00', strtotime($endDate.' +1 day')));
+        }
+
+        $period = $this->periodExpression($granularity);
+        $stats = $query
+            ->selectRaw($period.' as period_start')
+            ->selectRaw('sub2api_user_id, MAX(sub2api_user_email) as sub2api_user_email')
+            ->selectRaw('COUNT(*) as record_count')
+            ->selectRaw('COALESCE(SUM(cash_amount), 0) as cash_total')
+            ->selectRaw('COALESCE(SUM(gift_quota_amount), 0) as gift_total')
+            ->selectRaw("COALESCE(SUM(CASE WHEN operation = 'increment' THEN amount ELSE 0 END), 0) as increment_total")
+            ->selectRaw("COALESCE(SUM(CASE WHEN operation = 'decrement' THEN amount ELSE 0 END), 0) as decrement_total")
+            ->groupByRaw($period.', sub2api_user_id');
+        $total = DB::query()->fromSub(clone $stats, 'user_stats')->count();
+        $tz = config('ledger.timezone', 'Asia/Shanghai');
+        $items = $stats
+            ->orderByDesc('period_start')
+            ->orderBy('sub2api_user_id')
+            ->forPage($page, $pageSize)
+            ->get()
+            ->map(function ($row) use ($granularity, $tz): array {
+                $start = CarbonImmutable::parse($row->period_start, $tz);
+                $end = match ($granularity) {
+                    'week' => $start->addDays(6),
+                    'month' => $start->endOfMonth(),
+                    default => $start,
+                };
+                $increment = Money::fmt($row->increment_total);
+                $decrement = Money::fmt($row->decrement_total);
+
+                return [
+                    'period_start' => $start->toDateString(),
+                    'period_end' => $end->toDateString(),
+                    'sub2api_user_id' => (int) $row->sub2api_user_id,
+                    'sub2api_user_email' => $row->sub2api_user_email,
+                    'record_count' => (int) $row->record_count,
+                    'cash_total' => Money::fmt($row->cash_total),
+                    'gift_total' => Money::fmt($row->gift_total),
+                    'increment_total' => $increment,
+                    'decrement_total' => $decrement,
+                    'net_total' => Money::sub($increment, $decrement),
+                ];
+            })
+            ->all();
+
+        return [
+            'items' => $items,
+            'total' => $total,
+            'page' => $page,
+            'page_size' => $pageSize,
+            'granularity' => $granularity,
+        ];
+    }
+
     public function row(LedgerAdjustment $adj): array
     {
         return [
@@ -388,6 +463,21 @@ class LedgerAdjustmentService
         return $operation === LedgerAdjustment::OP_DECREMENT
             ? bcsub($before, $amount, 2)
             : bcadd($before, $amount, 2);
+    }
+
+    private function periodExpression(string $granularity): string
+    {
+        $pgsql = DB::connection()->getDriverName() === 'pgsql';
+
+        return match ($granularity) {
+            'week' => $pgsql
+                ? "DATE_TRUNC('week', confirmed_at)::date"
+                : "DATE(confirmed_at, '-' || ((CAST(strftime('%w', confirmed_at) AS INTEGER) + 6) % 7) || ' days')",
+            'month' => $pgsql
+                ? "DATE_TRUNC('month', confirmed_at)::date"
+                : "DATE(confirmed_at, 'start of month')",
+            default => 'DATE(confirmed_at)',
+        };
     }
 
     private function money(mixed $val): string

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { GiftOutlined, HistoryOutlined, MinusCircleOutlined, PlusCircleOutlined } from '@ant-design/icons-vue'
-import type { TablePaginationConfig } from 'ant-design-vue'
+import { CopyOutlined, GiftOutlined, HistoryOutlined, MinusCircleOutlined, PlusCircleOutlined } from '@ant-design/icons-vue'
+import type { TableProps } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import { computed, onMounted, reactive, ref } from 'vue'
@@ -25,6 +25,7 @@ const selectedIds = ref<number[]>([])
 const historyPage = reactive({ current: 1, pageSize: 10, total: 0 })
 const keyword = ref('')
 const userFilter = ref<'zero_balance' | 'negative_balance' | 'disabled' | ''>('')
+const balanceSort = ref<'' | 'asc' | 'desc'>('')
 const lastUsedRange = ref<[Dayjs, Dayjs] | null>(null)
 const batchMode = ref<'selected' | 'all'>('selected')
 const batchProgress = ref('')
@@ -43,7 +44,7 @@ const allColumns = [
   { title: '邮箱', dataIndex: 'email', width: 220 },
   { title: '用户名', dataIndex: 'username', width: 140 },
   { title: '角色', dataIndex: 'role', width: 100 },
-  { title: '余额', dataIndex: 'balance', align: 'right', width: 120 },
+  { title: '余额', dataIndex: 'balance', align: 'right', width: 120, sorter: true },
   { title: 'Sub2API 累计充值字段', dataIndex: 'total_recharged', align: 'right', width: 190 },
   { title: '状态', dataIndex: 'status', width: 110 },
   { title: '近期使用时间', dataIndex: 'last_used_at', width: 180 },
@@ -66,6 +67,8 @@ function userParams(pageNo = page.current, pageSize = page.pageSize) {
     user_filter: userFilter.value,
     last_used_start: lastUsedRange.value?.[0].format('YYYY-MM-DD'),
     last_used_end: lastUsedRange.value?.[1].format('YYYY-MM-DD'),
+    sort_by: balanceSort.value ? 'balance' as const : undefined,
+    sort_order: balanceSort.value || undefined,
   }
 }
 
@@ -123,10 +126,23 @@ function changeUserFilter() {
   search()
 }
 
-function change(pager: TablePaginationConfig) {
+const change: TableProps['onChange'] = (pager, _filters, sorter) => {
+  const active = Array.isArray(sorter) ? sorter[0] : sorter
+  balanceSort.value = active.field === 'balance' && active.order
+    ? (active.order === 'ascend' ? 'asc' : 'desc')
+    : ''
   page.current = pager.current || 1
   page.pageSize = pager.pageSize || page.pageSize
   loadUsers()
+}
+
+async function copyEmail(email: string) {
+  try {
+    await navigator.clipboard.writeText(email)
+    message.success('邮箱已复制')
+  } catch {
+    message.error('邮箱复制失败')
+  }
 }
 
 function openBatchGift() {
@@ -286,6 +302,14 @@ onMounted(loadUsers)
       @change="change"
     >
       <template #bodyCell="{ column, record }">
+        <template v-if="column.dataIndex === 'email'">
+          <a-tooltip title="点击复制邮箱">
+            <button type="button" class="copyEmail" @click="copyEmail(record.email)">
+              <span>{{ record.email }}</span>
+              <CopyOutlined />
+            </button>
+          </a-tooltip>
+        </template>
         <template v-if="column.dataIndex === 'status'">
           <a-tag :color="record.status === 'active' ? 'green' : 'default'">
             {{ record.status || '-' }}
@@ -449,6 +473,8 @@ onMounted(loadUsers)
 .compactSummary strong { color: var(--heading, #1f2937); font-variant-numeric: tabular-nums; }
 .selectedUsers { display: flex; flex-wrap: wrap; gap: 6px; max-height: 150px; overflow: auto; padding: 8px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 8px; }
 .batchScope { display: grid; gap: 10px; }
+.copyEmail { display: inline-flex; max-width: 100%; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: #1677ff; cursor: pointer; }
+.copyEmail span { overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 760px) { .userFilters { width: 100%; flex-wrap: wrap; } .userFilterSelect, .lastUsedFilter, .search { width: 100%; } }
 @media (max-width: 760px) { .compactSummary { width: 100%; justify-content: space-between; } }
 </style>
