@@ -1,0 +1,3 @@
+# 将 /var/www/sub2api-audit-admin/backend 和 PHP 路径替换为生产实际值。
+# Laravel Scheduler 每分钟同步 Sub2API 外部收入。
+* * * * * cd /var/www/sub2api-audit-admin/backend && /usr/bin/php artisan schedule:run >> /dev/null 2>&1

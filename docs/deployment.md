@@ -50,7 +50,7 @@ SESSION_DRIVER=database
 
 只有从旧审计 SQLite 切换到 PostgreSQL 时才执行本节。
 
-1. 进入维护模式并停止管理端写入。
+1. 进入维护模式并停止管理端写入和 Scheduler。
 2. 对审计 SQLite 执行 checkpoint。
 3. 确认源目录没有 -wal、-shm、-journal 旁路文件。
 4. 备份审计 SQLite、私有附件和生产环境文件，记录 SHA-256。
@@ -96,6 +96,12 @@ php artisan route:cache
 php artisan view:cache
 ~~~
 
+Scheduler 每分钟触发，用于同步 Sub2API 外部收入：
+
+~~~cron
+* * * * * cd /var/www/sub2api-audit-admin/backend && /usr/bin/php artisan schedule:run >> /dev/null 2>&1
+~~~
+
 当前应用没有常驻队列任务，不需要部署 Queue Worker。
 
 ## 4. 上线验收
@@ -105,6 +111,7 @@ php artisan view:cache
 - Sub2API 普通用户登录管理后台返回 403。
 - Sub2API 用户列表、余额历史和模型统计可查询。
 - 调额、入账记录、历史账、利润和审计页面正常。
+- Scheduler 每分钟正常执行，且不存在 `ledger:reconcile` 任务。
 - 应用日志不记录密码、Token、API Key、Authorization 或完整敏感响应。
 
 ## 5. 回滚边界

@@ -21,7 +21,7 @@ sub2api-audit-admin/
   backend/             Laravel 12 API、SQLite 审计账本和自动任务
   frontend/            Vue 3、TypeScript、Ant Design Vue、ECharts
   docs/                统计口径、开发检查和部署说明
-  deploy/              Caddy 部署示例
+  deploy/              Caddy、Laravel Scheduler 示例
   project-management/  架构与模块进度文档
 ```
 
@@ -85,4 +85,4 @@ corepack pnpm build
 
 - `docs/sub2api-statistics-apis.md`：统计来源、官方接口和字段口径。
 - `docs/dev-checklist.md`：本地、异常路径和业务验收清单。
-- `docs/deployment.md`：维护切账、迁移、构建和上线验收顺序。
+- `docs/deployment.md`：维护切账、迁移、Scheduler、构建和上线验收顺序。

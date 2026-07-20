@@ -4,7 +4,7 @@
 
 ## 1. 目标
 
-完成自动化验证、安全检查、首次生产切账、远端关联回填和真实小额调额闭环验收。
+完成自动化验证、安全检查、首次生产切账、远端关联回填、Scheduler 安装和真实小额调额闭环验收。
 
 ## 2. 当前进度
 
@@ -15,7 +15,7 @@
 | 前端生产构建 | 已完成 | Node `22.22.0`，`vue-tsc -b && vite build` 通过 |
 | Diff 检查 | 已完成 | `git diff --check` 通过 |
 | UTF-8 与敏感信息复核 | 已完成 | 中文文件可正常解码，未发现生产凭据写入工作区 |
-| 部署文档 | 已完成 | SQLite、切账、回填、验收和安全边界已更新 |
+| 部署文档 | 已完成 | SQLite、切账、回填、Scheduler、验收和安全边界已更新 |
 | 生产 SSH 登录 | 待运维确认 | 不猜测用户名或凭据，不保存登录密码 |
 | 官方统计验收 | 待生产执行 | 指定历史日期与官方 Admin API 对齐 |
 | 真实调增/调减 | 待生产执行 | 使用小额测试用户 |
@@ -59,8 +59,9 @@ git diff
 3. 部署代码并执行 `php artisan migrate --force`。
 4. 首次执行 `php artisan ledger:cutover --at="YYYY-MM-DD HH:mm:ss"`，核对中国时间和 UTC。
 5. 执行 `php artisan ledger:link-sources`，只按用户 ID 和完整幂等键回填。
-6. 使用 Node `22.22.0` 构建前端，清理并重建 Laravel 缓存。
-7. 恢复服务后执行官方统计、旧账和真实小额调额验收。
+6. 安装每分钟 `php artisan schedule:run`，用于同步 Sub2API 外部收入。
+7. 使用 Node `22.22.0` 构建前端，清理并重建 Laravel 缓存。
+8. 恢复服务后执行官方统计、旧账和真实小额调额验收。
 
 详细命令见 `docs/deployment.md`。
 
