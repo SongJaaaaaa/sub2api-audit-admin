@@ -115,10 +115,6 @@ export interface DashboardStatsRes {
   recent_adjustments: RecentAdjustment[]
   alerts: {
     unlinked_adjustment_count: number
-    reconcile_issue_count: number
-    external_adjustment_count: number
-    audit_orphan_count: number
-    last_reconciled_date: string | null
   }
 }
 

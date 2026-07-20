@@ -8,7 +8,6 @@ import {
   FundOutlined,
   HistoryOutlined,
   HomeOutlined,
-  ReconciliationOutlined,
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons-vue'
@@ -30,7 +29,6 @@ export const menuItems: MenuItem[] = [
   { key: 'expense', label: '支出', path: '/operation-expense', icon: DollarOutlined },
   { key: 'balance-events', label: '历史账', path: '/balance-events', icon: HistoryOutlined },
   { key: 'profit', label: '利润统计', path: '/profit', icon: FundOutlined },
-  { key: 'reconcile', label: '调额对账中心', path: '/reconcile', icon: ReconciliationOutlined },
   { key: 'exception', label: '异常中心', path: '/exceptions', icon: ExceptionOutlined },
   { key: 'audit', label: '操作审计', path: '/audit-log', icon: AuditOutlined },
   { key: 'admins', label: '管理员账号', path: '/admins', icon: TeamOutlined },

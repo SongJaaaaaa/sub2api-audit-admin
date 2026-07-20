@@ -4,8 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Admin;
 use App\Models\LedgerAdjustment;
-use App\Models\ReconciliationBatch;
-use App\Models\ReconciliationDiff;
 use App\Services\Ledger\LedgerCutoverService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -98,23 +96,6 @@ class DashboardStatsTest extends TestCase
             'created_at' => '2026-07-02 12:00:00',
         ]);
 
-        $batch = ReconciliationBatch::query()->create([
-            'batch_no' => 'REC-1',
-            'biz_date' => '2026-07-02',
-            'cash_total' => 0,
-            'quota_total' => 0,
-            'gift_total' => 0,
-            'sub2api_delta_total' => 0,
-            'diff_amount' => 0,
-            'status' => ReconciliationBatch::STATUS_ERROR,
-            'created_by' => $admin->id,
-        ]);
-        $this->reconcileDiff($batch, 'amount_mismatch', $first->id, 201);
-        $this->reconcileDiff($batch, 'direction_mismatch', $first->id, 201);
-        $this->reconcileDiff($batch, 'remote_external', null, 301);
-        $this->reconcileDiff($batch, 'remote_external', null, 301);
-        $this->reconcileDiff($batch, 'remote_audit_orphan', null, 302);
-
         $this->fakeOfficialStats();
 
         $res = $this->withToken($admin->createToken('dashboard')->plainTextToken)
@@ -146,11 +127,7 @@ class DashboardStatsTest extends TestCase
             ->assertJsonPath('rankings.user_actual_cost.0.actual_cost', '8')
             ->assertJsonPath('rankings.user_tokens', [])
             ->assertJsonPath('rankings.models', [])
-            ->assertJsonPath('alerts.unlinked_adjustment_count', 1)
-            ->assertJsonPath('alerts.reconcile_issue_count', 1)
-            ->assertJsonPath('alerts.external_adjustment_count', 1)
-            ->assertJsonPath('alerts.audit_orphan_count', 1)
-            ->assertJsonPath('alerts.last_reconciled_date', '2026-07-02');
+            ->assertJsonPath('alerts.unlinked_adjustment_count', 1);
 
         $this->assertNull($res->json('summary'));
         $this->assertNull($res->json('quota_rank'));
@@ -245,18 +222,6 @@ class DashboardStatsTest extends TestCase
         }
 
         return $row;
-    }
-
-    private function reconcileDiff(ReconciliationBatch $batch, string $type, ?int $localId, int $remoteId): void
-    {
-        ReconciliationDiff::query()->create([
-            'reconciliation_batch_id' => $batch->id,
-            'type' => $type,
-            'title' => $type,
-            'amount' => '1.00',
-            'local_adjustment_id' => $localId,
-            'remote_event_id' => $remoteId,
-        ]);
     }
 
     private function seedBalanceUsers(): void

@@ -51,21 +51,6 @@ test('admin can login and open core business pages', async ({ page }) => {
         summary: { income_total: '0.00', expense_total: '0.00', profit_total: '0.00', income_count: 0, expense_count: 0 },
         pending_summary: { income_total: '0.00', expense_total: '0.00', profit_total: '0.00', income_count: 0, expense_count: 0 },
       }
-    } else if (path.endsWith('/reconciliations')) {
-      body = {
-        ...body as object,
-        summary: {
-          batch_count: 0,
-          ok_count: 0,
-          warning_count: 0,
-          error_count: 0,
-          diff_count: 0,
-          diff_amount: '0.00',
-          healthy_rate: 0,
-          last_success_date: null,
-          unreconciled_days: null,
-        },
-      }
     } else if (path.endsWith('/audit-logs')) {
       body = {
         ...body as object,
@@ -100,7 +85,6 @@ test('admin can login and open core business pages', async ({ page }) => {
     { path: '/gift-quota', title: '赠送额度' },
     { path: '/operation-expense', title: '支出' },
     { path: '/profit', title: '利润统计' },
-    { path: '/reconcile', title: '调额对账中心' },
     { path: '/audit-log', title: '操作审计' },
   ]
 

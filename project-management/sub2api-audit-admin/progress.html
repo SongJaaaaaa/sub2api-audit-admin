@@ -447,7 +447,7 @@
       </section>
 
       <div class="toolbar">
-        <input class="field" id="searchInput" placeholder="搜索模块或事项，例如 调额 / 对账 / 前端">
+        <input class="field" id="searchInput" placeholder="搜索模块或事项，例如 调额 / 审计 / 前端">
         <select class="field" id="statusFilter">
           <option value="all">全部状态</option>
           <option value="todo">未完成</option>
@@ -489,7 +489,7 @@
       'phase:s3-sub2api:0': true,
       'phase:s4-ledger:0': true,
       'phase:s5-stats:0': true,
-      'phase:s6-reconcile:0': true,
+      'phase:s6-history-audit:0': true,
       'phase:s7-frontend:0': true,
       'mod:m01:0': true,
       'mod:m01:1': true,
@@ -569,15 +569,6 @@
       'mod:m08:7': true,
       'mod:m08:8': true,
       'mod:m08:9': true,
-      'mod:m09:0': true,
-      'mod:m09:1': true,
-      'mod:m09:2': true,
-      'mod:m09:3': true,
-      'mod:m09:4': true,
-      'mod:m09:5': true,
-      'mod:m09:6': true,
-      'mod:m09:7': true,
-      'mod:m09:8': true,
       'mod:m10:0': true,
       'mod:m10:1': true,
       'mod:m10:2': true,
@@ -614,7 +605,7 @@
       ['s3-sub2api', 'S3 Sub2API 集成', '只读库、Admin API、线上结构复核'],
       ['s4-ledger', 'S4 账本和调额', '强一致调额、现金账、赠送账、异常作废'],
       ['s5-stats', 'S5 统计与排行榜', '本地财务、官方用量、当前余额与四类独立排行'],
-      ['s6-reconcile', 'S6 历史账、对账与审计', '历史余额事件、七类差异、自动对账和操作审计'],
+      ['s6-history-audit', 'S6 历史账与审计', '历史余额事件、CSV 和操作审计'],
       ['s7-frontend', 'S7 前端管理后台', 'soybean-admin-antd 风格页面'],
       ['s8-e2e', 'S8 联调和 E2E', '全链路验收'],
       ['s9-deploy', 'S9 上线部署', '部署文档、环境变量、备份和监控']
@@ -678,17 +669,10 @@
         items: ['私有存储', '上传接口', '下载鉴权', '富文本过滤', '前端组件', 'AttachmentTest / pnpm build 通过', '桌面端验收', 'H5 手机端验收', '前后端联通验收', '异常路径验收']
       },
       {
-        id: 'm09',
-        title: '09 对账中心',
-        doc: 'modules/09-reconciliation.md',
-        desc: '实现切账后的真实日报对账、七类差异、同日幂等补跑和自动任务。',
-        items: ['精确日期范围', 'source ID/幂等键匹配', '七类差异', 'ok/warning/error 页面', 'ReconcileTest / pnpm build 通过', '同日补跑替换', '00:15 自动任务', '前后端联通验收', '外部/孤儿只告警']
-      },
-      {
         id: 'm10',
         title: '10 操作审计',
         doc: 'modules/10-audit-log.md',
-        desc: '记录调额、作废、补附件、富文本修改和对账操作。',
+        desc: '记录调额、作废、补附件和富文本修改操作。',
         items: ['审计服务', '列表接口', '前端页面', 'AuditLogTest / pnpm build 通过', '桌面端验收', 'H5 手机端验收', '前后端联通验收', '异常路径验收']
       },
       {
@@ -702,15 +686,15 @@
         id: 'm12',
         title: '12 前端业务页面',
         doc: 'modules/12-frontend-business-pages.md',
-        desc: '首页、requested 模型、历史账、调额、财务、对账和审计页面已完成。',
-        items: ['首页 ECharts 看板', 'Sub2API 用户数据源', 'requested 模型统计', '用户与额度', '调额表单', '调额/财务表格', '历史账与 CSV', '对账/审计页面', 'Node 22 构建', '桌面端验收', 'H5 手机端验收', '前后端联通验收', '官方失败状态']
+        desc: '首页、requested 模型、历史账、调额、财务和审计页面已完成。',
+        items: ['首页 ECharts 看板', 'Sub2API 用户数据源', 'requested 模型统计', '用户与额度', '调额表单', '调额/财务表格', '历史账与 CSV', '审计页面', 'Node 22 构建', '桌面端验收', 'H5 手机端验收', '前后端联通验收', '官方失败状态']
       },
       {
         id: 'm13',
         title: '13 联调验收与部署',
         doc: 'modules/13-verification-deployment.md',
         desc: '本地实现与自动化验证已完成；等待首次切账、官方统计和生产小额调额验收。',
-        items: ['后端全量测试（55 passed / 349 assertions）', 'Node 22.22.0 前端构建通过', 'PHP 语法检查通过', 'git diff/UTF-8/敏感信息检查通过', '官方统计基准验收', '首次切账与源关联', 'Scheduler 验收', '真实调增/调减', '部署文档']
+        items: ['后端全量测试（79 passed / 689 assertions / 1 skipped）', 'Node 22.22.0 前端构建通过', 'PHP 语法检查通过', 'git diff/UTF-8/敏感信息检查通过', '官方统计基准验收', '首次切账与源关联', '真实调增/调减', '部署文档']
       }
     ]
 

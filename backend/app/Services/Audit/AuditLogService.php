@@ -67,7 +67,7 @@ class AuditLogService
         if (! empty($filters['to'])) {
             $query->where('created_at', '<', date('Y-m-d 00:00:00', strtotime($filters['to'].' +1 day')));
         }
-        $riskActions = ['admin.create', 'ledger_adjustment.create', 'ledger_adjustment.succeeded', 'ledger_adjustment.voided', 'ledger_adjustment.exception', 'operation_expense.create', 'reconcile.run', 'profit_settlement.confirm', 'profit_settlement.reverse'];
+        $riskActions = ['admin.create', 'ledger_adjustment.create', 'ledger_adjustment.succeeded', 'ledger_adjustment.voided', 'ledger_adjustment.exception', 'operation_expense.create', 'profit_settlement.confirm', 'profit_settlement.reverse'];
         if (($filters['risk'] ?? '') === 'high') {
             $query->whereIn('action', $riskActions);
         }

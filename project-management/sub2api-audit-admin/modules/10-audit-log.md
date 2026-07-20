@@ -12,7 +12,6 @@
 - 作废审计。
 - 补附件审计。
 - 富文本修改审计。
-- 对账审计。
 
 ## 3. 依赖
 
@@ -60,4 +59,4 @@ php artisan test --filter=AuditLogTest
 
 ## 9. 完成记录
 
-- 2026-07-06: 完成审计表、审计服务、列表接口、前端操作审计页；调额、附件、经营账、对账写入审计；`AuditLogTest`、`php artisan test` 和 `pnpm build` 已通过。
+- 2026-07-06: 完成审计表、审计服务、列表接口、前端操作审计页；调额、附件和经营账写入审计；`AuditLogTest`、`php artisan test` 和 `pnpm build` 已通过。

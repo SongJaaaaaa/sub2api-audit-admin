@@ -2,7 +2,6 @@
 
 namespace App\Services\Ledger;
 
-use App\Exceptions\LedgerCutoverException;
 use App\Models\SystemSetting;
 use App\Support\ChinaDateRange;
 use App\Support\ChinaTime;
@@ -65,33 +64,5 @@ class LedgerCutoverService
         }
 
         return [$start, $range->localEndExclusive];
-    }
-
-    public function reconcileRanges(string $date): array
-    {
-        $range = ChinaDateRange::day($date);
-        $cutover = $this->get();
-
-        if (! $cutover) {
-            throw new LedgerCutoverException('尚未设置切账时间，请先执行 ledger:cutover');
-        }
-
-        $cutoverLocal = $cutover->setTimezone($range->timezone);
-        if ($range->localEndExclusive->lessThanOrEqualTo($cutoverLocal)) {
-            throw new LedgerCutoverException('切账前日期不生成当前对账');
-        }
-
-        $localStart = $range->localStart->greaterThan($cutoverLocal)
-            ? $range->localStart
-            : $cutoverLocal;
-        $localEnd = $range->localEndExclusive;
-
-        return [
-            'range' => $range,
-            'local_start' => $localStart,
-            'local_end' => $localEnd,
-            'utc_start' => $localStart->utc(),
-            'utc_end' => $localEnd->utc(),
-        ];
     }
 }

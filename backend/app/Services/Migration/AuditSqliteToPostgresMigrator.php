@@ -14,8 +14,6 @@ class AuditSqliteToPostgresMigrator
         'gift_quota_entries',
         'operation_expenses',
         'attachments',
-        'reconciliation_batches',
-        'reconciliation_diffs',
         'audit_logs',
         'system_settings',
         'profit_settlements',
@@ -41,6 +39,8 @@ class AuditSqliteToPostgresMigrator
         'rebate_scan_cursors',
         'rebate_users',
         'rebate_withdrawals',
+        'reconciliation_batches',
+        'reconciliation_diffs',
         'sessions',
         'sqlite_sequence',
     ];
@@ -50,8 +50,6 @@ class AuditSqliteToPostgresMigrator
         'cash_entries' => ['cash_amount'],
         'gift_quota_entries' => ['quota_amount'],
         'operation_expenses' => ['amount'],
-        'reconciliation_batches' => ['cash_total', 'quota_total', 'gift_total', 'sub2api_delta_total', 'diff_amount'],
-        'reconciliation_diffs' => ['amount', 'local_amount', 'remote_amount'],
         'profit_settlements' => ['income_total', 'expense_total', 'profit_total'],
         'profit_settlement_items' => ['amount'],
     ];

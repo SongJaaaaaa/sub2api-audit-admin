@@ -9,7 +9,6 @@ use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\FinanceLedgerController;
 use App\Http\Controllers\Api\V1\LedgerAdjustmentController;
 use App\Http\Controllers\Api\V1\ProfitController;
-use App\Http\Controllers\Api\V1\ReconcileController;
 use App\Http\Controllers\Api\V1\Sub2Api\Sub2ApiDataController;
 use Illuminate\Support\Facades\Route;
 
@@ -61,9 +60,6 @@ Route::prefix('v1')->group(function (): void {
         Route::get('attachments', [AttachmentController::class, 'index']);
         Route::post('attachments', [AttachmentController::class, 'store']);
         Route::get('attachments/{attachment}/download', [AttachmentController::class, 'download']);
-        Route::get('reconciliations', [ReconcileController::class, 'index']);
-        Route::post('reconciliations', [ReconcileController::class, 'store']);
-        Route::get('reconciliations/{batch}/diffs', [ReconcileController::class, 'diffs']);
         Route::get('audit-logs', [AuditLogController::class, 'index']);
     });
 });

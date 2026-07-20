@@ -35,7 +35,6 @@ backend/app/
     Sub2Api/
     Ledger/
     Stats/
-    Reconcile/
     Attachments/
     Audit/
   Support/
@@ -55,7 +54,6 @@ backend/tests/Feature/
 | `Services/Ledger/Sub2ApiBalanceVerifier.php` | 调额后二次确认 |
 | `Services/Ledger/LedgerNumberService.php` | 生成业务单号和幂等键 |
 | `Services/Stats/DashboardStatsService.php` | 首页统计聚合 |
-| `Services/Reconcile/ReconcileService.php` | 对账批次和差异计算 |
 | `Services/Attachments/AttachmentService.php` | 私有附件上传和下载 |
 | `Services/Audit/AuditLogService.php` | 操作审计 |
 | `Support/Money.php` | 两位小数金额处理 |
@@ -86,7 +84,6 @@ frontend/src/
     LedgerAdjustmentListView.vue
     GiftQuotaListView.vue
     OperationExpenseView.vue
-    ReconcileView.vue
     ExceptionCenterView.vue
     AuditLogView.vue
     LoginView.vue
@@ -100,7 +97,6 @@ frontend/src/
 | `api/dashboard.ts` | 首页统计 API |
 | `api/users.ts` | 用户搜索和详情 |
 | `api/ledger.ts` | 调额、记录、赠送额度 |
-| `api/reconcile.ts` | 对账批次和差异 |
 | `components/table/ColumnSettings.vue` | 表格列显示配置 |
 | `components/ledger/AdjustmentForm.vue` | 调额表单 |
 | `components/attachments/AttachmentUploader.vue` | 附件上传 |

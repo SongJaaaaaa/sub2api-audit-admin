@@ -61,7 +61,7 @@ php artisan test --filter=FinanceLedgerTest
 
 ## 8. 风险
 
-- 现金、额度、赠送混账会导致对账不可信。
+- 现金、额度、赠送混账会导致账务统计不可信。
 
 ## 9. 完成记录
 

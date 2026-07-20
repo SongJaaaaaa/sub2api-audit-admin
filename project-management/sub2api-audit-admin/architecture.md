@@ -7,8 +7,8 @@
 - 从本系统安全调整 Sub2API 用户余额，并形成可追溯台账。
 - 正确区分实收、赠送、正向调额、负向调额和调额净额。
 - 完全沿用 Sub2API 官方口径展示请求、Token、标准消费、实际消费和模型统计。
-- 通过只读远端数据展示当前余额、历史余额事件并完成真实对账。
-- 对未关联成功单、外部后台调额和审计孤儿提供告警，不猜测、不自动认领。
+- 通过只读远端数据展示当前余额和历史余额事件。
+- 对未关联成功单提供告警，不猜测、不自动认领。
 - 提供附件、富文本、操作审计、CSV 导出和桌面/H5 管理页面。
 
 ## 2. 系统上下文
@@ -23,7 +23,7 @@ Vue 3 + Ant Design Vue 前端
 Laravel API 后端
     |
     |-- 本地 SQLite
-    |     调额账本 / 财务账 / 审计日志 / 切账设置 / 对账批次与差异
+    |     调额账本 / 财务账 / 审计日志 / 切账设置
     |
     |-- 私有文件存储
     |     凭证图片 / PDF / 其他附件
@@ -32,7 +32,7 @@ Laravel API 后端
     |     用户查询 / 余额调整 / 二次确认 / 官方 Dashboard 统计
     |
     `-- Sub2API PostgreSQL 只读连接
-          用户余额 / 后台调额事件 / 兑换码 / 支付订单 / 历史账 / 对账
+          用户余额 / 后台调额事件 / 兑换码 / 支付订单 / 历史账
 ```
 
 远端 PostgreSQL 不承担本系统主库职责，也不用于重新计算官方用量统计。
@@ -41,9 +41,9 @@ Laravel API 后端
 
 | 数据源 | 负责内容 | 明确禁止 |
 |---|---|---|
-| 本地审计 SQLite | `cash_total`、赠送、调增、调减、净额、实收入账用户榜、调额记录、告警和对账结果 | 不得把远端外部调额或支付事件算成本地实收入账 |
+| 本地审计 SQLite | `cash_total`、赠送、调增、调减、净额、实收入账用户榜、调额记录和告警 | 不得把远端外部调额或支付事件算成本地实收入账 |
 | Sub2API 官方 Admin API | 请求数、四类 Token、标准消费、实际消费、用户实际消费榜、用户 Token 榜、requested 模型榜 | 官方接口失败时不得降级为自定义 SQL |
-| Sub2API PostgreSQL 只读连接 | 当前普通启用用户余额、远端事件关联、历史余额事件、真实对账 | 不得直接写用户余额、兑换码、支付订单或其他业务表 |
+| Sub2API PostgreSQL 只读连接 | 当前普通启用用户余额、远端事件关联和历史余额事件 | 不得直接写用户余额、兑换码、支付订单或其他业务表 |
 
 官方统计接口包括：
 
@@ -62,7 +62,7 @@ Laravel API 后端
 - 远端 PostgreSQL 查询将相同边界转换为 UTC 半开区间。
 - 官方 Admin API 传自然日日期和 `timezone=Asia/Shanghai`。
 - 切账时间保存在 `system_settings.ledger_cutover_at`，首次写入后永久锁定。
-- 切账只限制账务统计、历史/当前分类、告警和对账；官方用量仍按完整中国自然日展示。
+- 切账只限制账务统计、历史/当前分类和告警；官方用量仍按完整中国自然日展示。
 
 ## 5. 后端模块
 
@@ -76,9 +76,8 @@ Laravel API 后端
 | Dashboard Stats | 本地财务、官方用量、当前余额快照、四类独立排行和告警 |
 | Model Stats | requested 模型统计和指定模型下用户 Token 排行 |
 | Balance Events | 历史/当前远端余额事件只读列表和 CSV 导出 |
-| Reconcile | 中国业务日真实对账、七类差异、同日幂等补跑和 Scheduler |
 | Attachment / Rich Text | 私有附件、下载鉴权和富文本过滤 |
-| Audit | 调额、财务、附件和对账等管理操作留痕 |
+| Audit | 调额、财务和附件等管理操作留痕 |
 
 ## 6. 前端模块
 
@@ -90,7 +89,6 @@ Laravel API 后端
 | Model Stats | requested 模型榜、指定模型下用户 Token 榜 |
 | Ledger / Finance | 调额记录、现金账、赠送账和经营账 |
 | Balance Events | 历史账只读筛选、分页和 CSV 导出 |
-| Reconcile | 批次、状态、汇总和七类差异明细 |
 | Audit / Exception | 操作审计、失败和作废记录 |
 | Attachment | 私有附件上传、预览和下载 |
 
@@ -172,35 +170,7 @@ deleted_at IS NULL
 
 历史页面不得认领、补录、修改或删除远端事件，也不得影响当前实收入账统计。
 
-## 10. 真实对账
-
-对账只比较本地成功调额与远端后台余额调额事件，匹配优先级为：
-
-1. `sub2api_source_id`
-2. 旧记录的 `used_by + 完整 idempotency_key`
-3. 禁止使用 `ledger_no`
-
-差异类型固定为：
-
-```text
-local_missing_remote
-remote_external
-remote_audit_orphan
-user_mismatch
-direction_mismatch
-amount_mismatch
-duplicate_source_link
-```
-
-状态固定为：
-
-```text
-ok | warning | error
-```
-
-同一中国业务日期只保留一个批次；手动补跑在事务内替换原差异明细。Scheduler 每天 `00:15 Asia/Shanghai` 处理上一自然日，并使用 `withoutOverlapping`。
-
-## 11. 安全边界
+## 10. 安全边界
 
 - 只有管理员可访问业务接口。
 - Sub2API PostgreSQL 使用只读账号，不暴露公网。

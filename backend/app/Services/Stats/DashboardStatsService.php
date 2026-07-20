@@ -3,8 +3,6 @@
 namespace App\Services\Stats;
 
 use App\Models\LedgerAdjustment;
-use App\Models\ReconciliationBatch;
-use App\Models\ReconciliationDiff;
 use App\Services\Ledger\LedgerCutoverService;
 use App\Services\Sub2Api\Sub2ApiAdminClient;
 use App\Support\ChinaDateRange;
@@ -267,37 +265,9 @@ class DashboardStatsService
     private function alerts(ChinaDateRange $range): array
     {
         $unlinked = $this->ledgerBase($range)?->whereNull('sub2api_source_id')->count() ?? 0;
-        $diffs = ReconciliationDiff::query()
-            ->join('reconciliation_batches as rb', 'rb.id', '=', 'reconciliation_diffs.reconciliation_batch_id')
-            ->where('rb.biz_date', '>=', $range->startDate)
-            ->where('rb.biz_date', '<=', $range->endDate)
-            ->get([
-                'reconciliation_diffs.id',
-                'reconciliation_diffs.type',
-                'reconciliation_diffs.local_adjustment_id',
-                'reconciliation_diffs.remote_event_id',
-            ]);
-
-        $issues = $diffs->whereIn('type', [
-            'local_missing_remote',
-            'user_mismatch',
-            'direction_mismatch',
-            'amount_mismatch',
-            'duplicate_source_link',
-        ]);
-        $issueKeys = $issues->map(fn ($row): string => $row->local_adjustment_id
-            ? 'local:'.$row->local_adjustment_id
-            : ($row->remote_event_id ? 'remote:'.$row->remote_event_id : 'diff:'.$row->id));
-        $external = $diffs->where('type', 'remote_external')->pluck('remote_event_id')->filter()->unique()->count();
-        $orphans = $diffs->where('type', 'remote_audit_orphan')->pluck('remote_event_id')->filter()->unique()->count();
-        $last = ReconciliationBatch::query()->max('biz_date');
 
         return [
             'unlinked_adjustment_count' => (int) $unlinked,
-            'reconcile_issue_count' => $issueKeys->unique()->count(),
-            'external_adjustment_count' => $external,
-            'audit_orphan_count' => $orphans,
-            'last_reconciled_date' => $last ? substr((string) $last, 0, 10) : null,
         ];
     }
 

@@ -7,7 +7,7 @@
 以明确的数据边界接入 Sub2API：
 
 - 官方 Admin API 用于余额调整、二次确认和官方统计。
-- PostgreSQL 只读连接用于当前余额、远端余额事件、历史账和真实对账。
+- PostgreSQL 只读连接用于当前余额、远端余额事件和历史账。
 - 不从远端数据库重新聚合官方用量，也不直接写远端业务表。
 
 ## 2. 数据源边界
@@ -15,8 +15,8 @@
 | 来源 | 用途 |
 |---|---|
 | `Sub2ApiAdminClient` | 用户、余额调整、余额确认、Dashboard trend/models/users-ranking/user-breakdown |
-| `Sub2ApiReadRepository` | 普通启用用户余额快照、后台调额事件、兑换码、支付订单、关联与对账数据 |
-| 本地 SQLite | 审计账本、切账、对账结果和操作审计 |
+| `Sub2ApiReadRepository` | 普通启用用户余额快照、后台调额事件、兑换码、支付订单和关联数据 |
+| 本地 SQLite | 审计账本、切账和操作审计 |
 
 Sub2API PostgreSQL 必须使用只读账号。模型和用量统计不得降级为直接聚合远端 `usage_logs`。
 

@@ -19,21 +19,21 @@ class AuditLogTest extends TestCase
             'password' => 'secret123',
             'status' => Admin::STATUS_ACTIVE,
         ]);
-        app(AuditLogService::class)->record($admin, 'reconcile.create', 'reconciliation_batch', 1, null, ['status' => 'balanced']);
+        app(AuditLogService::class)->record($admin, 'attachment.upload', 'attachment', 1, null, ['name' => 'receipt.png']);
 
         $this->getJson('/api/v1/audit-logs')->assertUnauthorized();
         $this->withToken($admin->createToken('admin-token')->plainTextToken)
-            ->getJson('/api/v1/audit-logs?action=reconcile.create&ip=127.0.0')
+            ->getJson('/api/v1/audit-logs?action=attachment.upload&ip=127.0.0')
             ->assertOk()
             ->assertJsonPath('total', 1)
             ->assertJsonPath('items.0.admin_id', $admin->id)
-            ->assertJsonPath('items.0.action', 'reconcile.create')
+            ->assertJsonPath('items.0.action', 'attachment.upload')
             ->assertJsonPath('summary.record_count', 1)
             ->assertJsonPath('summary.operator_count', 1)
             ->assertJsonPath('summary.action_count', 1)
             ->assertJsonPath('summary.target_count', 1)
             ->assertJsonPath('summary.high_risk_count', 0)
-            ->assertJsonPath('summary.actions.0.action', 'reconcile.create')
+            ->assertJsonPath('summary.actions.0.action', 'attachment.upload')
             ->assertJsonPath('summary.actions.0.record_count', 1);
     }
 

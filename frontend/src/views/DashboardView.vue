@@ -74,9 +74,6 @@ const alertTotal = computed(() => {
   const val = stats.value?.alerts
   if (!val) return 0
   return val.unlinked_adjustment_count
-    + val.reconcile_issue_count
-    + val.external_adjustment_count
-    + val.audit_orphan_count
 })
 
 const alertCards = computed(() => {
@@ -85,9 +82,6 @@ const alertCards = computed(() => {
 
   return [
     { label: '未关联成功单', value: val.unlinked_adjustment_count, path: '/ledger', tone: 'orange' },
-    { label: '对账问题', value: val.reconcile_issue_count, path: '/reconcile', tone: 'red' },
-    { label: '外部后台调额', value: val.external_adjustment_count, path: '/balance-events', tone: 'blue' },
-    { label: '审计孤儿', value: val.audit_orphan_count, path: '/balance-events', tone: 'purple' },
   ]
 })
 
@@ -424,7 +418,7 @@ onBeforeUnmount(() => {
         <section class="alertPanel">
           <div class="sectionHead">
             <div>
-              <h2><AlertOutlined /> 对账告警</h2>
+              <h2><AlertOutlined /> 账务告警</h2>
             </div>
             <a-badge :count="alertTotal" :overflow-count="9999" />
           </div>
@@ -434,7 +428,6 @@ onBeforeUnmount(() => {
               <strong>{{ item.value }}</strong>
             </RouterLink>
           </div>
-          <div class="lastReconcile">最近对账日期：{{ stats.alerts.last_reconciled_date || '尚未对账' }}</div>
         </section>
 
         <div class="chartGrid">
@@ -516,7 +509,6 @@ onBeforeUnmount(() => {
 .alertItem.red { border-left: 4px solid #ff4d4f; }
 .alertItem.blue { border-left: 4px solid #1677ff; }
 .alertItem.purple { border-left: 4px solid #9254de; }
-.lastReconcile { margin-top: 10px; color: var(--text-secondary, #7a8395); font-size: 12px; text-align: right; }
 .chartGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 16px; margin-top: 16px; }
 .chart { width: 100%; }
 .chartWide { height: 370px; }

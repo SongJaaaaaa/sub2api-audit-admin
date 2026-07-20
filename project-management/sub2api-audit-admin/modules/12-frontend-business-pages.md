@@ -18,9 +18,8 @@
 | 赠送额度 | 已完成 | 赠送额度账本列表 |
 | 经营账 | 已完成 | 平台经营支出列表和录入 |
 | 历史账 | 已完成 | 三类远端余额事件、筛选、分页、关联状态和 CSV 导出 |
-| 对账中心 | 已完成 | 批次汇总、`ok/warning/error`、七类差异和手动补跑 |
 | 异常中心 | 已完成 | 失败、异常和作废记录 |
-| 操作审计 | 已完成 | 管理操作及新旧对账状态翻译 |
+| 操作审计 | 已完成 | 管理操作记录和详情翻译 |
 
 ## 3. 首页展示规则
 
@@ -66,14 +65,7 @@ code=SUB2API_STATS_UNAVAILABLE
 - 页面只读，无认领、补录、修改和删除入口。
 - CSV 复用列表筛选，忽略分页，由后端流式导出 UTF-8 BOM 文件。
 
-## 6. 对账页面
-
-- 展示业务日期、实际起止时间、本地与远端笔数和净额、外部事件、审计孤儿及问题数。
-- 状态使用 `ok`、`warning`、`error`。
-- 操作审计兼容展示旧快照中的 `balanced`、`diff`，但新业务不再生成旧状态。
-- 同日手动补跑会替换原批次明细，不提示旧版“重复对账 409”。
-
-## 7. 交付物
+## 6. 交付物
 
 - `frontend/src/views/DashboardView.vue`
 - `frontend/src/views/Sub2ApiUsersView.vue`
@@ -83,14 +75,13 @@ code=SUB2API_STATS_UNAVAILABLE
 - `frontend/src/views/GiftQuotaListView.vue`
 - `frontend/src/views/OperationExpenseView.vue`
 - `frontend/src/views/BalanceEventsView.vue`
-- `frontend/src/views/ReconcileView.vue`
 - `frontend/src/views/ExceptionCenterView.vue`
 - `frontend/src/views/AuditLogView.vue`
 - `frontend/src/api/*.ts`
 - `frontend/src/router/index.ts`
 - `frontend/src/config/menu.ts`
 
-## 8. 验收标准
+## 7. 验收标准
 
 - 页面均接真实 API，不保留会误导验收的 mock 数字。
 - 桌面端筛选、表格、趋势、抽屉和弹窗不拥挤。
@@ -100,7 +91,7 @@ code=SUB2API_STATS_UNAVAILABLE
 - 首页四类排行名称、排序字段和展示单位一致。
 - Node `22.22.0` 下生产构建通过。
 
-## 9. 测试命令
+## 8. 测试命令
 
 ```bash
 source ~/.nvm/nvm.sh
