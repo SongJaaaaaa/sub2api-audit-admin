@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
       vue(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+        includeAssets: ['favicon.png', 'apple-touch-icon.png'],
         manifest: {
           id: '/app',
           name: 'Sub2API 审计后台',

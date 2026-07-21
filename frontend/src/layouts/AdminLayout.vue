@@ -98,7 +98,7 @@ onBeforeUnmount(() => {
       :native-scrollbar="false"
     >
       <div class="soyLogo">
-        <span class="brandMark">S</span>
+        <span class="brandMark"><img src="/pwa-192.png" alt="MY JARVIS" /></span>
         <strong v-if="!collapsed">Sub2API 审计</strong>
       </div>
       <NMenu
@@ -169,7 +169,7 @@ onBeforeUnmount(() => {
     <NDrawer v-model:show="drawerOpen" placement="left" :width="280">
       <NDrawerContent class="mobileDrawerContent" body-content-class="mobileDrawerBody" :native-scrollbar="false">
         <div class="soyLogo mobileLogo">
-          <span class="brandMark">S</span>
+          <span class="brandMark"><img src="/pwa-192.png" alt="MY JARVIS" /></span>
           <strong>Sub2API 审计</strong>
         </div>
         <NMenu :options="menuData" :value="selectedKey" @update:value="goMenu" />

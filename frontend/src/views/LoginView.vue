@@ -53,7 +53,7 @@ async function submit() {
     <div class="appLoginContent">
       <div class="appLoginBrand">
         <div class="appLoginMark">
-          <img src="/favicon.svg" alt="" />
+          <img src="/pwa-192.png" alt="MY JARVIS" />
         </div>
         <h1 class="appLoginTitle">Sub2 审计</h1>
       </div>

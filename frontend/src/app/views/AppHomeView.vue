@@ -36,7 +36,7 @@ async function logout() {
     <header class="appHomeHead">
       <div class="appHomeBrand">
         <div class="appHomeMark">
-          <img src="/favicon.svg" alt="" />
+          <img src="/pwa-192.png" alt="MY JARVIS" />
         </div>
         <div class="appHomeBrandText">
           <h1 id="appHomeTitle">Sub2API 审计</h1>
