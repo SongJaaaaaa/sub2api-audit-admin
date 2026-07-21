@@ -139,7 +139,7 @@ function markCashEdited() {
             </a-tooltip>
           </span>
         </template>
-        <a-input v-model:value="form.amount" placeholder="0.00" />
+        <a-input v-model:value="form.amount" placeholder="0.00" inputmode="decimal" />
         <div class="quotaAfterBalance">
           调整后 Sub2API 额度
           <strong>{{ nextBalance }}</strong>
@@ -153,7 +153,7 @@ function markCashEdited() {
 
     <div v-if="showFinance" class="quotaFormGrid">
       <a-form-item v-if="isRecharge" label="入账金额（现金）">
-        <a-input v-model:value="form.cash_amount" placeholder="0.00" @input="markCashEdited" />
+        <a-input v-model:value="form.cash_amount" placeholder="0.00" inputmode="decimal" @input="markCashEdited" />
         <div class="quotaAfterBalance" style="font-size:12px;color:var(--text2);">实收现金金额，剩余计入赠送</div>
       </a-form-item>
       <a-form-item label="赠送额度">

@@ -16,6 +16,7 @@ import { getSub2BalanceHistory, getSub2Users, type Sub2BalanceHistoryItem, type 
 import AdjustmentForm, { type AdjustmentFormState } from '../components/ledger/AdjustmentForm.vue'
 import SafeRichTextDisplay from '../components/richtext/SafeRichTextDisplay.vue'
 import { useAppMode } from '../app/composables/useAppMode'
+import { useHistoryOverlay } from '../app/composables/useHistoryOverlay'
 
 const { message, modal } = AntApp.useApp()
 const { isAppMode } = useAppMode()
@@ -57,6 +58,44 @@ const form = reactive<AdjustmentFormState>({
   adjust_reason: '充值',
   admin_notes: '',
 })
+
+// 把移动端详情/弹窗接入浏览器历史：侧滑返回时先关闭浮层（退回列表），而不是退回主页。
+const historyDetailOpen = computed({
+  get: () => !!selectedHistory.value,
+  set: (val: boolean) => { if (!val) selectedHistory.value = null },
+})
+
+function hasUnsavedChanges() {
+  return !!(form.amount || hasNotes(form.admin_notes))
+}
+
+function promptDiscardDetail() {
+  modal.confirm({
+    title: '放弃未提交的充值？',
+    content: '当前表单还有未提交内容。',
+    okText: '放弃',
+    cancelText: '继续编辑',
+    onOk: () => {
+      resetForm()
+      forceCloseDetail()
+    },
+  })
+}
+
+const { forceClose: forceCloseDetail } = useHistoryOverlay(mobileDetailOpen, {
+  guard: () => !hasUnsavedChanges(),
+  onBlocked: promptDiscardDetail,
+})
+useHistoryOverlay(mobileConfirmOpen)
+useHistoryOverlay(historyDetailOpen)
+
+function requestCloseDetail() {
+  if (hasUnsavedChanges()) {
+    promptDiscardDetail()
+    return
+  }
+  mobileDetailOpen.value = false
+}
 
 const selectedName = computed(() => selected.value?.username || selected.value?.email || '-')
 const totalQuota = computed(() => Number(userSummary.total_recharge) + Number(userSummary.total_gift))
@@ -327,25 +366,6 @@ function confirmAdjust() {
   mobileConfirmOpen.value = true
 }
 
-function closeMobileDetail() {
-  if (form.amount || hasNotes(form.admin_notes)) {
-    mobileDetailOpen.value = true
-    modal.confirm({
-      title: '放弃未提交的充值？',
-      content: '当前表单还有未提交内容。',
-      okText: '放弃',
-      cancelText: '继续编辑',
-      onOk: () => {
-        mobileDetailOpen.value = false
-        resetForm()
-      },
-    })
-    return
-  }
-  mobileDetailOpen.value = false
-}
-
-
 function moneyText(val: number | string) {
   return Number(val || 0).toFixed(2)
 }
@@ -430,11 +450,11 @@ onMounted(initPage)
     <p v-else-if="users.length" class="app-end-state">已显示全部用户</p>
 
     <a-drawer
-      v-model:open="mobileDetailOpen"
+      :open="mobileDetailOpen"
       placement="right"
       :width="'100%'"
       :title="selected ? `${selectedName} · 充值` : '用户充值'"
-      @close="closeMobileDetail"
+      @close="requestCloseDetail"
     >
       <template v-if="selected">
         <div class="app-detail app-quota-detail">
@@ -457,11 +477,11 @@ onMounted(initPage)
           </div>
 
           <section class="app-detail-section">
-            <div class="app-section-head"><h2>充值入账</h2></div>
+            <div class="app-section-head"><h2>充���入账</h2></div>
             <AdjustmentForm :key="formKey" v-model:value="form" :current-balance="selected.balance" />
             <div class="app-action-bar">
-              <a-button @click="resetForm">重置</a-button>
-              <a-button type="primary" :loading="submitting" @click="confirmAdjust">确认充值</a-button>
+              <a-button class="app-action-reset" @click="resetForm">重置</a-button>
+              <a-button class="app-action-confirm" type="primary" :loading="submitting" @click="confirmAdjust">确认充值</a-button>
             </div>
             <p class="app-note">充值仅在 Sub2API 真实入账并二次确认成功后记账。</p>
           </section>
@@ -504,7 +524,7 @@ onMounted(initPage)
       </div>
     </a-modal>
 
-    <a-modal :open="!!selectedHistory" title="充值记录详情" :footer="null" :width="'calc(100vw - 24px)'" @cancel="selectedHistory = null">
+    <a-modal v-model:open="historyDetailOpen" title="充值记录详情" :footer="null" :width="'calc(100vw - 24px)'">
       <div v-if="selectedHistory" class="app-confirm-summary">
         <p><span>操作人员</span><strong>{{ selectedHistory.operator_name || 'Sub2API' }}</strong></p>
         <p><span>充值账号</span><strong>{{ selectedHistory.adjusted_account || selected?.email || '-' }}</strong></p>
@@ -660,7 +680,25 @@ onMounted(initPage)
 /* Centralized app styles in src/app/styles/app.css */
 .app-toolbar { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .app-card-list, .app-history-list { gap: 9px; }
-.app-action-bar { z-index: 15; }
+.app-action-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 15;
+  display: grid;
+  grid-template-columns: 1fr 1.6fr;
+  gap: 16px;
+  margin-top: 8px;
+  padding: 12px 0 calc(6px + var(--app-safe-bottom, 0px));
+  background: linear-gradient(to top, var(--bg, #fff) 72%, transparent);
+}
+.app-action-bar .ant-btn {
+  width: 100%;
+  min-height: 48px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 12px;
+}
+.app-action-bar .app-action-reset { font-weight: 500; }
 .app-history-button { width: 100%; cursor: pointer; }
 pre { max-width: 100%; overflow: auto; white-space: pre-wrap; }
 
