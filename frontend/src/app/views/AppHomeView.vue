@@ -35,21 +35,46 @@ async function logout() {
   <section class="appHome" aria-labelledby="appHomeTitle">
     <header class="appHomeHead">
       <div class="appHomeBrand">
-        <img class="appHomeMark" src="/favicon.svg" alt="" />
-        <div>
-          <h1 id="appHomeTitle">Sub2API 审计后台</h1>
-          <p>{{ auth.admin?.name || auth.admin?.email || '管理员' }}</p>
+        <div class="appHomeMark">
+          <img src="/favicon.svg" alt="" />
+        </div>
+        <div class="appHomeBrandText">
+          <h1 id="appHomeTitle">Sub2API 审计</h1>
+          <p class="appHomeUser">{{ auth.admin?.name || auth.admin?.email || '管理员' }}</p>
         </div>
       </div>
-      <button class="appIconButton" type="button" aria-label="退出登录" title="退出登录" @click="logout"><LogoutOutlined /></button>
+      <button class="appIconButton appLogoutBtn" type="button" aria-label="退出登录" title="退出登录" @click="logout">
+        <LogoutOutlined />
+      </button>
     </header>
 
+    <div class="appHomeIntro">
+      <span>选择模块开始工作</span>
+    </div>
+
     <div class="appModuleGrid">
-      <button v-for="item in menuItems" :key="item.key" class="appModuleCard" type="button" @click="openModule(item.path)">
-        <span class="appModuleIcon" aria-hidden="true"><component :is="item.icon" /></span>
-        <span class="appModuleTitle"><strong>{{ item.label }}</strong><RightOutlined class="appCardArrow" /></span>
-        <span class="appModuleHint">{{ hints[item.key] || '打开模块' }}</span>
+      <button
+        v-for="item in menuItems"
+        :key="item.key"
+        class="appModuleCard"
+        type="button"
+        @click="openModule(item.path)"
+      >
+        <div class="appModuleIconWrap">
+          <span class="appModuleIcon" aria-hidden="true"><component :is="item.icon" /></span>
+        </div>
+        <div class="appModuleMeta">
+          <div class="appModuleTitle">
+            <strong>{{ item.label }}</strong>
+            <RightOutlined class="appCardArrow" />
+          </div>
+          <span class="appModuleHint">{{ hints[item.key] || '打开模块' }}</span>
+        </div>
       </button>
+    </div>
+
+    <div class="appHomeFooter">
+      <span>移动端快捷入口</span>
     </div>
   </section>
 </template>

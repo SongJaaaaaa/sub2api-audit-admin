@@ -608,23 +608,16 @@ onMounted(() => Promise.all([loadSummary(), loadSettlements()]))
 :deep(.clickableRow) { cursor: pointer; }
 :deep(.clickableRow:hover) > td { background: var(--row-hover) !important; }
 :deep(.profitTotalRow > td) { background: var(--surface-muted, #fafafa); }
+/* App-mode styles centralized in src/app/styles/app.css */
 .appProfitTopbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
 .appTabSwitch { display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface2); }
 .appTabSwitch button { min-height: 36px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
 .appTabSwitch button.active { background: var(--surface); color: var(--primary); box-shadow: var(--shadow-card); }
 .appProfitActions { display: flex; margin: 0 0 12px; }
 .appProfitActions .appPrimaryButton { width: 100%; }
-.appSummaryGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
-.appSummaryCard { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.appSummaryCard span { display: block; margin-bottom: 4px; color: var(--muted); font-size: 12px; }
-.appSummaryCard strong { font-size: 18px; font-variant-numeric: tabular-nums; }
-.appCardList .appRecordCard { min-height: 124px; }
-.appDetailBody { padding: 16px; padding-bottom: calc(28px + var(--app-safe-bottom)); }
+.appCardList .appRecordCard { min-height: 120px; }
 .appDetailSection + .appDetailSection { margin-top: 18px; }
 .appDetailSection h2 { margin: 0 0 8px; font-size: 16px; color: var(--heading); }
-.appFormStack { display: grid; gap: 14px; }
-.appFormStack label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
-.appFullControl { width: 100%; }
 .appSmallButton { min-height: 34px; padding: 0 10px; font-size: 12px; }
 @media (max-width: 760px) { .profitSummary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .profitToolbar :deep(.ant-picker) { width: 100%; } }
 @media (max-width: 420px) { .profitSummary { grid-template-columns: 1fr; } }

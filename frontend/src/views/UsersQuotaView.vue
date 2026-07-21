@@ -32,7 +32,7 @@ const selectedHistory = ref<Sub2BalanceHistoryItem | null>(null)
 const userSummary = reactive<UserFinanceSummary>({ total_recharge: '0.00', total_gift: '0.00' })
 const keyword = ref('')
 const adjustPanel = ref<HTMLElement | null>(null)
-const mobileFiltersOpen = ref(false)
+const searchRef = ref<any>(null)
 const mobileDetailOpen = ref(false)
 const mobileConfirmOpen = ref(false)
 const mobileLoadingMore = ref(false)
@@ -41,6 +41,8 @@ const loadError = ref('')
 let historyVersion = 0
 let summaryVersion = 0
 let usersVersion = 0
+let pasteVersion = 0
+let clearPasteFallback: (() => void) | null = null
 const page = reactive({
   current: 1,
   pageSize: 10,
@@ -66,7 +68,6 @@ const mobileNextBalance = computed(() => {
   const next = form.operation === 'decrement' ? current - amount : current + amount
   return next.toFixed(2)
 })
-const mobileFilterTags = computed(() => keyword.value.trim() ? [{ key: 'keyword', label: `关键词：${keyword.value.trim()}` }] : [])
 async function loadUsers() {
   const version = ++usersVersion
   loading.value = true
@@ -135,9 +136,82 @@ function openMobileUser(row: Sub2User) {
   loadUserSummary(row.id)
 }
 
-function clearMobileFilter() {
-  keyword.value = ''
-  search()
+async function pasteAndSearch() {
+  const version = ++pasteVersion
+  clearPasteFallback?.()
+
+  // 1. 优先尝试直接读取剪贴板（用户手势后很多浏览器/WebView 允许）
+  try {
+    const text = await navigator.clipboard.readText()
+    if (version !== pasteVersion) return
+    const val = (text || '').trim()
+    if (val) {
+      keyword.value = val
+      await nextTick()
+      if (version !== pasteVersion) return
+      search()
+      message.success('已从剪贴板粘贴并搜索')
+      return
+    }
+  } catch {
+    if (version !== pasteVersion) return
+    // 继续 fallback
+  }
+
+  // 2. 读取失败 → 聚焦搜索框 + 强力监听 paste（这是移动端最可靠的做法）
+  message.info('请在搜索框长按 → 粘贴')
+
+  await nextTick()
+  if (version !== pasteVersion) return
+
+  const root = searchRef.value?.$el as HTMLElement | undefined
+  const inputEl = root?.querySelector<HTMLInputElement>('input')
+    || document.querySelector<HTMLInputElement>('.app-quota-page .ant-input-search input')
+    || document.querySelector<HTMLInputElement>('.app-quota-page .ant-input-affix-wrapper input')
+    || document.querySelector<HTMLInputElement>('.app-quota-page input')
+
+  if (!inputEl) {
+    // 最后兜底：直接给 keyword 赋值并搜索（用户可以手动粘贴后点搜索）
+    message.info('无法自动聚焦，请手动在搜索框粘贴后点击搜索')
+    return
+  }
+
+  // 聚焦并准备接收粘贴
+  inputEl.focus()
+  try {
+    inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length)
+  } catch {}
+
+  let done = false
+  let timer = 0
+  const finish = (val: string) => {
+    const text = val.trim()
+    if (!text || done) return
+    done = true
+    clearPasteFallback?.()
+    keyword.value = text
+    nextTick(search)
+  }
+
+  const handlePaste = (ev: ClipboardEvent) => {
+    const text = ev.clipboardData?.getData('text') || ev.clipboardData?.getData('text/plain') || ''
+    if (text.trim()) {
+      ev.preventDefault()
+      finish(text)
+    }
+  }
+  const handleInput = () => finish(inputEl.value)
+  const cleanup = () => {
+    inputEl.removeEventListener('paste', handlePaste)
+    inputEl.removeEventListener('input', handleInput)
+    window.clearTimeout(timer)
+    if (clearPasteFallback === cleanup) clearPasteFallback = null
+  }
+
+  clearPasteFallback = cleanup
+  inputEl.addEventListener('paste', handlePaste)
+  inputEl.addEventListener('input', handleInput)
+  timer = window.setTimeout(cleanup, 30000)
 }
 
 async function loadUserSummary(id: number) {
@@ -321,20 +395,15 @@ onMounted(initPage)
 
 <template>
   <section v-if="isAppMode" class="app-page app-quota-page">
-    <header class="app-header">
-      <div><span class="app-eyebrow">Sub2API</span><h1>用户充值</h1></div>
-      <strong class="app-count">{{ page.total }} 人</strong>
-    </header>
-    <div class="app-toolbar">
-      <a-input-search v-model:value="keyword" class="app-search" placeholder="邮箱或用户名" allow-clear enter-button @search="search" />
-      <a-button @click="mobileFiltersOpen = !mobileFiltersOpen">筛选<span v-if="mobileFilterTags.length">（{{ mobileFilterTags.length }}）</span></a-button>
-    </div>
-    <div v-if="mobileFiltersOpen" class="app-filter-sheet" @keydown.esc="mobileFiltersOpen = false">
-      <label class="app-field"><span>用户关键词</span><a-input v-model:value="keyword" allow-clear @press-enter="search" /></label>
-      <div class="app-filter-actions"><a-button @click="clearMobileFilter">重置</a-button><a-button type="primary" @click="mobileFiltersOpen = false; search()">查询</a-button></div>
-    </div>
-    <div v-if="mobileFilterTags.length" class="app-filter-tags" aria-label="已生效筛选">
-      <button v-for="tag in mobileFilterTags" :key="tag.key" type="button" class="app-filter-tag" @click="clearMobileFilter">{{ tag.label }} ×</button>
+    <div class="app-top-sticky">
+      <header class="app-header">
+        <div><span class="app-eyebrow">Sub2API</span><h1>用户充值</h1></div>
+        <strong class="app-count">{{ page.total }} 人</strong>
+      </header>
+      <div class="app-toolbar">
+        <a-input-search ref="searchRef" v-model:value="keyword" class="app-search" placeholder="邮箱或用户名/ID" allow-clear enter-button @search="search" />
+        <a-button @click="pasteAndSearch" size="small">粘贴搜索</a-button>
+      </div>
     </div>
     <div v-if="loadError" class="app-error-bar">
       <a-alert type="error" show-icon :message="loadError" />
@@ -371,28 +440,49 @@ onMounted(initPage)
         <div class="app-detail app-quota-detail">
           <div class="app-detail-hero">
             <span class="app-avatar">{{ selectedName.slice(0, 1).toUpperCase() }}</span>
-            <div><h2>{{ selectedName }}</h2><p>{{ selected.email }} · ID {{ selected.id }}</p></div>
+            <div class="app-detail-userinfo">
+              <h2>{{ selectedName }}</h2>
+              <p class="app-detail-meta">
+                <span class="app-email">{{ selected.email }}</span>
+                <span class="app-id"> · ID {{ selected.id }}</span>
+              </p>
+            </div>
           </div>
-          <div class="app-summary-grid app-detail-summary">
-            <div><span>当前余额</span><strong class="app-money">{{ moneyText(selected.balance) }}</strong></div>
-            <div><span>累计充值</span><strong>{{ moneyText(userSummary.total_recharge) }}</strong></div>
-            <div><span>累计赠送</span><strong>{{ moneyText(userSummary.total_gift) }}</strong></div>
-            <div><span>总额度</span><strong>{{ moneyText(totalQuota) }}</strong></div>
+
+          <div class="app-quota-metrics">
+            <div class="app-metric"><span>当前余额</span><strong class="app-money">{{ moneyText(selected.balance) }}</strong></div>
+            <div class="app-metric"><span>累计充值</span><strong>{{ moneyText(userSummary.total_recharge) }}</strong></div>
+            <div class="app-metric"><span>累计赠送</span><strong>{{ moneyText(userSummary.total_gift) }}</strong></div>
+            <div class="app-metric"><span>总额度</span><strong>{{ moneyText(totalQuota) }}</strong></div>
           </div>
+
           <section class="app-detail-section">
-            <div class="app-section-head"><h2>充值入账</h2><span>提交前确认金额与余额变化</span></div>
+            <div class="app-section-head"><h2>充值入账</h2></div>
             <AdjustmentForm :key="formKey" v-model:value="form" :current-balance="selected.balance" />
-            <div class="app-action-bar"><a-button @click="resetForm">重置</a-button><a-button type="primary" :loading="submitting" @click="confirmAdjust">确认充值</a-button></div>
+            <div class="app-action-bar">
+              <a-button @click="resetForm">重置</a-button>
+              <a-button type="primary" :loading="submitting" @click="confirmAdjust">确认充值</a-button>
+            </div>
             <p class="app-note">充值仅在 Sub2API 真实入账并二次确认成功后记账。</p>
           </section>
+
           <section class="app-detail-section">
-            <div class="app-section-head"><h2>充值记录</h2><span>{{ historyPage.total }} 条</span></div>
+            <div class="app-section-head">
+              <h2>充值记录</h2>
+              <span>{{ historyPage.total }} 条</span>
+            </div>
             <a-spin :spinning="historyLoading && history.length === 0">
               <a-empty v-if="!historyLoading && history.length === 0" description="暂无充值记录" />
               <div v-else class="app-history-list">
                 <button v-for="item in history" :key="item.id" type="button" class="app-history-card app-history-button" @click="openHistory(item)">
-                  <div class="app-history-top"><strong :class="item.operation === 'increment' ? 'app-positive' : 'app-danger'">{{ opSign(item) }}{{ absMoneyText(item.value) }}</strong><span>{{ item.operator_name || 'Sub2API' }}</span></div>
-                  <div class="app-history-meta"><span>{{ item.before_balance ?? '-' }} → {{ item.after_balance ?? '-' }}</span><span>{{ timeText(item) }}</span></div>
+                  <div class="app-history-top">
+                    <strong :class="item.operation === 'increment' ? 'app-positive' : 'app-danger'">{{ opSign(item) }}{{ absMoneyText(item.value) }}</strong>
+                    <span class="app-history-op">{{ item.operator_name || 'Sub2API' }}</span>
+                  </div>
+                  <div class="app-history-meta">
+                    <span>{{ item.before_balance ?? '-' }} → {{ item.after_balance ?? '-' }}</span>
+                    <span>{{ timeText(item) }}</span>
+                  </div>
                 </button>
               </div>
             </a-spin>
@@ -567,65 +657,91 @@ onMounted(initPage)
 </template>
 
 <style scoped>
-.app-page { display: grid; gap: 14px; min-width: 0; padding-bottom: 24px; }
-.app-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.app-header h1 { margin: 2px 0 0; color: var(--heading); font-size: 22px; }
-.app-eyebrow { color: var(--muted); font-size: 12px; }
-.app-count { color: var(--primary); font-variant-numeric: tabular-nums; }
-.app-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
-.app-search { min-width: 0; }
-.app-filter-sheet { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.app-field { display: grid; gap: 6px; }
-.app-field > span { color: var(--muted); font-size: 12px; }
-.app-filter-actions, .app-action-bar { display: flex; justify-content: flex-end; gap: 8px; }
-.app-action-bar { position: sticky; bottom: 0; z-index: 5; padding: 10px 0 calc(10px + var(--app-safe-bottom)); background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(10px); }
-.app-action-bar > * { flex: 1; }
-.app-error-bar { display: flex; align-items: center; gap: 8px; }
-.app-error-bar .ant-alert { min-width: 0; flex: 1; }
-.app-filter-tags { display: flex; flex-wrap: wrap; gap: 6px; }
-.app-filter-tag { padding: 5px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface2); color: var(--text); font-size: 12px; }
-.app-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.app-summary-grid > div { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.app-summary-grid span { display: block; color: var(--muted); font-size: 12px; }
-.app-summary-grid strong { display: block; margin-top: 3px; color: var(--heading); font-size: 16px; font-variant-numeric: tabular-nums; }
-.app-card-list, .app-history-list { display: grid; gap: 8px; }
-.app-card { min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.app-quota-user-card { cursor: pointer; }
-.app-quota-user-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.app-card-top, .app-card-foot, .app-history-top, .app-history-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.app-card-title { display: grid; min-width: 0; gap: 3px; }
-.app-card-title strong, .app-card-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.app-card-title span, .app-card-foot, .app-history-meta { color: var(--muted); font-size: 12px; }
-.app-status { color: var(--muted); }
-.app-card-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
-.app-card-metrics > div { min-width: 0; padding: 8px; border-radius: 6px; background: var(--surface2); }
-.app-card-metrics span { display: block; color: var(--muted); font-size: 12px; }
-.app-card-metrics strong { display: block; margin-top: 3px; color: var(--heading); font-variant-numeric: tabular-nums; }
-.app-link-button { padding: 0; border: 0; background: transparent; color: var(--primary); cursor: pointer; }
-.app-load-more { width: 100%; min-height: 40px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--primary); cursor: pointer; }
-.app-load-more:disabled { cursor: wait; opacity: 0.6; }
-.app-end-state, .app-note { margin: 0; color: var(--muted); font-size: 12px; text-align: center; }
-.app-detail { display: grid; gap: 16px; padding-bottom: 24px; }
-.app-detail-hero { display: flex; align-items: center; gap: 12px; }
-.app-avatar { display: inline-flex; width: 44px; height: 44px; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 50%; background: var(--primary-soft); color: var(--primary); font-weight: 700; }
-.app-detail-hero h2 { margin: 0; color: var(--heading); font-size: 18px; }
-.app-detail-hero p { margin: 3px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.app-detail-section { display: grid; gap: 10px; }
-.app-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.app-section-head h2 { margin: 0; color: var(--heading); font-size: 16px; }
-.app-section-head span { color: var(--muted); font-size: 12px; }
-.app-history-card { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); text-align: left; }
+/* Centralized app styles in src/app/styles/app.css */
+.app-toolbar { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.app-card-list, .app-history-list { gap: 9px; }
+.app-action-bar { z-index: 15; }
 .app-history-button { width: 100%; cursor: pointer; }
-.app-history-top strong { font-size: 16px; font-variant-numeric: tabular-nums; }
-.app-history-top span { color: var(--muted); font-size: 12px; }
-.app-history-meta { justify-content: flex-start; flex-wrap: wrap; margin-top: 6px; }
-.app-confirm-summary { display: grid; gap: 9px; }
-.app-confirm-summary p { display: flex; justify-content: space-between; gap: 12px; margin: 0; }
-.app-confirm-summary p span { color: var(--muted); }
-.app-confirm-summary p strong { color: var(--heading); text-align: right; overflow-wrap: anywhere; }
-.app-money, .app-positive { color: var(--success) !important; font-variant-numeric: tabular-nums; }
-.app-danger { color: var(--danger) !important; }
 pre { max-width: 100%; overflow: auto; white-space: pre-wrap; }
+
+/* 搜索框固定到顶部 */
+.app-top-sticky {
+  position: sticky;
+  top: var(--app-safe-top, 0px);
+  z-index: 20;
+  background: var(--bg, #fff);
+  border-bottom: 1px solid var(--border);
+  /* 让 header + toolbar 一起固定在内容区域顶部 */
+  margin-left: -16px;
+  margin-right: -16px;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.app-top-sticky .app-header {
+  padding-top: 8px;
+  padding-bottom: 4px;
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.app-top-sticky .app-toolbar {
+  padding-bottom: 8px;
+  background: transparent;
+}
+
+/* 简化后的工具栏 */
+.app-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.app-toolbar .ant-btn {
+  font-size: 12px;
+  min-height: 36px;
+  padding: 0 10px;
+}
+
+/* 详情排版优化 */
+.app-detail-hero {
+  align-items: flex-start;
+}
+.app-detail-userinfo {
+  min-width: 0;
+  flex: 1;
+}
+.app-detail-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 2px 0 0;
+  white-space: normal !important;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+/* 确保详情里很长的邮箱能正常换行 */
+.app-detail-hero p.app-detail-meta,
+.app-detail-hero .app-detail-meta {
+  max-width: 100%;
+  overflow: visible;
+}
+
+.app-history-top {
+  align-items: center;
+}
+.app-history-op {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 列表中邮箱过长也允许换行 */
+.app-card-title span {
+  white-space: normal;
+  word-break: break-all;
+}
+
 @media (max-width: 360px) {
   .app-card-top { align-items: flex-start; flex-direction: column; }
 }

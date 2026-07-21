@@ -9,7 +9,7 @@
   width: min(420px, 100%);
   padding: 28px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--surface);
   box-shadow: var(--shadow-float);
 }
@@ -280,10 +280,16 @@
 
   .loginPage {
     align-items: start;
-    padding: 18px 12px;
+    padding: 22px 14px;
   }
 
   .loginPanel {
-    padding: 20px;
+    padding: 22px 20px;
+    border-radius: 12px;
+    box-shadow: var(--shadow-card);
+  }
+
+  .loginHead h1 {
+    font-size: 20px;
   }
 }

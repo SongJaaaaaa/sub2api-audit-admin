@@ -70,8 +70,8 @@ test('App mode opens the module home without desktop navigation and renders mobi
   })
 
   await page.goto('/login')
-  await page.getByPlaceholder('Sub2API 用户邮箱').fill(admin.email)
-  await page.getByPlaceholder('密码').fill('secret123')
+  await page.getByPlaceholder('请输入账号').fill(admin.email)
+  await page.getByPlaceholder('请输入密码').fill('secret123')
   await page.locator('button[type="submit"]').click()
 
   await expect(page).toHaveURL(/\/app$/)
@@ -100,4 +100,82 @@ test('App mode opens the module home without desktop navigation and renders mobi
   await expect(page.locator('.soySider')).toHaveCount(0)
   await page.goto('/admins')
   await expect(page.locator('.appAdminCard')).toContainText('admin@example.com')
+})
+
+test('App quota paste fallback sends one request after repeated clicks and paste input events', async ({ page }) => {
+  const queries: string[] = []
+  await page.route('**/api/v1/**', (route) => {
+    const url = new URL(route.request().url())
+    if (url.pathname.endsWith('/auth/login')) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ identity_type: 'admin', token: 'app-e2e-token', admin }),
+      })
+    }
+    if (url.pathname.endsWith('/auth/me')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ admin }) })
+    }
+    if (url.pathname.endsWith('/sub2api/users')) {
+      queries.push(url.searchParams.get('keyword') || '')
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: [], total: 0, page: 1, page_size: 10 }),
+      })
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+  })
+
+  await page.goto('/login')
+  await page.getByPlaceholder('请输入账号').fill(admin.email)
+  await page.getByPlaceholder('请输入密码').fill('secret123')
+  await page.locator('button[type="submit"]').click()
+  await page.goto('/users-quota')
+  await expect.poll(() => queries).toEqual([''])
+
+  await page.getByRole('button', { name: '粘贴搜索' }).click()
+  await page.getByRole('button', { name: '粘贴搜索' }).click()
+  await page.getByPlaceholder('邮箱或用户名/ID').evaluate((input) => {
+    const data = new DataTransfer()
+    data.setData('text/plain', 'search@example.com')
+    input.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data }))
+    input.value = 'search@example.com'
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: 'search@example.com' }))
+  })
+
+  await expect.poll(() => queries).toEqual(['', 'search@example.com'])
+  await page.waitForTimeout(300)
+  expect(queries).toEqual(['', 'search@example.com'])
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        readText: () => new Promise((resolve) => {
+          window.setTimeout(() => resolve('direct@example.com'), 80)
+        }),
+      },
+    })
+  })
+  await page.getByRole('button', { name: '粘贴搜索' }).dblclick()
+
+  await expect.poll(() => queries).toEqual(['', 'search@example.com', 'direct@example.com'])
+  await page.waitForTimeout(300)
+  expect(queries).toEqual(['', 'search@example.com', 'direct@example.com'])
+})
+
+test('App login displays an unavailable server error', async ({ page }) => {
+  await page.route('**/api/v1/auth/login', (route) => route.fulfill({
+    status: 502,
+    contentType: 'application/json',
+    body: JSON.stringify({ message: 'Sub2API 登录服务暂不可用' }),
+  }))
+
+  await page.goto('/login')
+  await page.getByPlaceholder('请输入账号').fill(admin.email)
+  await page.getByPlaceholder('请输入密码').fill('secret123')
+  await page.locator('button[type="submit"]').click()
+
+  await expect(page.getByRole('alert')).toContainText('Sub2API 登录服务暂不可用')
 })

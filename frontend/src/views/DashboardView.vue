@@ -607,21 +607,14 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.appDashboardKpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.appKpiCard { min-width: 0; padding: 14px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); box-shadow: var(--shadow-card); }
-.appKpiCard span, .appKpiCard small { display: block; color: var(--text-secondary, #7a8395); }
-.appKpiCard strong { display: block; margin: 6px 0 4px; overflow: hidden; font-size: 22px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
-.appKpiCash strong { color: var(--primary); }.appKpiSource strong { color: var(--text); }.appKpiCost strong { color: var(--warning); }.appKpiBalance strong { color: var(--teal); }
-.appPanel { min-width: 0; padding: 14px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); box-shadow: var(--shadow-card); }
-.appSectionHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
-.appSectionHead h2 { margin: 0; font-size: 16px; }
-.appChart { width: 100%; min-width: 0; }.appChartFinance { height: 280px; }.appChartCost { height: 250px; }.appChartRank { height: 290px; }
-.appAlertCard { display: flex; align-items: center; justify-content: space-between; min-height: 56px; padding: 12px; border-left: 4px solid var(--warning); border-radius: 8px; color: inherit; background: var(--surface2); }
-.appAlertCard strong { font-size: 22px; }
-.appRecordList { display: grid; gap: 10px; }.appRecordCard { min-width: 0; padding: 12px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 10px; background: var(--surface2); }
-.appRecordHead, .appRecordMeta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.appRecordHead strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.appRecordMetric { margin: 8px 0 5px; font-size: 20px; font-weight: 700; }.appRecordMetric.positive { color: var(--success); }.appRecordMetric.negative { color: var(--danger); }
-.appRecordMeta { color: var(--text-secondary, #7a8395); font-size: 12px; }.appRecordMeta span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.appRecordNote { margin: 8px 0 0; overflow: hidden; color: var(--text-secondary, #7a8395); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+/* Dashboard app-mode specific overrides & desktop styles only.
+   Base .appKpiCard / .appPanel / etc now live in app/styles/app.css for consistency. */
+.appDashboardKpis { gap: 10px; }
+.appPanel { margin-bottom: 12px; }
+.appChartFinance { height: 260px; }
+.appChartCost { height: 232px; }
+.appChartRank { height: 262px; }
+
 .dashboardV2 { display: grid; gap: 18px; }
 .dashboardHead { gap: 18px; }
 .statsAlert { margin-bottom: 2px; }
@@ -660,6 +653,7 @@ onBeforeUnmount(() => {
 .money { font-variant-numeric: tabular-nums; font-weight: 600; }
 .money { color: var(--warning); }
 .recentPanel { margin-top: 16px; }
+
 @media (max-width: 1180px) {
   .kpiGrid, .alertGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .chartGrid { grid-template-columns: 1fr; }
@@ -668,7 +662,6 @@ onBeforeUnmount(() => {
   .kpiGrid, .alertGrid, .rankingGrid { grid-template-columns: 1fr; }
   .headActions { align-items: stretch; }
 }
-
 @media (max-width: 640px) {
   .dashboardV2 { gap: 12px; }
   .dashboardHead { gap: 10px; }

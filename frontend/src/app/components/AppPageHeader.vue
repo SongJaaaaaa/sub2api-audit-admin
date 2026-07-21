@@ -19,6 +19,8 @@ const emit = defineEmits<{ back: [] }>()
       <h1>{{ title }}</h1>
       <p v-if="subtitle">{{ subtitle }}</p>
     </div>
-    <div class="appPageHeaderActions"><slot name="actions" /></div>
+    <div class="appPageHeaderActions">
+      <slot name="actions" />
+    </div>
   </header>
 </template>

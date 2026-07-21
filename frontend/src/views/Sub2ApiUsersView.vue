@@ -892,76 +892,15 @@ onMounted(loadUsers)
   .compactSummary { justify-content: space-between; }
 }
 
-.app-page { display: grid; gap: 14px; min-width: 0; padding-bottom: 24px; }
-.app-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.app-header h1 { margin: 2px 0 0; color: var(--heading); font-size: 22px; }
-.app-eyebrow { color: var(--muted); font-size: 12px; }
-.app-count { color: var(--primary); font-variant-numeric: tabular-nums; }
-.app-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; }
-.app-search { min-width: 0; }
-.app-filter-sheet { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.app-field { display: grid; gap: 6px; min-width: 0; }
-.app-field > span { color: var(--muted); font-size: 12px; }
-.app-field-control { width: 100%; }
-.app-filter-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.app-filter-tags { display: flex; flex-wrap: wrap; gap: 6px; }
-.app-filter-tag { padding: 5px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface2); color: var(--text); font-size: 12px; }
-.app-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.app-summary-grid > div { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.app-summary-grid span, .app-card-metrics span { display: block; color: var(--muted); font-size: 12px; }
-.app-summary-grid strong { display: block; margin-top: 3px; color: var(--heading); font-size: 16px; font-variant-numeric: tabular-nums; }
-.app-alert { margin: 0; }
-.app-error-bar { display: flex; align-items: center; gap: 8px; }
-.app-error-bar .ant-alert { min-width: 0; flex: 1; }
-.app-card-list, .app-history-list { display: grid; gap: 8px; }
-.app-card { min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.app-user-card { cursor: pointer; }
-.app-user-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.app-card-top, .app-card-foot, .app-history-top, .app-history-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.app-card-title { display: grid; min-width: 0; gap: 3px; }
-.app-card-title strong, .app-card-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.app-card-title span, .app-card-foot, .app-history-meta, .app-history-card small { color: var(--muted); font-size: 12px; }
-.app-card-check { width: 20px; height: 20px; flex: 0 0 auto; accent-color: var(--primary); }
-.app-card-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
-.app-card-metrics > div { min-width: 0; padding: 8px; border-radius: 6px; background: var(--surface2); }
-.app-card-metrics strong { display: block; margin-top: 3px; color: var(--heading); font-variant-numeric: tabular-nums; }
-.app-money { color: var(--primary) !important; font-variant-numeric: tabular-nums; }
-.app-danger { color: var(--danger) !important; }
-.app-positive { color: var(--success) !important; }
-.app-status { color: var(--muted); }
-.app-status.active { color: var(--success); }
-.app-link-button { padding: 0; border: 0; background: transparent; color: var(--primary); cursor: pointer; }
-.app-load-more { width: 100%; min-height: 40px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--primary); cursor: pointer; }
-.app-load-more:disabled { cursor: wait; opacity: 0.6; }
-.app-end-state { margin: 0; color: var(--muted); font-size: 12px; text-align: center; }
-.app-selected-users { display: flex; flex-wrap: wrap; gap: 6px; max-height: 140px; overflow: auto; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
-.app-radio-stack { display: grid; gap: 10px; }
-.app-confirm-summary { display: grid; gap: 8px; margin-bottom: 12px; padding: 10px; border-radius: 8px; background: var(--surface2); }
-.app-confirm-summary p { display: flex; justify-content: space-between; gap: 12px; margin: 0; }
-.app-confirm-summary p span { color: var(--muted); }
-.app-confirm-summary p strong { color: var(--heading); font-variant-numeric: tabular-nums; }
-.app-detail { display: grid; gap: 16px; padding-bottom: 24px; }
-.app-detail-hero { display: flex; align-items: center; gap: 12px; }
-.app-avatar { display: inline-flex; width: 44px; height: 44px; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 50%; background: var(--primary-soft); color: var(--primary); font-weight: 700; }
-.app-detail-hero h2 { margin: 0; color: var(--heading); font-size: 18px; }
-.app-detail-hero p { margin: 3px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-.app-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
-.app-detail-grid > div { min-width: 0; padding: 10px; border-radius: 6px; background: var(--surface2); }
-.app-detail-grid dt { color: var(--muted); font-size: 12px; }
-.app-detail-grid dd { margin: 4px 0 0; color: var(--heading); overflow-wrap: anywhere; }
-.app-detail-section { display: grid; gap: 10px; }
-.app-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.app-section-head h2 { margin: 0; color: var(--heading); font-size: 16px; }
-.app-section-head span { color: var(--muted); font-size: 12px; }
-.app-history-card { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.app-history-top strong { font-size: 16px; font-variant-numeric: tabular-nums; }
-.app-history-top span { color: var(--muted); font-size: 12px; }
-.app-history-meta { justify-content: flex-start; margin-top: 6px; flex-wrap: wrap; }
-.app-history-card p { margin: 6px 0 0; color: var(--text); overflow-wrap: anywhere; }
-.app-history-card small { display: block; margin-top: 6px; }
+/* App-mode shared styles moved to centralized app.css.
+   Only view-specific + small tweaks remain. */
+.app-toolbar { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+.app-card-list, .app-history-list { gap: 9px; }
+.app-card-metrics { margin: 12px 0; }
+.app-detail { padding-bottom: 8px; }
+.app-history-card { padding: 12px; }
 @media (max-width: 420px) {
   .app-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
   .app-toolbar .ant-btn { min-width: 0; }
-  .app-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 </style>

@@ -35,7 +35,9 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown))
           <div class="appSheetBody"><slot /></div>
           <div class="appSheetActions">
             <button class="appSecondaryButton" type="button" @click="emit('reset')">重置</button>
-            <button class="appPrimaryButton" type="button" @click="emit('apply'); close()">查询<span v-if="activeCount">（{{ activeCount }}）</span></button>
+            <button class="appPrimaryButton" type="button" @click="emit('apply'); close()">
+              查询<span v-if="activeCount">（{{ activeCount }}）</span>
+            </button>
           </div>
         </section>
       </div>

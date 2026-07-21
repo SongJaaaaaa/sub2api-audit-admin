@@ -383,20 +383,11 @@ onMounted(() => loadItems())
 .expense { color: var(--danger); }
 .gift { color: var(--info); }
 small { display: block; margin-top: 3px; color: var(--text-secondary, #7a8395); }
-.appSummaryGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
-.appSummaryCard { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.appSummaryCard span { display: block; margin-bottom: 4px; color: var(--muted); font-size: 12px; }
-.appSummaryCard strong { font-size: 18px; font-variant-numeric: tabular-nums; }
-.appCardList .appRecordCard { min-height: 128px; }
-.appDetailBody { padding: 16px; padding-bottom: calc(28px + var(--app-safe-bottom)); }
-.appDetailList { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--border); }
+/* App-mode styles centralized in src/app/styles/app.css.
+   Only view-specific overrides kept here. */
+.appCardList .appRecordCard { min-height: 122px; }
+.appDetailList { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--app-radius-sm, 10px); background: var(--border); }
 .appDetailList > div { display: flex; justify-content: space-between; gap: 12px; padding: 13px 12px; background: var(--surface); }
-.appDetailList span { color: var(--muted); font-size: 13px; }
-.appDetailList strong { min-width: 0; color: var(--heading); text-align: right; overflow-wrap: anywhere; }
-.appFormStack { display: grid; gap: 14px; }
-.appFormStack label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
-.appFullControl { width: 100%; }
-.appIconOnly { width: 42px; padding: 0; }
 @media (max-width: 760px) {
   .filterGrid label { flex: 1 1 100%; max-width: none; }
   .dateQuickFilter { flex-direction: column; }

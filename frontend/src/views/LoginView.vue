@@ -48,7 +48,52 @@ async function submit() {
 </script>
 
 <template>
-  <main class="loginPage">
+  <!-- App 端登录 - 只保留账号、密码、登录按钮 -->
+  <main v-if="isAppMode" class="appLoginPage appLoginMinimal">
+    <div class="appLoginContent">
+      <div class="appLoginBrand">
+        <div class="appLoginMark">
+          <img src="/favicon.svg" alt="" />
+        </div>
+        <h1 class="appLoginTitle">Sub2 审计</h1>
+      </div>
+
+      <a-alert v-if="error" class="loginError" type="error" show-icon :message="error" />
+
+      <a-form class="appLoginFormMinimal" layout="vertical" :model="form" @finish="submit">
+        <a-form-item name="account" :rules="[{ required: true, message: '请输入账号' }]">
+          <a-input
+            v-model:value="form.account"
+            class="appPillInput"
+            autocomplete="username"
+            placeholder="请输入账号"
+          />
+        </a-form-item>
+
+        <a-form-item name="password" :rules="[{ required: true, message: '请输入密码' }]">
+          <a-input-password
+            v-model:value="form.password"
+            class="appPillInput"
+            autocomplete="current-password"
+            placeholder="请输入密码"
+          />
+        </a-form-item>
+
+        <a-button
+          class="appLoginPillButton"
+          block
+          html-type="submit"
+          :loading="loading"
+          :disabled="loading"
+        >
+          登录
+        </a-button>
+      </a-form>
+    </div>
+  </main>
+
+  <!-- Desktop / normal admin login -->
+  <main v-else class="loginPage">
     <section class="loginPanel">
       <div class="loginHead">
         <h1>Sub2API 审计后台</h1>
