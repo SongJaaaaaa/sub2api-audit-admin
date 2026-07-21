@@ -17,7 +17,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'sqlite'),
+    'default' => 'sqlite',
 
     /*
     |--------------------------------------------------------------------------
@@ -34,10 +34,10 @@ return [
 
         'sqlite' => [
             'driver' => 'sqlite',
-            'url' => env('DB_URL'),
-            'database' => env('DB_DATABASE', database_path('database.sqlite')),
+            'url' => null,
+            'database' => env('APP_ENV') === 'testing' ? ':memory:' : database_path('database.sqlite'),
             'prefix' => '',
-            'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
+            'foreign_key_constraints' => true,
             'busy_timeout' => null,
             'journal_mode' => null,
             'synchronous' => null,
@@ -97,21 +97,6 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
-        ],
-
-        'sub2api' => [
-            'driver' => 'pgsql',
-            'url' => env('SUB2API_DB_URL'),
-            'host' => env('SUB2API_DB_HOST', '127.0.0.1'),
-            'port' => env('SUB2API_DB_PORT', '5432'),
-            'database' => env('SUB2API_DB_DATABASE', 'sub2api'),
-            'username' => env('SUB2API_DB_USERNAME', 'sub2api_ro'),
-            'password' => env('SUB2API_DB_PASSWORD', ''),
-            'charset' => env('SUB2API_DB_CHARSET', 'utf8'),
-            'prefix' => '',
-            'prefix_indexes' => true,
-            'search_path' => env('SUB2API_DB_SCHEMA', 'public'),
-            'sslmode' => env('SUB2API_DB_SSLMODE', 'prefer'),
         ],
 
         'sqlsrv' => [

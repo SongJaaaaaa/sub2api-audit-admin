@@ -1,5 +1,18 @@
 <?php
 
+$key = trim((string) env('APP_KEY', ''));
+if ($key === '') {
+    $keyFile = dirname(__DIR__).'/storage/app.key';
+    $key = is_file($keyFile) ? trim((string) file_get_contents($keyFile)) : '';
+    if ($key === '') {
+        $key = 'base64:'.base64_encode(random_bytes(32));
+        if (file_put_contents($keyFile, $key, LOCK_EX) === false) {
+            throw new RuntimeException('无法写入 storage/app.key');
+        }
+        @chmod($keyFile, 0600);
+    }
+}
+
 return [
 
     /*
@@ -13,7 +26,7 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'Laravel'),
+    'name' => 'Sub2API 审计后台',
 
     /*
     |--------------------------------------------------------------------------
@@ -39,7 +52,7 @@ return [
     |
     */
 
-    'debug' => (bool) env('APP_DEBUG', false),
+    'debug' => false,
 
     /*
     |--------------------------------------------------------------------------
@@ -52,7 +65,7 @@ return [
     |
     */
 
-    'url' => env('APP_URL', 'http://localhost'),
+    'url' => 'https://audit.sjiaa.cc.cd',
 
     /*
     |--------------------------------------------------------------------------
@@ -65,7 +78,7 @@ return [
     |
     */
 
-    'timezone' => env('APP_TIMEZONE', 'Asia/Shanghai'),
+    'timezone' => 'Asia/Shanghai',
 
     /*
     |--------------------------------------------------------------------------
@@ -97,7 +110,7 @@ return [
 
     'cipher' => 'AES-256-CBC',
 
-    'key' => env('APP_KEY'),
+    'key' => $key,
 
     'previous_keys' => [
         ...array_filter(

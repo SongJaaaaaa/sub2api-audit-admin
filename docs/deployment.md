@@ -1,89 +1,34 @@
-# 部署与数据迁移
+# 部署
 
-## 1. 数据边界
+## 1. 配置
 
-生产环境使用两套 PostgreSQL 连接：
+生产环境只需要填写两个变量：
 
-| 连接 | 用途 | 权限 |
-|---|---|---|
-| 默认 pgsql | Sub2API 管理员映射、审计账本、附件和利润 | 本应用读写 |
-| sub2api | Sub2API 用户、余额、充值、兑换和用量数据 | 只读 |
-
-管理员账号由 Sub2API 管理。本系统登录时调用 Sub2API 用户 API 验证管理员身份，并在本地同步管理员资料。Sub2API 余额只能通过官方 Admin API 调整，禁止直接更新 Sub2API 数据库。
-
-生产环境至少配置：
-
-~~~env
-APP_ENV=production
-APP_DEBUG=false
-APP_TIMEZONE=Asia/Shanghai
-
-DB_CONNECTION=pgsql
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_DATABASE=sub2api_audit
-DB_USERNAME=sub2api_audit
-DB_PASSWORD=
-DB_SSLMODE=prefer
-
-SUB2API_DB_CONNECTION=sub2api
-SUB2API_DB_HOST=127.0.0.1
-SUB2API_DB_PORT=5432
-SUB2API_DB_DATABASE=sub2api
-SUB2API_DB_USERNAME=sub2api_ro
-SUB2API_DB_PASSWORD=
-SUB2API_DB_SSLMODE=prefer
-
-SUB2API_ADMIN_API_URL=https://sub2api.example.com
+```env
+SUB2API_API_URL=https://sub2api.example.com
 SUB2API_ADMIN_API_KEY=
-SUB2API_USER_API_URL=https://sub2api.example.com
-SUB2API_USER_API_TIMEOUT=10
-SUB2API_REMOTE_RECONCILE_DELAY_SECONDS=60
+```
 
-CACHE_STORE=database
-SESSION_DRIVER=database
-~~~
+同一个地址用于管理员登录、用户读取、账变历史和官方统计。请求由后端携带 `x-api-key`，Key 不得写入仓库、前端构建产物、部署日志或命令历史。
 
-数据库密码和 API Key 不得写入仓库、部署日志或命令历史。附件目录 backend/storage/app/private 需要独立持久化和备份。
+应用名称、域名、时区、CORS、超时、SQLite、缓存、会话和队列均使用代码内默认值。`APP_KEY` 首次启动时自动生成到 `backend/storage/app.key`，无需手动配置；该文件和 `backend/database/database.sqlite` 必须持久化并备份。
 
-## 2. 审计 SQLite 迁移
+## 2. 首次启动
 
-只有从旧审计 SQLite 切换到 PostgreSQL 时才执行本节。
-
-1. 进入维护模式并停止管理端写入和 Scheduler。
-2. 对审计 SQLite 执行 checkpoint。
-3. 确认源目录没有 -wal、-shm、-journal 旁路文件。
-4. 备份审计 SQLite、私有附件和生产环境文件，记录 SHA-256。
-
-~~~bash
-stamp=$(date +%Y%m%d%H%M%S)
-mkdir -p "/backup/sub2api-audit/$stamp"
-sqlite3 backend/database/database.sqlite 'PRAGMA wal_checkpoint(TRUNCATE);'
-test -z "$(find backend/database -maxdepth 1 -type f \( -name '*.sqlite-wal' -o -name '*.sqlite-shm' -o -name '*.sqlite-journal' \) -print -quit)"
-cp -a backend/database/database.sqlite "/backup/sub2api-audit/$stamp/audit.sqlite"
-tar -czf "/backup/sub2api-audit/$stamp/private-files.tar.gz" -C backend/storage/app private
-sha256sum "/backup/sub2api-audit/$stamp/audit.sqlite"
-~~~
-
-先创建空 PostgreSQL 数据库并执行迁移，再对源文件 dry run：
-
-~~~bash
+```bash
 cd /var/www/sub2api-audit-admin/backend
+cp .env.example .env
+# 填写上面的两个变量
+touch database/database.sqlite
 composer install --no-dev --optimize-autoloader --no-interaction
 php artisan migrate --force
+```
 
-php artisan audit:migrate-sqlite-to-postgres \
-  --source=/backup/sub2api-audit/时间戳/audit.sqlite --dry-run
-
-php artisan audit:migrate-sqlite-to-postgres \
-  --source=/backup/sub2api-audit/时间戳/audit.sqlite --commit
-~~~
-
-命令保留主键 ID，校验行数和关键金额，并重置 PostgreSQL 序列。缓存、会话、队列、Token、迁移记录及旧返利表不会迁移，所有管理员需要重新登录。
+确保 PHP 运行用户可写 `backend/database/`、`backend/storage/` 和 `backend/bootstrap/cache/`。
 
 ## 3. 发布
 
-~~~bash
+```bash
 cd /var/www/sub2api-audit-admin/frontend
 corepack pnpm install --frozen-lockfile
 corepack pnpm build
@@ -94,28 +39,27 @@ php artisan optimize:clear
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
-~~~
+```
+
+App 的正式 API 地址已固定为 `https://audit.sjiaa.cc.cd/api/v1`，构建时无需提供 Vite API 环境变量。
 
 Scheduler 每分钟触发，用于同步 Sub2API 外部收入：
 
-~~~cron
+```cron
 * * * * * cd /var/www/sub2api-audit-admin/backend && /usr/bin/php artisan schedule:run >> /dev/null 2>&1
-~~~
+```
 
 当前应用没有常驻队列任务，不需要部署 Queue Worker。
 
 ## 4. 上线验收
 
-- /api/v1/health 返回成功。
-- Sub2API admin 角色可以登录，资料同步到只读管理员账号页。
-- Sub2API 普通用户登录管理后台返回 403。
-- Sub2API 用户列表、余额历史和模型统计可查询。
+- `/api/v1/health` 返回成功。
+- Sub2API admin 角色可以登录，普通用户登录返回 403。
+- 用户列表、余额历史、余额事件、支付订单和模型统计可查询。
+- 连续调用同一列表接口不会出现间歇性 500/502。
 - 调额、入账记录、历史账、利润和审计页面正常。
-- Scheduler 每分钟正常执行，且不存在 `ledger:reconcile` 任务。
-- 应用日志不记录密码、Token、API Key、Authorization 或完整敏感响应。
+- 日志不记录密码、Token、API Key、Authorization 或完整敏感响应。
 
-## 5. 回滚边界
+## 5. 备份与回滚
 
-数据库接受新写入前，可以停止新服务并切回已备份版本。数据库接受新账本或管理端写入后，只允许在 PostgreSQL 上前向修复；不要执行破坏性 migrate:rollback。
-
-需要回退应用代码时，先备份 PostgreSQL、私有附件和生产环境文件，并确认旧代码能够读取当前字段。
+发布前备份 `backend/database/database.sqlite`、`backend/storage/app.key` 和 `backend/storage/app/private`。数据库接受新账本写入后，只允许前向修复，不执行破坏性 `migrate:rollback`。

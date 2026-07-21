@@ -36,28 +36,15 @@ frontend/
 
 签名文件、证书、Provisioning Profile、密码、CI secret 和 keystore 必须保存在仓库外的安全位置。不要把它们放入 `frontend/`、压缩包、日志或 `.env` 提交。
 
-## 3. 环境变量
+## 3. 固定配置
 
-### 3.1 App 前端环境
+### 3.1 App API
 
-在本机创建未提交的 `frontend/.env.app.local`，或在 CI 注入等价变量：
-
-```dotenv
-VITE_APP_MODE=app
-VITE_API_BASE_URL=https://实际域名/api/v1
-```
-
-`VITE_API_BASE_URL` 必须是正式 HTTPS 绝对地址。`VITE_API_PROXY_TARGET` 只用于本地 Vite 代理，不能代替打包后的 API 地址。App 构建前确认构建产物中没有 API Key、数据库密码、签名密码或其他服务端秘密。
+App API 已固定为 `https://audit.sjiaa.cc.cd/api/v1`，构建时不需要设置 `VITE_API_BASE_URL`。`VITE_API_PROXY_TARGET` 只用于本地 Vite 代理。App 构建前确认构建产物中没有 API Key、数据库密码、签名密码或其他服务端秘密。
 
 ### 3.2 后端 CORS
 
-在后端 `.env` 配置逗号分隔的明确来源：
-
-```dotenv
-CORS_ALLOWED_ORIGINS=https://localhost,capacitor://localhost
-```
-
-本地联调可以追加 `http://localhost:5173`、`http://localhost:5175`、`http://127.0.0.1:5173` 等实际来源。不要配置 `*`。配置应允许 App 发送 `Authorization`、`Content-Type`、`Accept`，并通过 `OPTIONS` 预检。
+后端已固定允许正式域名、`https://localhost`、`capacitor://localhost` 和本地开发来源，不需要环境变量。配置允许 App 发送 `Authorization`、`Content-Type`、`Accept`，并通过 `OPTIONS` 预检。
 
 修改环境变量后清理配置缓存并重启后端：
 

@@ -5,8 +5,7 @@
 | 数据源 | 本系统用途 | 禁止事项 |
 |---|---|---|
 | 本地审计 SQLite | 现金、赠送、调增、调减、净额、充值用户排行、调额记录 | 不得拿远端调额或支付事件补成本地实收入账 |
-| Sub2API 官方 Admin API | 请求、Token、标准消费、实际消费、用户用量排行、requested 模型统计 | 官方失败时不得用数据库 SQL 降级重算 |
-| Sub2API PostgreSQL 只读连接 | 当前普通用户余额、远端后台调额关联和历史余额事件 | 不得直接更新用户余额或远端业务表 |
+| Sub2API 官方 Admin API | 用户、余额、远端事件、请求、Token、消费和 requested 模型统计 | 官方失败时不得用数据库 SQL 降级重算 |
 
 模型和用量统计不再由审计系统直接聚合 `usage_logs`，避免产生第三套统计口径。
 
@@ -23,12 +22,12 @@ timezone=Asia/Shanghai
 ```
 
 - 本地 SQLite 查询使用中国时间半开区间：`[开始日 00:00:00, 结束日次日 00:00:00)`。
-- 远端 PostgreSQL 查询将同一边界转换为 UTC 后使用半开区间。
+- 远端事件由 Admin API 返回，应用按 UTC 半开区间过滤。
 - 切账时间只限制账务、历史分类和告警；官方用量始终展示用户选择的完整中国自然日。
 
 ## 3. 官方 Admin API
 
-后端通过 `SUB2API_ADMIN_API_URL` 和 `SUB2API_ADMIN_API_KEY` 调用以下接口。
+后端通过 `SUB2API_API_URL` 和 `SUB2API_ADMIN_API_KEY` 调用以下接口。
 
 ### 3.1 用量趋势
 

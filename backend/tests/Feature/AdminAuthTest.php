@@ -16,6 +16,7 @@ class AdminAuthTest extends TestCase
         parent::setUp();
 
         config()->set('sub2api.user_api.base_url', 'https://sub2api.test');
+        config()->set('sub2api.user_api.key', 'test-key');
     }
 
     public function test_sub2api_admin_can_login_and_is_synced(): void
@@ -51,6 +52,7 @@ class AdminAuthTest extends TestCase
             'password' => null,
         ]);
         Http::assertSentCount(1);
+        Http::assertSent(fn ($req): bool => $req->hasHeader('x-api-key', 'test-key'));
     }
 
     public function test_disabled_sub2api_admin_cannot_login(): void

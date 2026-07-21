@@ -39,6 +39,22 @@ class Sub2ApiClientTest extends TestCase
 
     public function test_user_search_returns_only_public_fields(): void
     {
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/users/1001' => Http::response([
+                'code' => 0,
+                'data' => [
+                    'id' => 1001,
+                    'email' => 'alpha@example.com',
+                    'username' => 'alpha',
+                    'role' => 'user',
+                    'balance' => '12.34',
+                    'total_recharged' => '100.00',
+                    'status' => 'active',
+                    'created_at' => '2026-07-01 00:00:00',
+                    'updated_at' => '2026-07-01 00:00:00',
+                ],
+            ]),
+        ]);
         $this->insertSub2ApiUser([
             'balance' => '12.34',
             'total_recharged' => '100.00',
@@ -50,13 +66,8 @@ class Sub2ApiClientTest extends TestCase
             'status' => 'disabled',
         ]);
 
-        $queries = 0;
-        DB::connection('sub2api')->listen(function () use (&$queries): void {
-            $queries++;
-        });
         $repo = app(Sub2ApiReadRepository::class);
         $res = $repo->users(['keyword' => 'alpha'], 1, 20);
-        $this->assertSame(2, $queries);
         $detail = $repo->user(1001);
 
         $this->assertSame(1, $res['total']);

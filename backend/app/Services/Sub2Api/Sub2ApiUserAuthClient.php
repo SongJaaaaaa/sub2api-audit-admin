@@ -35,13 +35,18 @@ class Sub2ApiUserAuthClient
     private function http(): PendingRequest
     {
         $baseUrl = rtrim((string) config('sub2api.user_api.base_url'), '/');
+        $apiKey = (string) config('sub2api.user_api.key');
         if ($baseUrl === '') {
-            throw new RuntimeException('缺少 SUB2API_USER_API_URL');
+            throw new RuntimeException('缺少 SUB2API_API_URL');
+        }
+        if ($apiKey === '') {
+            throw new RuntimeException('缺少 SUB2API_ADMIN_API_KEY');
         }
 
         return Http::baseUrl($baseUrl)
             ->timeout((int) config('sub2api.user_api.timeout', 10))
-            ->acceptJson();
+            ->acceptJson()
+            ->withHeaders(['x-api-key' => $apiKey]);
     }
 
     private function ensureLoginSucceeded(Response $response): void

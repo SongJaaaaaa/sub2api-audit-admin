@@ -2,15 +2,18 @@
 
 namespace Tests\Support;
 
+use App\Services\Sub2Api\Sub2ApiAdminClient;
+use App\Support\ChinaDateRange;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Mockery;
 
 trait Sub2ApiTestDatabase
 {
     protected function setUpSub2ApiDatabase(): void
     {
-        config()->set('sub2api.db_connection', 'sub2api');
         config()->set('database.connections.sub2api', [
             'driver' => 'sqlite',
             'database' => ':memory:',
@@ -66,6 +69,23 @@ trait Sub2ApiTestDatabase
             $table->timestamp('completed_at')->nullable();
             $table->timestamp('created_at')->nullable();
         });
+
+        config()->set('sub2api.admin_api.base_url', 'https://sub2api.test');
+        config()->set('sub2api.admin_api.key', 'test-key');
+        $client = Mockery::mock(Sub2ApiAdminClient::class)->makePartial();
+        $client->shouldReceive('users')->andReturnUsing(
+            fn (int $page = 1, int $pageSize = 100): array => $this->sub2ApiUsers($page, $pageSize),
+        );
+        $client->shouldReceive('redeemCodes')->andReturnUsing(
+            fn (int $page = 1, int $pageSize = 100): array => $this->sub2ApiRedeemCodes($page, $pageSize),
+        );
+        $client->shouldReceive('paymentOrders')->andReturnUsing(
+            fn (int $page = 1, int $pageSize = 100): array => $this->sub2ApiPaymentOrders($page, $pageSize),
+        );
+        $client->shouldReceive('dashboardUsersRanking')->andReturnUsing(
+            fn (ChinaDateRange $range, int $limit): array => $this->sub2ApiRanking($range, $limit),
+        );
+        app()->instance(Sub2ApiAdminClient::class, $client);
     }
 
     protected function tearDownSub2ApiDatabase(): void
@@ -87,5 +107,103 @@ trait Sub2ApiTestDatabase
             'updated_at' => '2026-07-01 00:00:00',
             'deleted_at' => null,
         ], $values));
+    }
+
+    private function sub2ApiUsers(int $page, int $pageSize): array
+    {
+        $rows = DB::connection('sub2api')->table('users')->whereNull('deleted_at')->orderByDesc('id')->get()
+            ->map(function ($row): array {
+                $item = (array) $row;
+                $item['last_used_at'] = DB::connection('sub2api')->table('usage_logs')
+                    ->where('user_id', $row->id)->max('created_at');
+
+                return $item;
+            })->all();
+
+        return $this->sub2ApiPage($rows, $page, $pageSize);
+    }
+
+    private function sub2ApiRedeemCodes(int $page, int $pageSize): array
+    {
+        $users = DB::connection('sub2api')->table('users')->get()->keyBy('id');
+        $rows = DB::connection('sub2api')->table('redeem_codes')->orderBy('id')->get()
+            ->map(function ($row) use ($users): array {
+                $item = (array) $row;
+                $user = $users->get($row->used_by);
+                $item['user'] = $user ? [
+                    'email' => $user->email,
+                    'username' => $user->username,
+                ] : null;
+
+                return $item;
+            })->all();
+
+        return $this->sub2ApiPage($rows, $page, $pageSize);
+    }
+
+    private function sub2ApiPaymentOrders(int $page, int $pageSize): array
+    {
+        $users = DB::connection('sub2api')->table('users')->get()->keyBy('id');
+        $rows = DB::connection('sub2api')->table('payment_orders')->orderBy('id')->get()
+            ->map(function ($row) use ($users): array {
+                $item = (array) $row;
+                $user = $users->get($row->user_id);
+                $item['user'] = $user ? [
+                    'email' => $user->email,
+                    'username' => $user->username,
+                ] : null;
+
+                return $item;
+            })->all();
+
+        return $this->sub2ApiPage($rows, $page, $pageSize);
+    }
+
+    private function sub2ApiRanking(ChinaDateRange $range, int $limit): array
+    {
+        $users = DB::connection('sub2api')->table('users')->get()->keyBy('id');
+        $rows = DB::connection('sub2api')->table('usage_logs')->get()
+            ->filter(function ($row) use ($range): bool {
+                $time = CarbonImmutable::parse($row->created_at, 'UTC');
+
+                return $time->greaterThanOrEqualTo($range->utcStart) && $time->lessThan($range->utcEndExclusive);
+            })
+            ->groupBy('user_id')
+            ->map(function ($logs, $userId) use ($users): array {
+                $user = $users->get($userId);
+
+                return [
+                    'user_id' => (int) $userId,
+                    'email' => $user?->email,
+                    'actual_cost' => (string) $logs->sum('actual_cost'),
+                    'requests' => $logs->count(),
+                    'tokens' => (int) $logs->sum(fn ($row): int => (int) $row->input_tokens
+                        + (int) $row->output_tokens
+                        + (int) $row->cache_creation_tokens
+                        + (int) $row->cache_read_tokens),
+                ];
+            })
+            ->sortByDesc(fn (array $row): float => (float) $row['actual_cost'])
+            ->take($limit)
+            ->values()
+            ->all();
+
+        return ['ranking' => $rows];
+    }
+
+    private function sub2ApiPage(array $rows, int $page, int $pageSize): array
+    {
+        $total = count($rows);
+
+        return [
+            'code' => 0,
+            'data' => [
+                'items' => array_slice($rows, ($page - 1) * $pageSize, $pageSize),
+                'page' => $page,
+                'page_size' => $pageSize,
+                'pages' => max(1, (int) ceil($total / $pageSize)),
+                'total' => $total,
+            ],
+        ];
     }
 }

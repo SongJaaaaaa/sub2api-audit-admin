@@ -1,6 +1,7 @@
 <?php
 
-$developmentOrigins = [
+$origins = [
+    'https://audit.sjiaa.cc.cd',
     'http://localhost',
     'http://localhost:5173',
     'http://localhost:5175',
@@ -10,19 +11,13 @@ $developmentOrigins = [
     'https://localhost',
     'capacitor://localhost',
 ];
-$defaultOrigins = env('APP_ENV') === 'production' ? [] : $developmentOrigins;
-
-$configuredOrigins = array_values(array_filter(
-    array_map('trim', explode(',', (string) env('CORS_ALLOWED_ORIGINS', implode(',', $defaultOrigins)))),
-    static fn (string $origin): bool => $origin !== '' && ! str_contains($origin, '*'),
-));
 
 return [
     'paths' => ['api/*'],
 
     'allowed_methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
 
-    'allowed_origins' => $configuredOrigins,
+    'allowed_origins' => $origins,
 
     'allowed_origins_patterns' => [],
 

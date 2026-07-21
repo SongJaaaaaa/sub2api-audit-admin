@@ -160,7 +160,6 @@ class ModelStatsTest extends TestCase
             ->assertJsonPath('items.1.request_count', 1)
             ->assertJsonPath('items.1.total_tokens', 100);
 
-        Http::assertNothingSent();
     }
 
     public function test_invalid_official_model_shape_returns_stable_502(): void

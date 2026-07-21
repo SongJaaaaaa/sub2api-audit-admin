@@ -29,7 +29,7 @@
 ## 2. 发布前环境
 
 - [ ] `VITE_APP_MODE=app` 已用于 App 构建。
-- [ ] `VITE_API_BASE_URL` 是正式 HTTPS 绝对地址，不是相对 `/api/v1`，也不是开发代理地址。
+- [ ] 安装包内 API 地址为固定的正式 HTTPS 地址，不是开发代理地址。
 - [ ] 构建产物没有 API Key、数据库密码、签名密码或 Token。
 - [ ] `CORS_ALLOWED_ORIGINS` 使用明确逗号列表，没有 `*`。
 - [ ] CORS 来源包含实际 Capacitor scheme/hostname，且允许 `Authorization`、`Content-Type`、`Accept` 和 `OPTIONS`。

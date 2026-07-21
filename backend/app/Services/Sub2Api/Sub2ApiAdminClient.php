@@ -14,6 +14,14 @@ use Throwable;
 
 class Sub2ApiAdminClient
 {
+    public function users(int $page = 1, int $pageSize = 100): array
+    {
+        return $this->get('/api/v1/admin/users', [
+            'page' => $page,
+            'page_size' => $pageSize,
+        ]);
+    }
+
     public function user(int $id): array
     {
         return $this->get('/api/v1/admin/users/'.$id);
@@ -43,6 +51,32 @@ class Sub2ApiAdminClient
         return $this->get('/api/v1/admin/users/'.$id.'/balance-history', [
             'page' => $page,
             'page_size' => $pageSize,
+        ]);
+    }
+
+    public function redeemCodes(int $page = 1, int $pageSize = 100): array
+    {
+        return $this->get('/api/v1/admin/redeem-codes', [
+            'page' => $page,
+            'page_size' => $pageSize,
+        ]);
+    }
+
+    public function paymentOrders(int $page = 1, int $pageSize = 100): array
+    {
+        return $this->get('/api/v1/admin/payment/orders', [
+            'page' => $page,
+            'page_size' => $pageSize,
+        ]);
+    }
+
+    public function dashboardUsersRanking(ChinaDateRange $range, int $limit): array
+    {
+        return $this->stats('/api/v1/admin/dashboard/users-ranking', [
+            ...$range->apiParams(),
+            'limit' => $limit,
+        ], 'ranking', [
+            'user_id', 'email', 'actual_cost', 'requests', 'tokens',
         ]);
     }
 
@@ -232,7 +266,7 @@ class Sub2ApiAdminClient
         $apiKey = (string) config('sub2api.admin_api.key');
 
         if ($baseUrl === '') {
-            throw new RuntimeException('缺少 SUB2API_ADMIN_API_URL');
+            throw new RuntimeException('缺少 SUB2API_API_URL');
         }
         if ($apiKey === '') {
             throw new RuntimeException('缺少 SUB2API_ADMIN_API_KEY');

@@ -9,10 +9,9 @@
 | 数据源 | 用途 |
 |---|---|
 | 本地审计 SQLite | 本地现金/赠送、调增/调减、现金入账用户排行、调额记录和操作审计 |
-| Sub2API 官方 Admin API | 请求数、四类 Token、标准消费、实际消费、用户排行和 requested 模型统计 |
-| Sub2API PostgreSQL 只读连接 | 用户累计充值快照、普通启用用户当前余额、后台调额事件关联和历史余额事件 |
+| Sub2API 官方 Admin API | 用户、余额、充值、历史事件、用量、排行和 requested 模型统计 |
 
-远端 PostgreSQL 只允许使用只读账号；余额修改只通过 Sub2API 官方 Admin API 完成。
+本系统不连接 Sub2API 数据库；远端读取和余额修改均通过官方 Admin API 完成。
 
 ## 目录
 
@@ -41,7 +40,7 @@ sub2api-audit-admin/
 ```bash
 cd backend
 cp .env.example .env
-php artisan key:generate
+# 只填写 SUB2API_API_URL 和 SUB2API_ADMIN_API_KEY
 php artisan migrate
 php artisan serve --host=127.0.0.1 --port=8010
 ```

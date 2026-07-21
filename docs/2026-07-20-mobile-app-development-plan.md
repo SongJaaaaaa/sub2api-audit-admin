@@ -220,7 +220,7 @@ frontend/src/
 ### 7.4 API 与环境变量
 
 - Web 生产环境继续使用同域 `/api/v1`。
-- App 构建必须设置 `VITE_API_BASE_URL=https://实际域名/api/v1`。
+- App API 地址固定为 `https://audit.sjiaa.cc.cd/api/v1`，构建无需设置 `VITE_API_BASE_URL`。
 - 正式环境只允许 HTTPS，不接受明文 HTTP API。
 - 后端 CORS 仅加入实际 Capacitor 来源和必要请求头。
 - 验证 `Authorization`、文件上传、文件下载和 401 响应均能通过 WebView。

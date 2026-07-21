@@ -7,7 +7,6 @@
 ```bash
 cd backend
 cp .env.example .env
-php artisan key:generate
 php artisan migrate
 php artisan serve --host=127.0.0.1 --port=8010
 ```
@@ -47,7 +46,7 @@ corepack pnpm e2e
 
 - 今天、本周、本月、近 7 天、近 30 天和自定义范围均包含首尾日期。
 - 近 7 天等于今天及之前 6 天；近 30 天等于今天及之前 29 天。
-- 本地 SQLite 使用中国时间半开区间，远端 PostgreSQL 使用对应 UTC 半开区间。
+- 本地 SQLite 使用中国时间半开区间，远端事件使用对应 UTC 半开区间。
 - 切账日账务从精确切账时间开始，不从当天 00:00 开始。
 - 官方用量不受切账时间截断。
 - Token 包含输入、输出、缓存创建和缓存读取四类。
@@ -108,7 +107,7 @@ corepack pnpm e2e
 
 ## 8. 安全检查
 
-- 远端 PostgreSQL 连接账号必须只读。
+- 生产环境不配置或连接 Sub2API PostgreSQL。
 - 代码、测试、文档和日志中不得出现服务器密码、数据库密码、Admin API Key 或 Authorization。
 - 结构异常只记录安全字段形态，不增加猜测式兼容。
 - 附件使用私有盘，下载必须鉴权，富文本脚本保存后被过滤。
