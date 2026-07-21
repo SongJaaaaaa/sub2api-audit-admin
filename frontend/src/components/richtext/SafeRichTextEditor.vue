@@ -25,6 +25,17 @@ const previewOpen = ref(false)
 const isDragging = ref(false)
 const maxImageSize = 2 * 1024 * 1024
 let dragDepth = 0
+// 记录编辑区内最后一次光标位置，供失焦后（如点击工具栏上传按钮）插入图片时恢复
+let savedRange: Range | null = null
+
+function saveSelection() {
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0) return
+  const range = selection.getRangeAt(0)
+  if (editor.value && editor.value.contains(range.commonAncestorContainer)) {
+    savedRange = range.cloneRange()
+  }
+}
 
 watch(
   () => props.value,
@@ -52,7 +63,14 @@ function sync() {
 
 function run(cmd: string) {
   editor.value?.focus()
+  // 恢复失焦前保存的选区，保证在移动端点击工具栏后格式命令作用于原文本
+  if (savedRange && editor.value?.contains(savedRange.commonAncestorContainer)) {
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(savedRange)
+  }
   document.execCommand(cmd)
+  saveSelection()
   sync()
 }
 
@@ -93,15 +111,29 @@ async function insertImages(files: File[], range?: Range | null) {
 
   try {
     const sources = await Promise.all(images.map(readImage))
-    if (!editor.value) return
+    const host = editor.value
+    if (!host) return
 
-    editor.value.focus()
-    if (range && editor.value.contains(range.commonAncestorContainer)) {
-      const selection = window.getSelection()
-      selection?.removeAllRanges()
-      selection?.addRange(range)
+    // 选定插入位置：优先拖拽落点 → 已保存光标 → 内容末尾。
+    // 直接用 DOM 插入 <img>，避免 execCommand('insertImage') 在移动端失焦时静默失败。
+    let target = range && host.contains(range.commonAncestorContainer) ? range : savedRange
+    if (!target || !host.contains(target.commonAncestorContainer)) {
+      target = document.createRange()
+      target.selectNodeContents(host)
+      target.collapse(false)
     }
-    sources.forEach((src) => document.execCommand('insertImage', false, src))
+
+    sources.forEach((src) => {
+      const img = document.createElement('img')
+      img.src = src
+      target!.insertNode(img)
+      // 光标移动到刚插入图片之后，保证多张图片按顺序排列
+      target!.setStartAfter(img)
+      target!.setEndAfter(img)
+    })
+
+    // 更新保存的光标位置并同步内容
+    savedRange = target.cloneRange()
     sync()
   } catch (err) {
     console.error('读取富文本图片失败', err)
@@ -169,7 +201,10 @@ function onDrop(e: DragEvent) {
       contenteditable="true"
       data-placeholder="可输入备注、调整字体样式，也可插入图片..."
       @input="sync"
-      @blur="sync"
+      @blur="() => { saveSelection(); sync() }"
+      @keyup="saveSelection"
+      @mouseup="saveSelection"
+      @touchend="saveSelection"
       @click="onEditorClick"
       @dragenter="onDragEnter"
       @dragover="onDragOver"

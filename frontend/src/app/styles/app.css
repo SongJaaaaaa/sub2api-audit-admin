@@ -1128,7 +1128,7 @@
   grid-template: unset;
 }
 .appLoginMinimal {
-  background: #fff;
+  background: var(--bg);
   padding: calc(20px + var(--app-safe-top)) 20px 40px calc(40px + var(--app-safe-bottom));
   display: flex;
   flex-direction: column;
@@ -1153,34 +1153,34 @@
 .appPillInput.ant-input-affix-wrapper {
   height: 52px !important;
   border-radius: 999px !important;
-  border: 1px solid #e5e7eb !important;
-  background: #f8f8f8 !important;
+  border: 1px solid var(--border) !important;
+  background: var(--surface2) !important;
   font-size: 15px !important;
-  color: #333 !important;
+  color: var(--text) !important;
   box-shadow: none !important;
   padding: 0 20px !important;
 }
 .appPillInput:focus,
 .appPillInput:focus-within,
 .appPillInput.ant-input-affix-wrapper:focus-within {
-  border-color: #d1d5db !important;
-  background: #fff !important;
+  border-color: var(--primary) !important;
+  background: var(--surface) !important;
   box-shadow: none !important;
 }
 .appPillInput .ant-input {
   background: transparent !important;
-  color: #333 !important;
+  color: var(--text) !important;
 }
 .appPillInput .ant-input-prefix {
-  color: #999;
+  color: var(--text3);
   margin-right: 6px;
 }
 .appPillInput .ant-input-suffix .anticon {
-  color: #999;
+  color: var(--text3);
   font-size: 16px;
 }
 .appPillInput .ant-input::placeholder {
-  color: #bbb;
+  color: var(--text3);
 }
 
 /* 登录按钮 - 大圆角 pill */
@@ -1190,15 +1190,14 @@
   font-size: 16px !important;
   font-weight: 500 !important;
   margin-top: 8px;
-  background: #111827 !important;
-  border-color: #111827 !important;
+  background: var(--primary) !important;
+  border-color: var(--primary) !important;
   color: #fff !important;
   box-shadow: none !important;
 }
 .appLoginPillButton:hover:not(:disabled),
 .appLoginPillButton:focus:not(:disabled) {
-  background: #1f2937 !important;
-  border-color: #1f2937 !important;
+  filter: brightness(1.08);
 }
 
 /* Logo + Title header */
@@ -1241,7 +1240,7 @@
   margin: 0;
   font-size: 24px;
   font-weight: 700;
-  color: #111827;
+  color: var(--heading);
   line-height: 1.2;
 }
 
