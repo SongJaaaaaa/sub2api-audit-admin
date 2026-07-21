@@ -23,6 +23,12 @@ async function render(out, width, height, { background = '#f7f9fc', scale = 0.24
 await render(path.join(assetDir, 'icon.png'), 1024, 1024, { background: '#111827', scale: 0.72 })
 await render(path.join(assetDir, 'splash.png'), 2732, 2732)
 
+const publicDir = path.join(root, 'public')
+await render(path.join(publicDir, 'apple-touch-icon.png'), 180, 180, { background: '#111827', scale: 0.68 })
+await render(path.join(publicDir, 'pwa-192.png'), 192, 192, { background: '#111827', scale: 0.68 })
+await render(path.join(publicDir, 'pwa-512.png'), 512, 512, { background: '#111827', scale: 0.68 })
+await render(path.join(publicDir, 'pwa-maskable-512.png'), 512, 512, { background: '#111827', scale: 0.56 })
+
 const androidRes = path.join(root, 'android/app/src/main/res')
 const iconSizes = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 }
 for (const [density, size] of Object.entries(iconSizes)) {
