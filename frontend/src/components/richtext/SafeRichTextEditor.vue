@@ -7,9 +7,10 @@ import {
   UnderlineOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons-vue'
-import { message } from 'ant-design-vue'
+import { App as AntApp } from 'ant-design-vue'
 import { onMounted, ref, watch } from 'vue'
 
+const { message } = AntApp.useApp()
 const props = defineProps<{
   value: string
 }>()
@@ -152,13 +153,13 @@ function onDrop(e: DragEvent) {
 <template>
   <div class="richEditor">
     <div class="richToolbar">
-      <a-button size="small" title="加粗" @click="run('bold')"><BoldOutlined /></a-button>
-      <a-button size="small" title="斜体" @click="run('italic')"><ItalicOutlined /></a-button>
-      <a-button size="small" title="下划线" @click="run('underline')"><UnderlineOutlined /></a-button>
-      <a-button size="small" title="无序列表" @click="run('insertUnorderedList')"><UnorderedListOutlined /></a-button>
-      <a-button size="small" title="有序列表" @click="run('insertOrderedList')"><OrderedListOutlined /></a-button>
+      <a-tooltip title="加粗"><a-button size="small" @click="run('bold')"><BoldOutlined /></a-button></a-tooltip>
+      <a-tooltip title="斜体"><a-button size="small" @click="run('italic')"><ItalicOutlined /></a-button></a-tooltip>
+      <a-tooltip title="下划线"><a-button size="small" @click="run('underline')"><UnderlineOutlined /></a-button></a-tooltip>
+      <a-tooltip title="无序列表"><a-button size="small" @click="run('insertUnorderedList')"><UnorderedListOutlined /></a-button></a-tooltip>
+      <a-tooltip title="有序列表"><a-button size="small" @click="run('insertOrderedList')"><OrderedListOutlined /></a-button></a-tooltip>
       <a-upload :before-upload="beforeUpload" :show-upload-list="false" accept="image/*">
-        <a-button size="small" title="插入图片"><PictureOutlined /></a-button>
+        <a-tooltip title="插入图片"><a-button size="small"><PictureOutlined /></a-button></a-tooltip>
       </a-upload>
     </div>
     <div

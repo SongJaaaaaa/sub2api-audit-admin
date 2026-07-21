@@ -19,6 +19,18 @@
 /frontend/.vite/
 /frontend/test-results/
 /frontend/playwright-report/
+/frontend/.playwright-cli/
+/frontend/output/
+/frontend/android/local.properties
+/frontend/android/.gradle/
+/frontend/android/**/build/
+/frontend/*.jks
+/frontend/*.keystore
+/.corepack/
+/.pnpm-store/
+/.vite/
+/test-results/
+/release-tmp/
 
 # tools
 /.idea/

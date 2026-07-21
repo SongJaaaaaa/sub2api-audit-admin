@@ -43,6 +43,7 @@ Route::prefix('v1')->group(function (): void {
         Route::post('ledger-adjustments', [LedgerAdjustmentController::class, 'store']);
         Route::post('ledger-adjustments/batch-gift', [LedgerAdjustmentController::class, 'batchGift']);
         Route::post('ledger-adjustments/{adjustment}/retry', [LedgerAdjustmentController::class, 'retry']);
+        Route::post('ledger-adjustments/{adjustment}/void', [LedgerAdjustmentController::class, 'markVoided']);
         Route::get('finance/users/{id}/summary', [FinanceLedgerController::class, 'userSummary']);
         Route::get('finance/cash', [FinanceLedgerController::class, 'cash']);
         Route::post('finance/cash', [FinanceLedgerController::class, 'storeIncome']);

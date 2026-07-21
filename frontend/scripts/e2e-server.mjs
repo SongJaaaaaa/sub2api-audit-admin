@@ -83,7 +83,24 @@ if (mode === 'backend') {
   })
 }
 
+let stopping = false
+function stopChild() {
+  if (!child || stopping) return
+  stopping = true
+  if (process.platform === 'win32') {
+    spawnSync('C:\\Windows\\System32\\taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+    return
+  }
+  child.kill('SIGTERM')
+}
+
 for (const signal of ['SIGINT', 'SIGTERM']) {
-  process.on(signal, () => child.kill(signal))
+  process.on(signal, () => {
+    stopChild()
+    if (process.platform === 'win32') process.exit(0)
+  })
 }
 child.on('exit', (code) => process.exit(code ?? 0))

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { CheckOutlined, EyeOutlined, SearchOutlined, UndoOutlined } from '@ant-design/icons-vue'
+import { CheckOutlined, EyeOutlined, FilterOutlined, RightOutlined, SearchOutlined, UndoOutlined } from '@ant-design/icons-vue'
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
-import { message, Modal } from 'ant-design-vue'
+import { App as AntApp } from 'ant-design-vue'
 import dayjs, { type Dayjs } from 'dayjs'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import {
@@ -19,7 +19,13 @@ import {
   type ProfitSettlementItem,
   type ProfitSummary,
 } from '../api/profit'
+import MobileFilterSheet from '../app/components/MobileFilterSheet.vue'
+import MobileListState from '../app/components/MobileListState.vue'
+import MobileLoadMore from '../app/components/MobileLoadMore.vue'
+import { useAppMode } from '../app/composables/useAppMode'
 
+const { message, modal } = AntApp.useApp()
+const { isAppMode } = useAppMode()
 const emptySummary = (): ProfitSummary => ({ income_total: '0.00', expense_total: '0.00', profit_total: '0.00', income_count: 0, expense_count: 0 })
 const activeTab = ref('pending')
 const dates = ref<[Dayjs, Dayjs] | null>([dayjs().subtract(6, 'day'), dayjs()])
@@ -41,10 +47,18 @@ const historyLoading = ref(false)
 const historyStatus = ref('')
 const settlements = ref<ProfitSettlement[]>([])
 const historyPage = reactive({ current: 1, pageSize: 20, total: 0 })
+let summaryVersion = 0
+let settlementsVersion = 0
+let detailVersion = 0
+let batchVersion = 0
 const batchOpen = ref(false)
 const batchLoading = ref(false)
 const selectedBatch = ref<ProfitSettlement | null>(null)
 const batchItems = ref<ProfitSettlementItem[]>([])
+const mobileDayLimit = ref(20)
+const historyError = ref('')
+const summaryError = ref('')
+const filterOpen = ref(false)
 const columnWidths = ref<Record<string, number>>(readColumnWidths())
 
 interface ResizableColumn {
@@ -57,7 +71,14 @@ interface ResizableColumn {
 }
 
 const pendingCount = computed(() => pendingSummary.income_count + pendingSummary.expense_count)
-const canSettle = computed(() => !loading.value && pendingCount.value > 0)
+const canSettle = computed(() => !loading.value && !settling.value && pendingCount.value > 0)
+const mobileDays = computed(() => days.value.slice(0, mobileDayLimit.value))
+const hasMoreDays = computed(() => mobileDayLimit.value < days.value.length)
+const hasMoreSettlements = computed(() => settlements.value.length < historyPage.total)
+const activeFilters = computed(() => [
+  dates.value ? `日期：${dates.value[0].format('MM-DD')} 至 ${dates.value[1].format('MM-DD')}` : '',
+  activeTab.value === 'history' && historyStatus.value ? `状态：${historyStatus.value === 'confirmed' ? '已确认' : '已撤销'}` : '',
+].filter(Boolean))
 const incomeOwners = computed(() => owners.value.filter(owner => owner.income_count > 0))
 const expenseOwners = computed(() => owners.value.filter(owner => owner.expense_count > 0))
 const tableWidth = computed(() => 475 + (incomeOwners.value.length + expenseOwners.value.length) * 140)
@@ -191,32 +212,41 @@ async function loadSummary() {
   const range = params()
   if (!range) return void message.warning('请选择日期范围')
   clearPending()
+  mobileDayLimit.value = 20
+  const version = ++summaryVersion
+  summaryError.value = ''
   loading.value = true
   try {
     const res = await getProfitSummary(range)
+    if (version !== summaryVersion) return
     owners.value = res.owners
     days.value = res.days
     Object.assign(summary, res.summary)
     Object.assign(pendingSummary, res.pending_summary)
   } catch (err) {
+    if (version !== summaryVersion) return
+    summaryError.value = apiMessage(err, '读取利润统计失败')
     message.error(apiMessage(err, '读取利润统计失败'))
   } finally {
-    loading.value = false
+    if (version === summaryVersion) loading.value = false
   }
 }
 
 async function openDay(row: ProfitDay) {
+  const version = ++detailVersion
   detailDate.value = row.biz_date
   detailOpen.value = true
   detailLoading.value = true
   try {
     const res = await getProfitDetails(row.biz_date)
+    if (version !== detailVersion) return
     incomeDetails.value = res.income
     expenseDetails.value = res.expenses
   } catch (err) {
+    if (version !== detailVersion) return
     message.error(apiMessage(err, '读取当日明细失败'))
   } finally {
-    detailLoading.value = false
+    if (version === detailVersion) detailLoading.value = false
   }
 }
 
@@ -225,6 +255,7 @@ function dayRow(row: ProfitDay) {
 }
 
 async function confirmSettlement() {
+  if (settling.value) return
   const range = params()
   if (!range) return
   settling.value = true
@@ -240,16 +271,26 @@ async function confirmSettlement() {
   }
 }
 
-async function loadSettlements() {
+async function loadSettlements(reset = false, append = false) {
+  if (historyLoading.value && !reset) return
+  if (reset) historyPage.current = 1
+  const version = ++settlementsVersion
   historyLoading.value = true
+  historyError.value = ''
   try {
-    const res = await getProfitSettlements({ page: historyPage.current, page_size: historyPage.pageSize, status: historyStatus.value })
-    settlements.value = res.items
+    const requestPage = append ? historyPage.current + 1 : historyPage.current
+    const res = await getProfitSettlements({ page: requestPage, page_size: isAppMode.value ? 20 : historyPage.pageSize, status: historyStatus.value })
+    if (version !== settlementsVersion) return
+    settlements.value = append ? [...settlements.value, ...res.items] : res.items
     historyPage.total = res.total
+    historyPage.current = res.page
+    historyPage.pageSize = res.page_size
   } catch (err) {
-    message.error(apiMessage(err, '读取分账记录失败'))
+    if (version !== settlementsVersion) return
+    historyError.value = apiMessage(err, '读取分账记录失败')
+    message.error(historyError.value)
   } finally {
-    historyLoading.value = false
+    if (version === settlementsVersion) historyLoading.value = false
   }
 }
 
@@ -260,27 +301,69 @@ function historyChange(pager: TablePaginationConfig) {
 }
 
 function searchHistory() {
-  historyPage.current = 1
-  loadSettlements()
+  loadSettlements(true)
+}
+
+function switchMobileTab(tab: string) {
+  activeTab.value = tab
+  if (tab === 'history' && !settlements.value.length) loadSettlements(true)
+}
+
+function applyMobileFilters() {
+  if (activeTab.value === 'pending') loadSummary()
+  else loadSettlements(true)
+}
+
+function resetMobileFilters() {
+  dates.value = [dayjs().subtract(6, 'day'), dayjs()]
+  historyStatus.value = ''
+  applyMobileFilters()
+}
+
+function loadMoreDays() {
+  mobileDayLimit.value += 20
+}
+
+function loadMoreSettlements() {
+  if (hasMoreSettlements.value) loadSettlements(false, true)
+}
+
+function requestSettlement() {
+  if (!canSettle.value) return
+  if (!isAppMode.value) {
+    confirmOpen.value = true
+    return
+  }
+  modal.confirm({
+    title: '确认分账？',
+    content: `${params()?.start_date} 至 ${params()?.end_date}；收入 ${pendingSummary.income_total}（${pendingSummary.income_count} 笔），支出 ${pendingSummary.expense_total}（${pendingSummary.expense_count} 笔），净利润 ${pendingSummary.profit_total}。`,
+    okText: '确认分账',
+    cancelText: '取消',
+    onOk: confirmSettlement,
+  })
 }
 
 async function openBatch(row: ProfitSettlement) {
+  const version = ++batchVersion
   selectedBatch.value = row
   batchOpen.value = true
   batchLoading.value = true
   try {
-    batchItems.value = (await getProfitSettlementItems(row.id)).items
+    const res = await getProfitSettlementItems(row.id)
+    if (version !== batchVersion || selectedBatch.value?.id !== row.id) return
+    batchItems.value = res.items
   } catch (err) {
+    if (version !== batchVersion) return
     message.error(apiMessage(err, '读取分账明细失败'))
   } finally {
-    batchLoading.value = false
+    if (version === batchVersion) batchLoading.value = false
   }
 }
 
 function reverseBatch(row: ProfitSettlement) {
-  Modal.confirm({
+  modal.confirm({
     title: '确认撤销该分账批次？',
-    content: `${row.start_date} 至 ${row.end_date} 的流水将重新进入待分账状态。`,
+        content: `${row.start_date} 至 ${row.end_date}；净利润 ${row.profit_total}，共 ${row.income_count + row.expense_count} 笔流水将重新进入待分账状态。`,
     okText: '撤销分账',
     okType: 'danger',
     cancelText: '取消',
@@ -302,12 +385,80 @@ onMounted(() => Promise.all([loadSummary(), loadSettlements()]))
 
 <template>
   <section class="page profitPage">
+    <template v-if="isAppMode">
+      <div class="appProfitTopbar">
+        <div class="appTabSwitch" role="tablist" aria-label="利润视图">
+          <button type="button" :class="{ active: activeTab === 'pending' }" @click="switchMobileTab('pending')">利润明细</button>
+          <button type="button" :class="{ active: activeTab === 'history' }" @click="switchMobileTab('history')">分账记录</button>
+        </div>
+        <button class="appSecondaryButton appFilterButton" type="button" @click="filterOpen = true"><FilterOutlined />筛选<span v-if="activeFilters.length">（{{ activeFilters.length }}）</span></button>
+      </div>
+      <div v-if="activeFilters.length" class="appFilterTags"><span v-for="tag in activeFilters" :key="tag" class="appFilterTag">{{ tag }}</span></div>
+
+      <template v-if="activeTab === 'pending'">
+        <div class="appSummaryGrid">
+          <article class="appSummaryCard"><span>收入合计</span><strong>{{ summary.income_total }}</strong></article>
+          <article class="appSummaryCard"><span>经营支出</span><strong class="expenseValue">{{ summary.expense_total }}</strong></article>
+          <article class="appSummaryCard"><span>净利润</span><strong :class="{ negative: Number(summary.profit_total) < 0 }">{{ summary.profit_total }}</strong></article>
+          <article class="appSummaryCard"><span>待分账</span><strong>{{ pendingCount }} 笔</strong></article>
+        </div>
+        <div class="appProfitActions"><button class="appPrimaryButton" type="button" :disabled="!canSettle" @click="requestSettlement"><CheckOutlined />{{ settling ? '提交中…' : `确认分账（${pendingCount} 笔）` }}</button></div>
+        <MobileListState :loading="loading && !days.length" :error="days.length ? '' : summaryError" :empty="!loading && !summaryError && !days.length" empty-text="当前日期范围暂无收支流水" @retry="loadSummary" />
+        <div v-if="days.length" class="appCardList">
+          <article v-for="row in mobileDays" :key="row.biz_date" class="appRecordCard" role="button" tabindex="0" @click="openDay(row)" @keydown.enter="openDay(row)">
+            <div class="appCardTop"><strong>{{ row.biz_date }}</strong><RightOutlined class="appCardArrow" /></div>
+            <div class="appCardMetric"><strong>{{ row.profit_total }}</strong><span class="appStatus" :class="Number(row.profit_total) < 0 ? 'danger' : 'success'">净利润</span></div>
+            <div class="appCardBottom"><span class="appCardMeta">收入 {{ row.income_total }}</span><span class="appCardMeta">支出 {{ row.expense_total }}</span></div>
+            <div class="appCardMeta">{{ row.income_count + row.expense_count }} 笔流水 · 点击查看明细</div>
+          </article>
+        </div>
+        <MobileLoadMore :loading="false" :has-more="hasMoreDays" :loaded="mobileDays.length" :total="days.length" @load="loadMoreDays" />
+      </template>
+
+      <template v-else>
+        <div class="appResultMeta">共 {{ historyPage.total }} 条分账记录</div>
+        <MobileListState :loading="historyLoading && !settlements.length" :error="settlements.length ? '' : historyError" :empty="!historyLoading && !historyError && !settlements.length" empty-text="暂无分账记录" @retry="loadSettlements(true)" />
+        <div v-if="settlements.length" class="appCardList">
+          <article v-for="row in settlements" :key="row.id" class="appRecordCard" role="button" tabindex="0" @click="openBatch(row)" @keydown.enter="openBatch(row)">
+            <div class="appCardTop"><strong>{{ row.batch_no }}</strong><span class="appStatus" :class="row.status === 'confirmed' ? 'success' : ''">{{ row.status === 'confirmed' ? '已确认' : '已撤销' }}</span></div>
+            <div class="appCardMetric"><strong :class="{ negative: Number(row.profit_total) < 0 }">{{ row.profit_total }}</strong><RightOutlined class="appCardArrow" /></div>
+            <div class="appCardBottom"><span class="appCardMeta">{{ row.start_date }} 至 {{ row.end_date }}</span><span class="appCardMeta">{{ row.income_count + row.expense_count }} 笔</span></div>
+            <div class="appCardBottom"><span class="appCardMeta">操作人：{{ row.operator_name || '-' }}</span><button v-if="row.status === 'confirmed'" class="appSecondaryButton appSmallButton" type="button" @click.stop="reverseBatch(row)"><UndoOutlined />撤销</button></div>
+          </article>
+        </div>
+        <MobileLoadMore :loading="historyLoading && !!settlements.length" :has-more="hasMoreSettlements" :loaded="settlements.length" :total="historyPage.total" @load="loadMoreSettlements" />
+      </template>
+
+      <MobileFilterSheet v-model:open="filterOpen" :active-count="activeFilters.length" @reset="resetMobileFilters" @apply="applyMobileFilters">
+        <div class="appFormStack">
+          <label>日期范围<a-range-picker v-model:value="dates" class="appFullControl" @change="clearPending" /></label>
+          <label v-if="activeTab === 'history'">分账状态<a-select v-model:value="historyStatus" allow-clear placeholder="全部状态"><a-select-option value="confirmed">已确认</a-select-option><a-select-option value="reversed">已撤销</a-select-option></a-select></label>
+        </div>
+      </MobileFilterSheet>
+
+      <a-drawer v-model:open="detailOpen" placement="right" :width="'100%'" :title="`${detailDate} 收支明细`">
+        <div class="appDetailBody">
+          <MobileListState :loading="detailLoading" :empty="!detailLoading && !incomeDetails.length && !expenseDetails.length" empty-text="暂无明细" />
+          <section v-if="incomeDetails.length" class="appDetailSection"><h2>收入明细</h2><div class="appCardList"><article v-for="row in incomeDetails" :key="row.id" class="appRecordCard"><div class="appCardTop"><strong>{{ row.entry_no }}</strong><span class="appStatus success">收入</span></div><div class="appCardMetric"><strong>{{ row.amount }}</strong></div><div class="appCardMeta">{{ row.biz_date }} · {{ row.sub2api_user_email || `用户 #${row.sub2api_user_id || '-'}` }} · {{ row.owner_name }}</div><div v-if="row.remark" class="appCardMeta wrap">{{ row.remark }}</div></article></div></section>
+          <section v-if="expenseDetails.length" class="appDetailSection"><h2>支出明细</h2><div class="appCardList"><article v-for="row in expenseDetails" :key="row.id" class="appRecordCard"><div class="appCardTop"><strong>{{ row.expense_no }}</strong><span class="appStatus danger">支出</span></div><div class="appCardMetric"><strong class="expenseValue">{{ row.amount }}</strong></div><div class="appCardMeta">{{ row.biz_date }} · {{ row.category }} · {{ row.owner_name }}</div><div v-if="row.remark" class="appCardMeta wrap">{{ row.remark }}</div></article></div></section>
+        </div>
+      </a-drawer>
+
+      <a-drawer v-if="selectedBatch" v-model:open="batchOpen" placement="right" :width="'100%'" :title="`分账明细 · ${selectedBatch.batch_no}`">
+        <div class="appDetailBody">
+          <MobileListState :loading="batchLoading" :empty="!batchLoading && !batchItems.length" empty-text="暂无分账明细" />
+          <div v-if="batchItems.length" class="appCardList"><article v-for="row in batchItems" :key="row.id" class="appRecordCard"><div class="appCardTop"><strong>{{ row.reference_no }}</strong><span class="appStatus">{{ row.item_type === 'cash_entry' ? '收入' : '支出' }}</span></div><div class="appCardMetric"><strong :class="{ expenseValue: row.item_type === 'operation_expense' }">{{ row.amount }}</strong></div><div class="appCardBottom"><span class="appCardMeta">{{ row.biz_date }} · {{ row.owner_name || '-' }}</span><span class="appCardMeta">{{ row.description || '-' }}</span></div></article></div>
+        </div>
+      </a-drawer>
+    </template>
+
+    <template v-else>
     <a-tabs v-model:active-key="activeTab">
       <a-tab-pane key="pending" tab="利润明细">
         <div class="profitToolbar">
           <a-range-picker v-model:value="dates" @change="clearPending" />
           <a-button type="primary" :loading="loading" @click="loadSummary"><SearchOutlined />查询</a-button>
-          <a-button type="primary" danger :disabled="!canSettle" @click="confirmOpen = true"><CheckOutlined />确认分账（{{ pendingCount }} 笔）</a-button>
+          <a-button type="primary" danger :disabled="!canSettle" @click="requestSettlement"><CheckOutlined />确认分账（{{ pendingCount }} 笔）</a-button>
         </div>
 
         <div class="profitSummary">
@@ -439,6 +590,7 @@ onMounted(() => Promise.all([loadSummary(), loadSettlements()]))
         <section class="detailSection"><h3>支出明细</h3><a-table row-key="id" :columns="batchColumns" :data-source="batchExpenses" :pagination="false" :scroll="{ x: 820 }" size="small" @resize-column="resizeBatchColumn" /></section>
       </a-spin>
     </a-drawer>
+    </template>
   </section>
 </template>
 
@@ -450,12 +602,30 @@ onMounted(() => Promise.all([loadSummary(), loadSettlements()]))
 .profitSummary section { padding: 14px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .profitSummary span { display: block; margin-bottom: 5px; color: var(--muted); font-size: 13px; }
 .profitSummary strong { font-size: 22px; }
-.expenseValue, .negative { color: #cf3f32; }
+.expenseValue, .negative { color: var(--danger); }
 .detailSection + .detailSection { margin-top: 24px; }
 .detailSection h3 { margin: 0 0 10px; font-size: 15px; }
 :deep(.clickableRow) { cursor: pointer; }
-:deep(.clickableRow:hover) > td { background: rgba(22, 119, 255, .06) !important; }
+:deep(.clickableRow:hover) > td { background: var(--row-hover) !important; }
 :deep(.profitTotalRow > td) { background: var(--surface-muted, #fafafa); }
+.appProfitTopbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.appTabSwitch { display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface2); }
+.appTabSwitch button { min-height: 36px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+.appTabSwitch button.active { background: var(--surface); color: var(--primary); box-shadow: var(--shadow-card); }
+.appProfitActions { display: flex; margin: 0 0 12px; }
+.appProfitActions .appPrimaryButton { width: 100%; }
+.appSummaryGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.appSummaryCard { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.appSummaryCard span { display: block; margin-bottom: 4px; color: var(--muted); font-size: 12px; }
+.appSummaryCard strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.appCardList .appRecordCard { min-height: 124px; }
+.appDetailBody { padding: 16px; padding-bottom: calc(28px + var(--app-safe-bottom)); }
+.appDetailSection + .appDetailSection { margin-top: 18px; }
+.appDetailSection h2 { margin: 0 0 8px; font-size: 16px; color: var(--heading); }
+.appFormStack { display: grid; gap: 14px; }
+.appFormStack label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
+.appFullControl { width: 100%; }
+.appSmallButton { min-height: 34px; padding: 0 10px; font-size: 12px; }
 @media (max-width: 760px) { .profitSummary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .profitToolbar :deep(.ant-picker) { width: 100%; } }
 @media (max-width: 420px) { .profitSummary { grid-template-columns: 1fr; } }
 </style>

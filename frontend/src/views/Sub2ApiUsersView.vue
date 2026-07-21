@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { GiftOutlined, HistoryOutlined, ImportOutlined, MinusCircleOutlined, PlusCircleOutlined } from '@ant-design/icons-vue'
 import type { TableProps } from 'ant-design-vue'
-import { message } from 'ant-design-vue'
+import { App as AntApp } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
@@ -11,6 +11,9 @@ import { getSub2BalanceHistory, getSub2Users, type Sub2BalanceHistoryItem, type 
 import SafeRichTextDisplay from '../components/richtext/SafeRichTextDisplay.vue'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useTableColumns } from '../composables/useTableColumns'
+import { useAppMode } from '../app/composables/useAppMode'
+const { message } = AntApp.useApp()
+const { isAppMode } = useAppMode()
 const router = useRouter()
 const loading = ref(false)
 const historyLoading = ref(false)
@@ -36,6 +39,12 @@ const lastUsedRange = ref<[Dayjs, Dayjs] | null>(null)
 const batchMode = ref<'selected' | 'all' | 'imported'>('selected')
 const batchProgress = ref('')
 const batchForm = reactive({ amount: '', admin_notes: '', include_revenue: false })
+const mobileFiltersOpen = ref(false)
+const mobileDetailOpen = ref(false)
+const mobileHistoryLoadingMore = ref(false)
+const mobileLoadingMore = ref(false)
+let historyVersion = 0
+let usersVersion = 0
 const page = reactive({
   current: 1,
   pageSize: 20,
@@ -64,6 +73,20 @@ const batchCount = computed(() => {
   return batchMode.value === 'selected' ? selectedIds.value.length : page.total
 })
 const actionName = computed(() => batchForm.include_revenue ? '入账' : '赠送')
+const batchTotalAmount = computed(() => moneyText(Number(batchForm.amount || 0) * batchCount.value))
+const hasMoreUsers = computed(() => page.current * page.pageSize < page.total)
+const hasMoreHistory = computed(() => historyPage.current * historyPage.pageSize < historyPage.total)
+const mobileFilterTags = computed(() => {
+  const tags: Array<{ key: string; label: string }> = []
+  if (keyword.value.trim()) tags.push({ key: 'keyword', label: `关键词：${keyword.value.trim()}` })
+  if (userFilter.value) {
+    const labels = { zero_balance: '零余额', negative_balance: '负余额', disabled: '已禁用' }
+    tags.push({ key: 'userFilter', label: labels[userFilter.value] })
+  }
+  if (lastUsedRange.value) tags.push({ key: 'lastUsedRange', label: '近期使用时间' })
+  if (balanceSort.value) tags.push({ key: 'balanceSort', label: balanceSort.value === 'asc' ? '余额升序' : '余额降序' })
+  return tags
+})
 const rowSelection = computed(() => ({
   selectedRowKeys: selectedIds.value,
   onChange: (keys: (string | number)[]) => { selectedIds.value = keys.map(Number) },
@@ -83,9 +106,11 @@ function userParams(pageNo = page.current, pageSize = page.pageSize) {
 }
 
 async function loadUsers() {
+  const version = ++usersVersion
   loading.value = true
   try {
     const res = await getSub2Users(userParams())
+    if (version !== usersVersion) return
     users.value = res.items
     page.total = res.total
     Object.assign(summary, res.summary)
@@ -93,25 +118,69 @@ async function loadUsers() {
     loadError.value = ''
     selectedIds.value = []
   } catch {
+    if (version !== usersVersion) return
     loadError.value = 'Sub2API 用户数据暂不可用，不展示零值。'
     message.error('读取 Sub2API 用户失败')
   } finally {
-    loading.value = false
+    if (version === usersVersion) loading.value = false
   }
 }
 
 async function loadHistory(userId: number, p = 1) {
+  const version = ++historyVersion
   historyLoading.value = true
   try {
     const res = await getSub2BalanceHistory(userId, { page: p, page_size: historyPage.pageSize })
+    if (version !== historyVersion || selectedUser.value?.id !== userId) return
     history.value = res.items
     historyPage.total = res.total
     historyPage.current = p
   } catch {
+    if (version !== historyVersion) return
     history.value = []
     message.error('读取充值记录失败')
   } finally {
-    historyLoading.value = false
+    if (version === historyVersion) historyLoading.value = false
+  }
+}
+
+async function loadMoreUsers() {
+  if (loading.value || mobileLoadingMore.value || !hasMoreUsers.value) return
+  const version = ++usersVersion
+  mobileLoadingMore.value = true
+  try {
+    const next = page.current + 1
+    const res = await getSub2Users(userParams(next))
+    if (version !== usersVersion) return
+    users.value = [...users.value, ...res.items]
+    page.current = next
+    page.total = res.total
+    Object.assign(summary, res.summary)
+  } catch {
+    if (version !== usersVersion) return
+    message.error('加载更多用户失败')
+  } finally {
+    mobileLoadingMore.value = false
+  }
+}
+
+async function loadMoreHistory() {
+  if (!selectedUser.value || historyLoading.value || mobileHistoryLoadingMore.value || !hasMoreHistory.value) return
+  const userId = selectedUser.value.id
+  const version = ++historyVersion
+  mobileHistoryLoadingMore.value = true
+  try {
+    const next = historyPage.current + 1
+    const res = await getSub2BalanceHistory(userId, { page: next, page_size: historyPage.pageSize })
+    if (version !== historyVersion || selectedUser.value?.id !== userId) return
+    history.value = [...history.value, ...res.items]
+    historyPage.current = next
+    historyPage.total = res.total
+  } catch {
+    if (version !== historyVersion) return
+    message.error('加载更多充值记录失败')
+  } finally {
+    mobileHistoryLoadingMore.value = false
   }
 }
 
@@ -121,6 +190,38 @@ function openHistory(row: Sub2User) {
   history.value = []
   historyPage.current = 1
   loadHistory(row.id)
+}
+
+function openMobileUser(row: Sub2User) {
+  selectedUser.value = row
+  mobileDetailOpen.value = true
+  history.value = []
+  historyPage.current = 1
+  loadHistory(row.id)
+}
+
+function toggleMobileSelection(row: Sub2User, event: Event) {
+  const checked = (event.target as HTMLInputElement).checked
+  selectedIds.value = checked
+    ? [...new Set([...selectedIds.value, row.id])]
+    : selectedIds.value.filter(id => id !== row.id)
+}
+
+function clearMobileFilter(key: string) {
+  if (key === 'keyword') keyword.value = ''
+  if (key === 'userFilter') userFilter.value = ''
+  if (key === 'lastUsedRange') lastUsedRange.value = null
+  if (key === 'balanceSort') balanceSort.value = ''
+  search()
+}
+
+function resetMobileFilters() {
+  keyword.value = ''
+  userFilter.value = ''
+  lastUsedRange.value = null
+  balanceSort.value = ''
+  mobileFiltersOpen.value = false
+  search()
 }
 
 function historyPageChange(p: number) {
@@ -282,7 +383,11 @@ function opSign(row: Sub2BalanceHistoryItem) {
 }
 
 function opColor(row: Sub2BalanceHistoryItem) {
-  return row.operation === 'increment' ? '#52c41a' : '#ff4d4f'
+  return row.operation === 'increment' ? 'var(--success)' : 'var(--danger)'
+}
+
+function opBg(row: Sub2BalanceHistoryItem) {
+  return row.operation === 'increment' ? 'var(--success-soft)' : 'var(--danger-soft)'
 }
 
 function timeText(row: Sub2BalanceHistoryItem) {
@@ -312,7 +417,218 @@ onMounted(loadUsers)
 </script>
 
 <template>
-  <section class="page">
+  <section v-if="isAppMode" class="app-page app-sub2-users">
+    <header class="app-header">
+      <div>
+        <span class="app-eyebrow">Sub2API</span>
+        <h1>用户</h1>
+      </div>
+      <strong class="app-count">{{ summary.user_count }} 人</strong>
+    </header>
+
+    <div class="app-toolbar">
+      <a-input-search
+        v-model:value="keyword"
+        class="app-search"
+        placeholder="邮箱或用户名"
+        allow-clear
+        enter-button
+        @search="search"
+      />
+      <a-button class="app-filter-trigger" @click="mobileFiltersOpen = !mobileFiltersOpen">
+        筛选<span v-if="mobileFilterTags.length">（{{ mobileFilterTags.length }}）</span>
+      </a-button>
+      <a-button @click="openImport"><template #icon><ImportOutlined /></template>导入</a-button>
+      <a-button type="primary" :disabled="page.total === 0" @click="openBatchGift">
+        <template #icon><GiftOutlined /></template>
+        批量
+      </a-button>
+    </div>
+
+    <div v-if="mobileFiltersOpen" class="app-filter-sheet" @keydown.esc="mobileFiltersOpen = false">
+      <label class="app-field">
+        <span>用户状态</span>
+        <a-select v-model:value="userFilter" class="app-field-control">
+          <a-select-option value="">全部用户</a-select-option>
+          <a-select-option value="zero_balance">零余额用户</a-select-option>
+          <a-select-option value="negative_balance">负余额用户</a-select-option>
+          <a-select-option value="disabled">禁用用户</a-select-option>
+        </a-select>
+      </label>
+      <label class="app-field">
+        <span>近期使用时间</span>
+        <a-range-picker v-model:value="lastUsedRange" class="app-field-control" :placeholder="['开始日期', '结束日期']" />
+      </label>
+      <label class="app-field">
+        <span>余额排序</span>
+        <a-select v-model:value="balanceSort" class="app-field-control">
+          <a-select-option value="">默认排序</a-select-option>
+          <a-select-option value="asc">余额从低到高</a-select-option>
+          <a-select-option value="desc">余额从高到低</a-select-option>
+        </a-select>
+      </label>
+      <div class="app-filter-actions">
+        <a-button @click="resetMobileFilters">重置</a-button>
+        <a-button type="primary" @click="mobileFiltersOpen = false; search()">查询</a-button>
+      </div>
+    </div>
+
+    <div v-if="mobileFilterTags.length" class="app-filter-tags" aria-label="已生效筛选">
+      <button v-for="tag in mobileFilterTags" :key="tag.key" type="button" class="app-filter-tag" @click="clearMobileFilter(tag.key)">
+        {{ tag.label }} ×
+      </button>
+    </div>
+
+    <div class="app-summary-grid">
+      <div><span>余额合计</span><strong>{{ moneyText(summary.balance_total) }}</strong></div>
+      <div><span>活跃用户</span><strong>{{ summary.active_count }}</strong></div>
+      <div><span>负余额</span><strong class="app-danger">{{ summary.negative_balance_count }}</strong></div>
+      <div><span>零余额</span><strong>{{ summary.zero_balance_count }}</strong></div>
+    </div>
+
+    <div v-if="loadError" class="app-error-bar">
+      <a-alert class="app-alert" type="error" show-icon :message="loadError" />
+      <a-button size="small" @click="loadUsers">重试</a-button>
+    </div>
+    <a-spin :spinning="loading && users.length === 0">
+      <a-empty v-if="!loading && !loadError && users.length === 0" description="暂无 Sub2API 用户数据" />
+      <div v-else class="app-card-list">
+        <article v-for="item in users" :key="item.id" class="app-card app-user-card" tabindex="0" role="button" @click="openMobileUser(item)" @keydown.enter="openMobileUser(item)">
+          <div class="app-card-top">
+            <div class="app-card-title">
+              <strong>{{ item.username || item.email || `用户 #${item.id}` }}</strong>
+              <span>{{ item.email }} · ID {{ item.id }}</span>
+            </div>
+            <input
+              class="app-card-check"
+              type="checkbox"
+              :checked="selectedIds.includes(item.id)"
+              :aria-label="`选择 ${item.email}`"
+              @click.stop
+              @change="toggleMobileSelection(item, $event)"
+            />
+          </div>
+          <div class="app-card-metrics">
+            <div><span>余额</span><strong class="app-money">{{ moneyText(item.balance) }}</strong></div>
+            <div><span>累计充值</span><strong>{{ moneyText(item.total_recharged) }}</strong></div>
+          </div>
+          <div class="app-card-foot">
+            <span class="app-status" :class="{ active: item.status === 'active' }">{{ item.status || '-' }}</span>
+            <span>{{ item.last_used_at || '从未使用' }}</span>
+            <button type="button" class="app-link-button" @click.stop="openMobileUser(item)">详情</button>
+          </div>
+        </article>
+      </div>
+    </a-spin>
+
+    <button v-if="hasMoreUsers" type="button" class="app-load-more" :disabled="mobileLoadingMore" @click="loadMoreUsers">
+      {{ mobileLoadingMore ? '加载中…' : '加载更多' }}
+    </button>
+    <p v-else-if="users.length" class="app-end-state">已显示全部用户</p>
+
+    <a-modal
+      v-model:open="importOpen"
+      title="导入赠送用户"
+      ok-text="读取用户"
+      cancel-text="取消"
+      :confirm-loading="importLoading"
+      :width="'calc(100vw - 24px)'"
+      @ok="resolveImportedUsers"
+    >
+      <a-form layout="vertical">
+        <a-form-item label="用户邮箱">
+          <a-textarea v-model:value="importText" :rows="8" placeholder="多个邮箱可用空格或换行分隔" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <a-modal
+      v-model:open="batchOpen"
+      title="批量赠送 / 入账"
+      :ok-text="`确认${actionName} ${batchCount} 人`"
+      cancel-text="取消"
+      :confirm-loading="batchSubmitting"
+      :ok-button-props="{ disabled: batchCount === 0 }"
+      :cancel-button-props="{ disabled: batchSubmitting }"
+      :closable="!batchSubmitting"
+      :mask-closable="!batchSubmitting"
+      :width="'calc(100vw - 24px)'"
+      @ok="submitBatchGift"
+    >
+      <a-form layout="vertical">
+        <a-form-item v-if="batchMode === 'imported'" :label="`已导入 ${importedUsers.length} 人`">
+          <div class="app-selected-users"><a-tag v-for="item in importedUsers" :key="item.id">{{ item.email }}</a-tag></div>
+        </a-form-item>
+        <a-form-item v-else label="操作范围">
+          <a-radio-group v-model:value="batchMode" class="app-radio-stack">
+            <a-radio value="selected" :disabled="selectedIds.length === 0">已勾选用户（{{ selectedIds.length }} 人）</a-radio>
+            <a-radio value="all">全部筛选结果（{{ page.total }} 人）</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-alert v-if="batchMode === 'all'" type="warning" show-icon :message="`将向当前筛选结果中的 ${page.total} 位用户${actionName}`" />
+        <a-form-item v-else-if="batchMode === 'selected'" :label="`已勾选 ${selectedIds.length} 人`">
+          <div class="app-selected-users"><a-tag v-for="item in batchUsers" :key="item.id">{{ item.username || item.email || `用户 #${item.id}` }}</a-tag></div>
+        </a-form-item>
+        <a-form-item :label="`每人${actionName}额度`" required><a-input v-model:value="batchForm.amount" placeholder="0.00" /></a-form-item>
+        <a-form-item label="操作类型">
+          <a-radio-group v-model:value="batchForm.include_revenue" class="app-radio-stack" @change="changeAction">
+            <a-radio :value="false">赠送</a-radio><a-radio :value="true">入账</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item label="备注"><a-textarea v-model:value="batchForm.admin_notes" :rows="3" :placeholder="`管理员${actionName}`" /></a-form-item>
+        <div class="app-confirm-summary">
+          <p><span>操作类型</span><strong>{{ actionName }}</strong></p>
+          <p><span>用户数量</span><strong>{{ batchCount }} 人</strong></p>
+          <p><span>每人额度</span><strong>{{ moneyText(batchForm.amount) }}</strong></p>
+          <p><span>合计影响</span><strong>{{ batchTotalAmount }}</strong></p>
+        </div>
+        <a-alert v-if="batchProgress" type="info" show-icon :message="batchProgress" />
+      </a-form>
+    </a-modal>
+
+    <a-drawer
+      v-model:open="mobileDetailOpen"
+      placement="right"
+      :width="'100%'"
+      :title="selectedUser ? `${selectedUser.username || selectedUser.email} · 用户详情` : '用户详情'"
+    >
+      <template v-if="selectedUser">
+        <div class="app-detail">
+          <div class="app-detail-hero">
+            <span class="app-avatar">{{ (selectedUser.username || selectedUser.email || 'U').slice(0, 1).toUpperCase() }}</span>
+            <div><h2>{{ selectedUser.username || selectedUser.email }}</h2><p>{{ selectedUser.email }} · ID {{ selectedUser.id }}</p></div>
+          </div>
+          <dl class="app-detail-grid">
+            <div><dt>余额</dt><dd class="app-money">{{ moneyText(selectedUser.balance) }}</dd></div>
+            <div><dt>累计充值</dt><dd>{{ moneyText(selectedUser.total_recharged) }}</dd></div>
+            <div><dt>角色</dt><dd>{{ selectedUser.role || '-' }}</dd></div>
+            <div><dt>状态</dt><dd>{{ selectedUser.status || '-' }}</dd></div>
+            <div><dt>最近使用</dt><dd>{{ selectedUser.last_used_at || '从未使用' }}</dd></div>
+            <div><dt>创建时间</dt><dd>{{ selectedUser.created_at || '-' }}</dd></div>
+          </dl>
+          <section class="app-detail-section">
+            <div class="app-section-head"><h2>充值历史</h2><span>{{ historyPage.total }} 条</span></div>
+            <a-spin :spinning="historyLoading && history.length === 0">
+              <a-empty v-if="!historyLoading && history.length === 0" description="暂无充值记录" />
+              <div v-else class="app-history-list">
+                <article v-for="item in history" :key="item.id" class="app-history-card">
+                  <div class="app-history-top"><strong :class="item.operation === 'increment' ? 'app-positive' : 'app-danger'">{{ opSign(item) }}{{ absVal(item.value) }}</strong><span>{{ typeLabel(item.type) }}</span></div>
+                  <div class="app-history-meta"><span>{{ item.before_balance ?? '-' }} → {{ item.after_balance ?? '-' }}</span><span>{{ item.operator_name || 'Sub2API' }}</span></div>
+                  <p v-if="item.adjust_reason || item.notes">{{ item.adjust_reason || item.notes }}</p>
+                  <small>{{ timeText(item) }}</small>
+                </article>
+              </div>
+            </a-spin>
+            <button v-if="hasMoreHistory" type="button" class="app-load-more" :disabled="mobileHistoryLoadingMore" @click="loadMoreHistory">
+              {{ mobileHistoryLoadingMore ? '加载中…' : '加载更多记录' }}
+            </button>
+          </section>
+        </div>
+      </template>
+    </a-drawer>
+  </section>
+
+  <section v-else class="page">
     <div class="pageHead pageHeadActionsOnly">
       <div class="headActions userFilters">
         <div v-if="loaded" class="compactSummary">
@@ -512,7 +828,7 @@ onMounted(loadUsers)
           <a-empty v-if="!historyLoading && history.length === 0" description="暂无充值记录" />
           <div v-else class="historyTimeline">
             <div v-for="item in history" :key="item.id" class="historyTimelineItem">
-              <div class="historyTimelineIcon" :style="{ background: opColor(item) + '20', color: opColor(item) }">
+              <div class="historyTimelineIcon" :style="{ background: opBg(item), color: opColor(item) }">
                 <PlusCircleOutlined v-if="item.operation === 'increment'" />
                 <MinusCircleOutlined v-else />
               </div>
@@ -566,8 +882,86 @@ onMounted(loadUsers)
 .compactSummary strong { color: var(--heading, #1f2937); font-variant-numeric: tabular-nums; }
 .selectedUsers { display: flex; flex-wrap: wrap; gap: 6px; max-height: 150px; overflow: auto; padding: 8px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 8px; }
 .batchScope { display: grid; gap: 10px; }
-.copyEmail { display: inline-flex; max-width: 100%; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: #1677ff; cursor: pointer; }
+.copyEmail { display: inline-flex; max-width: 100%; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: var(--primary); cursor: pointer; }
 .copyEmail span { overflow: hidden; text-overflow: ellipsis; }
 :deep(.ant-table-tbody > tr) { cursor: pointer; }
-@media (max-width: 760px) { .userFilters { padding-bottom: 4px; } }
+@media (max-width: 760px) {
+  .pageHeadActionsOnly { justify-content: stretch; }
+  .userFilters { display: grid; grid-template-columns: minmax(0, 1fr); overflow: visible; padding-bottom: 0; }
+  .userFilters > * { width: 100% !important; min-width: 0; }
+  .compactSummary { justify-content: space-between; }
+}
+
+.app-page { display: grid; gap: 14px; min-width: 0; padding-bottom: 24px; }
+.app-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.app-header h1 { margin: 2px 0 0; color: var(--heading); font-size: 22px; }
+.app-eyebrow { color: var(--muted); font-size: 12px; }
+.app-count { color: var(--primary); font-variant-numeric: tabular-nums; }
+.app-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: center; }
+.app-search { min-width: 0; }
+.app-filter-sheet { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.app-field { display: grid; gap: 6px; min-width: 0; }
+.app-field > span { color: var(--muted); font-size: 12px; }
+.app-field-control { width: 100%; }
+.app-filter-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.app-filter-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.app-filter-tag { padding: 5px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface2); color: var(--text); font-size: 12px; }
+.app-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.app-summary-grid > div { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.app-summary-grid span, .app-card-metrics span { display: block; color: var(--muted); font-size: 12px; }
+.app-summary-grid strong { display: block; margin-top: 3px; color: var(--heading); font-size: 16px; font-variant-numeric: tabular-nums; }
+.app-alert { margin: 0; }
+.app-error-bar { display: flex; align-items: center; gap: 8px; }
+.app-error-bar .ant-alert { min-width: 0; flex: 1; }
+.app-card-list, .app-history-list { display: grid; gap: 8px; }
+.app-card { min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.app-user-card { cursor: pointer; }
+.app-user-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.app-card-top, .app-card-foot, .app-history-top, .app-history-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.app-card-title { display: grid; min-width: 0; gap: 3px; }
+.app-card-title strong, .app-card-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-card-title span, .app-card-foot, .app-history-meta, .app-history-card small { color: var(--muted); font-size: 12px; }
+.app-card-check { width: 20px; height: 20px; flex: 0 0 auto; accent-color: var(--primary); }
+.app-card-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.app-card-metrics > div { min-width: 0; padding: 8px; border-radius: 6px; background: var(--surface2); }
+.app-card-metrics strong { display: block; margin-top: 3px; color: var(--heading); font-variant-numeric: tabular-nums; }
+.app-money { color: var(--primary) !important; font-variant-numeric: tabular-nums; }
+.app-danger { color: var(--danger) !important; }
+.app-positive { color: var(--success) !important; }
+.app-status { color: var(--muted); }
+.app-status.active { color: var(--success); }
+.app-link-button { padding: 0; border: 0; background: transparent; color: var(--primary); cursor: pointer; }
+.app-load-more { width: 100%; min-height: 40px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--primary); cursor: pointer; }
+.app-load-more:disabled { cursor: wait; opacity: 0.6; }
+.app-end-state { margin: 0; color: var(--muted); font-size: 12px; text-align: center; }
+.app-selected-users { display: flex; flex-wrap: wrap; gap: 6px; max-height: 140px; overflow: auto; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
+.app-radio-stack { display: grid; gap: 10px; }
+.app-confirm-summary { display: grid; gap: 8px; margin-bottom: 12px; padding: 10px; border-radius: 8px; background: var(--surface2); }
+.app-confirm-summary p { display: flex; justify-content: space-between; gap: 12px; margin: 0; }
+.app-confirm-summary p span { color: var(--muted); }
+.app-confirm-summary p strong { color: var(--heading); font-variant-numeric: tabular-nums; }
+.app-detail { display: grid; gap: 16px; padding-bottom: 24px; }
+.app-detail-hero { display: flex; align-items: center; gap: 12px; }
+.app-avatar { display: inline-flex; width: 44px; height: 44px; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 50%; background: var(--primary-soft); color: var(--primary); font-weight: 700; }
+.app-detail-hero h2 { margin: 0; color: var(--heading); font-size: 18px; }
+.app-detail-hero p { margin: 3px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.app-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.app-detail-grid > div { min-width: 0; padding: 10px; border-radius: 6px; background: var(--surface2); }
+.app-detail-grid dt { color: var(--muted); font-size: 12px; }
+.app-detail-grid dd { margin: 4px 0 0; color: var(--heading); overflow-wrap: anywhere; }
+.app-detail-section { display: grid; gap: 10px; }
+.app-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.app-section-head h2 { margin: 0; color: var(--heading); font-size: 16px; }
+.app-section-head span { color: var(--muted); font-size: 12px; }
+.app-history-card { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.app-history-top strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+.app-history-top span { color: var(--muted); font-size: 12px; }
+.app-history-meta { justify-content: flex-start; margin-top: 6px; flex-wrap: wrap; }
+.app-history-card p { margin: 6px 0 0; color: var(--text); overflow-wrap: anywhere; }
+.app-history-card small { display: block; margin-top: 6px; }
+@media (max-width: 420px) {
+  .app-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .app-toolbar .ant-btn { min-width: 0; }
+  .app-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 </style>

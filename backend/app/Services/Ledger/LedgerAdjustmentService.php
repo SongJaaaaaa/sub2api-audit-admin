@@ -71,6 +71,48 @@ class LedgerAdjustmentService
         });
     }
 
+    public function voidAdjustment(Admin $admin, LedgerAdjustment $adj): LedgerAdjustment
+    {
+        if ($adj->status === LedgerAdjustment::STATUS_VOIDED) {
+            return $adj;
+        }
+        if ($adj->status !== LedgerAdjustment::STATUS_EXCEPTION) {
+            throw new RuntimeException('仅异常调额可以作废');
+        }
+
+        return $this->withUserLock((int) $adj->sub2api_user_id, function () use ($admin, $adj): LedgerAdjustment {
+            $locked = DB::transaction(
+                fn (): LedgerAdjustment => LedgerAdjustment::query()->whereKey($adj->id)->lockForUpdate()->firstOrFail(),
+                3,
+            );
+            if ($locked->status === LedgerAdjustment::STATUS_VOIDED) {
+                return $locked;
+            }
+            if ($locked->status !== LedgerAdjustment::STATUS_EXCEPTION) {
+                throw new RuntimeException('调额状态已变化，不能作废');
+            }
+
+            $delay = (int) config('ledger.remote_reconcile_delay_seconds', 60);
+            if ($locked->request_started_at?->isAfter(now()->subSeconds($delay))) {
+                throw new RuntimeException('Sub2API 幂等流水尚未完成同步，请稍后再作废');
+            }
+            $sources = $this->read->findAdminAdjustmentSources(
+                (int) $locked->sub2api_user_id,
+                (string) $locked->idempotency_key,
+            );
+            if ($sources !== []) {
+                throw new RuntimeException('Sub2API 已存在该幂等流水，不能作废，请重试完成对账');
+            }
+
+            $before = $this->row($locked);
+            $locked->update(['status' => LedgerAdjustment::STATUS_VOIDED]);
+            $locked = $locked->refresh();
+            $this->audit->record($admin, 'ledger_adjustment.voided_by_admin', 'ledger_adjustment', $locked->id, $before, $this->row($locked));
+
+            return $locked;
+        });
+    }
+
     private function createAdjustment(
         Admin $admin,
         array $data,

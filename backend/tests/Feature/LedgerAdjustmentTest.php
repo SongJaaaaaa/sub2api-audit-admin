@@ -129,6 +129,56 @@ class LedgerAdjustmentTest extends TestCase
             && (float) $req['balance'] === 10.0);
     }
 
+    public function test_exception_adjustment_can_be_voided_after_remote_reconcile_window(): void
+    {
+        $admin = $this->admin();
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/users/1001' => $this->sub2ApiUserSequence('50.00'),
+            'https://sub2api.test/api/v1/admin/users/1001/balance' => Http::response([], 500),
+        ]);
+        $token = $admin->createToken('admin-token')->plainTextToken;
+        $this->withToken($token)->postJson('/api/v1/ledger-adjustments', [
+            'sub2api_user_id' => 1001,
+            'operation' => LedgerAdjustment::OP_INCREMENT,
+            'amount' => '10.00',
+            'adjust_reason' => '充值',
+        ])->assertStatus(409);
+        $adj = LedgerAdjustment::query()->firstOrFail();
+        $adj->update(['request_started_at' => now()->subMinutes(2)]);
+
+        $this->withToken($token)
+            ->postJson('/api/v1/ledger-adjustments/'.$adj->id.'/void')
+            ->assertOk()
+            ->assertJsonPath('adjustment.status', LedgerAdjustment::STATUS_VOIDED);
+
+        $this->assertDatabaseHas('ledger_adjustments', [
+            'id' => $adj->id,
+            'status' => LedgerAdjustment::STATUS_VOIDED,
+        ]);
+    }
+
+    public function test_recent_exception_adjustment_cannot_be_voided(): void
+    {
+        $admin = $this->admin();
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/users/1001' => $this->sub2ApiUserSequence('50.00'),
+            'https://sub2api.test/api/v1/admin/users/1001/balance' => Http::response([], 500),
+        ]);
+        $token = $admin->createToken('admin-token')->plainTextToken;
+        $this->withToken($token)->postJson('/api/v1/ledger-adjustments', [
+            'sub2api_user_id' => 1001,
+            'operation' => LedgerAdjustment::OP_INCREMENT,
+            'amount' => '10.00',
+            'adjust_reason' => '充值',
+        ])->assertStatus(409);
+        $adj = LedgerAdjustment::query()->firstOrFail();
+
+        $this->withToken($token)
+            ->postJson('/api/v1/ledger-adjustments/'.$adj->id.'/void')
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'Sub2API 幂等流水尚未完成同步，请稍后再作废');
+    }
+
     public function test_list_filters_email_operator_and_date_and_returns_summary(): void
     {
         $admin = $this->admin();

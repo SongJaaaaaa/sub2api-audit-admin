@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import type { Dayjs } from 'dayjs'
 import type { TablePaginationConfig } from 'ant-design-vue'
-import { message } from 'ant-design-vue'
+import { App as AntApp } from 'ant-design-vue'
 import { onMounted, reactive, ref } from 'vue'
 import { getGiftEntries, type FinanceSummary, type GiftQuotaEntry } from '../api/finance'
 
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useAdminOptions } from '../composables/useAdminOptions'
 import { useTableColumns } from '../composables/useTableColumns'
+const { message } = AntApp.useApp()
 const adminOptions = useAdminOptions()
 const loading = ref(false)
 const userId = ref('')
@@ -160,7 +161,7 @@ onMounted(loadItems)
 
 <style scoped>
 :deep(.clickableRow) { cursor: pointer; }
-:deep(.clickableRow:hover) > td { background: rgba(22, 119, 255, .06) !important; }
+:deep(.clickableRow:hover) > td { background: var(--row-hover) !important; }
 .filterBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
 .filterId { flex: 0 0 120px; }.filterSm { flex: 0 0 150px; }.filterBusiness { flex: 0 0 210px; }.filterLg { flex: 0 0 220px; }.filterDate { flex: 0 0 250px; }
 .summaryGrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }

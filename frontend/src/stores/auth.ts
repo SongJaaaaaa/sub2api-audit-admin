@@ -2,39 +2,54 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { http } from '../api/http'
 import type { AdminInfo } from '../api/auth'
+import {
+  clearTokenStorage,
+  getMemoryToken,
+  hydrateTokenStorage,
+  saveAdminInfo,
+  saveToken,
+} from '../app/services/tokenStorage'
 
 interface MeRes {
   admin: AdminInfo
 }
 
-const savedAdmin = () => {
-  const raw = localStorage.getItem('adminInfo')
-  return raw ? (JSON.parse(raw) as AdminInfo) : null
+function parseAdmin(raw: string | null) {
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as AdminInfo
+  } catch {
+    return null
+  }
 }
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref(localStorage.getItem('adminToken') || '')
-  const admin = ref<AdminInfo | null>(savedAdmin())
+  const token = ref(getMemoryToken())
+  const admin = ref<AdminInfo | null>(null)
   const authed = computed(() => token.value !== '')
 
-  function save(nextToken: string, nextAdmin: AdminInfo) {
-    token.value = nextToken
-    admin.value = nextAdmin
-    localStorage.setItem('adminToken', nextToken)
-    localStorage.setItem('adminInfo', JSON.stringify(nextAdmin))
+  async function hydrate() {
+    const saved = await hydrateTokenStorage()
+    token.value = saved.token
+    admin.value = parseAdmin(saved.adminInfo)
   }
 
-  function clear() {
+  async function save(nextToken: string, nextAdmin: AdminInfo) {
+    token.value = nextToken
+    admin.value = nextAdmin
+    await saveToken(nextToken, JSON.stringify(nextAdmin))
+  }
+
+  async function clear() {
     token.value = ''
     admin.value = null
-    localStorage.removeItem('adminToken')
-    localStorage.removeItem('adminInfo')
+    await clearTokenStorage()
   }
 
   async function fetchMe() {
     const res = await http.get<unknown, MeRes>('/auth/me')
     admin.value = res.admin
-    localStorage.setItem('adminInfo', JSON.stringify(res.admin))
+    await saveAdminInfo(JSON.stringify(res.admin))
   }
 
   async function logout() {
@@ -45,13 +60,14 @@ export const useAuthStore = defineStore('auth', () => {
         // 本地退出不能被已失效 token 阻断。
       }
     }
-    clear()
+    await clear()
   }
 
   return {
     token,
     admin,
     authed,
+    hydrate,
     save,
     clear,
     fetchMe,

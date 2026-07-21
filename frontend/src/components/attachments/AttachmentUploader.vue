@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { UploadOutlined } from '@ant-design/icons-vue'
-import { message } from 'ant-design-vue'
+import { App as AntApp } from 'ant-design-vue'
 import { onMounted, ref, watch } from 'vue'
 import { downloadAttachment, getAttachments, uploadAttachment, type AttachmentItem } from '../../api/attachments'
+import { saveBlob } from '../../app/services/nativeFiles'
 
+const { message } = AntApp.useApp()
 const props = defineProps<{
   attachableType: string
   attachableId: number | null
@@ -67,12 +69,7 @@ function fileSize(val: number) {
 async function download(item: AttachmentItem) {
   try {
     const blob = await downloadAttachment(item.id)
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = item.original_name
-    link.click()
-    URL.revokeObjectURL(url)
+    await saveBlob(blob, item.original_name, `下载附件：${item.original_name}`)
   } catch {
     message.error('下载附件失败')
   }

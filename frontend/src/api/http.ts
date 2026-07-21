@@ -1,7 +1,9 @@
 import axios from 'axios'
+import { clearTokenStorage, getMemoryToken } from '../app/services/tokenStorage'
+import { getApiBaseUrl } from '../app/services/platform'
 
 export const http = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  baseURL: getApiBaseUrl(),
   timeout: 15000,
   headers: {
     Accept: 'application/json',
@@ -9,7 +11,7 @@ export const http = axios.create({
 })
 
 http.interceptors.request.use((config) => {
-  const token = localStorage.getItem('adminToken')
+  const token = getMemoryToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -21,8 +23,8 @@ http.interceptors.response.use(
   (res) => res.data,
   (err) => {
     if (err.response?.status === 401) {
-      localStorage.removeItem('adminToken')
-      localStorage.removeItem('adminInfo')
+      void clearTokenStorage()
+      window.dispatchEvent(new CustomEvent('auth-expired'))
     }
 
     return Promise.reject(err)

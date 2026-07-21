@@ -45,7 +45,7 @@
   background: var(--surface2);
   transition: box-shadow 0.15s;
 }
-.historyTimelineItem:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.historyTimelineItem:hover { box-shadow: var(--shadow-card); }
 .historyTimelineIcon {
   flex-shrink: 0;
   width: 36px;

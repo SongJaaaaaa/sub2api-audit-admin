@@ -4,3 +4,4 @@
 @import './styles/auth-responsive.css';
 @import './styles/detail-drawers.css';
 @import './styles/table-overrides.css';
+@import './app/styles/app.css';

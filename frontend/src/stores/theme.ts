@@ -6,6 +6,7 @@ export type ThemeName = 'light' | 'dark'
 
 const key = 'themeMode'
 const modes: ThemeMode[] = ['system', 'light', 'dark']
+let initialized = false
 
 function savedMode(): ThemeMode {
   const val = localStorage.getItem(key) as ThemeMode | null
@@ -33,6 +34,8 @@ export const useThemeStore = defineStore('theme', () => {
 
   function initTheme() {
     apply()
+    if (initialized) return
+    initialized = true
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     media.addEventListener('change', (event) => {
       systemDark.value = event.matches

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { theme as antdTheme } from 'ant-design-vue'
+import { App as AntApp, theme as antdTheme } from 'ant-design-vue'
 import zhCN from 'ant-design-vue/es/locale/zh_CN'
 import { NConfigProvider, darkTheme } from 'naive-ui'
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { RouterView } from 'vue-router'
 import { useThemeStore } from './stores/theme'
 
@@ -19,13 +19,15 @@ const themeCfg = computed(() => ({
 
 const naiveTheme = computed(() => (themeStore.themeName === 'dark' ? darkTheme : undefined))
 
-onMounted(themeStore.initTheme)
+themeStore.initTheme()
 </script>
 
 <template>
   <n-config-provider :theme="naiveTheme" class="appProvider">
     <a-config-provider :locale="zhCN" :theme="themeCfg">
-      <RouterView />
+      <AntApp class="antdApp">
+        <RouterView />
+      </AntApp>
     </a-config-provider>
   </n-config-provider>
 </template>

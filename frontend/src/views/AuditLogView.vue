@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, FileTextOutlined, PaperClipOutlined, SettingOutlined, UserAddOutlined } from '@ant-design/icons-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
-import { message } from 'ant-design-vue'
+import { App as AntApp } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import { onMounted, reactive, ref } from 'vue'
+import { useAppMode } from '../app/composables/useAppMode'
 import { getAuditLogs, type AuditLog, type AuditSummary } from '../api/audit'
 
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useAdminOptions } from '../composables/useAdminOptions'
 import { useTableColumns } from '../composables/useTableColumns'
+const { message } = AntApp.useApp()
+const { isAppMode } = useAppMode()
 // ── 中文映射 ──────────────────────────────────────────────────────────
 const actionLabels: Record<string, string> = {
   'admin.create':                '新增管理员',
@@ -147,6 +150,8 @@ function targetLabel(type: string) {
 // ── 组件逻辑 ──────────────────────────────────────────────────────────
 const adminOptions = useAdminOptions()
 const loading = ref(false)
+const loadError = ref('')
+let loadSeq = 0
 const drawerOpen = ref(false)
 const items = ref<AuditLog[]>([])
 const selected = ref<AuditLog | null>(null)
@@ -165,8 +170,11 @@ const allColumns = [
 ] as const
 const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('audit-log-columns', allColumns, 1050)
 
-async function loadItems() {
+async function loadItems(append = false) {
+  const seq = ++loadSeq
+  const requestedPage = page.current
   loading.value = true
+  loadError.value = ''
   try {
     const res = await getAuditLogs({
       page: page.current,
@@ -181,13 +189,17 @@ async function loadItems() {
       from: filters.dates?.[0].format('YYYY-MM-DD'),
       to: filters.dates?.[1].format('YYYY-MM-DD'),
     })
-    items.value = res.items
+    if (seq !== loadSeq) return
+    items.value = append ? [...items.value, ...res.items] : res.items
     page.total = res.total
     if (res.summary) Object.assign(summary, res.summary)
   } catch {
-    message.error('读取操作审计失败')
+    if (seq !== loadSeq) return
+    if (append) page.current = Math.max(1, requestedPage - 1)
+    loadError.value = '读取操作审计失败，请重试。'
+    message.error(loadError.value)
   } finally {
-    loading.value = false
+    if (seq === loadSeq) loading.value = false
   }
 }
 
@@ -204,6 +216,20 @@ function change(pager: TablePaginationConfig) {
   loadItems()
 }
 
+function hasMore() {
+  return page.current * page.pageSize < page.total
+}
+
+function loadMore() {
+  if (loading.value || !hasMore()) return
+  page.current += 1
+  loadItems(true)
+}
+
+function filterCount() {
+  return [filters.action, filters.admin_id, filters.target_type, filters.target_id, filters.ip, filters.keyword, filters.risk, filters.dates].filter(Boolean).length
+}
+
 function openDetail(row: AuditLog) {
   selected.value = row
   drawerOpen.value = true
@@ -217,6 +243,57 @@ onMounted(loadItems)
 
 <template>
   <section class="page">
+    <a-alert v-if="loadError" class="appLoadError" type="error" show-icon :message="loadError">
+      <template #description><a-button size="small" @click="loadItems">重试</a-button></template>
+    </a-alert>
+
+    <template v-if="isAppMode">
+    <details class="appFilterPanel" open>
+      <summary>筛选<span v-if="filterCount()">（{{ filterCount() }} 项生效）</span></summary>
+      <div class="appFilterGrid">
+        <a-input v-model:value="filters.keyword" placeholder="关键字" allow-clear @press-enter="search" />
+        <a-select v-model:value="filters.action" placeholder="操作类型" allow-clear>
+          <a-select-option value="">全部操作</a-select-option>
+          <a-select-option v-for="(label, key) in actionLabels" :key="key" :value="key">{{ label }}</a-select-option>
+        </a-select>
+        <a-select v-model:value="filters.risk" placeholder="风险级别">
+          <a-select-option value="">全部风险</a-select-option>
+          <a-select-option value="high">高风险操作</a-select-option>
+        </a-select>
+        <a-select v-model:value="filters.admin_id" placeholder="操作人" allow-clear>
+          <a-select-option v-for="row in adminOptions" :key="row.id" :value="row.id">{{ row.name }}（{{ row.email }}）</a-select-option>
+        </a-select>
+        <a-select v-model:value="filters.target_type" placeholder="对象类型" allow-clear>
+          <a-select-option value="">全部对象</a-select-option>
+          <a-select-option v-for="(label, key) in targetTypeLabels" :key="key" :value="key">{{ label }}</a-select-option>
+        </a-select>
+        <a-input v-model:value="filters.target_id" placeholder="对象 ID" allow-clear />
+        <a-input v-model:value="filters.ip" placeholder="IP" allow-clear @press-enter="search" />
+        <a-range-picker v-model:value="filters.dates" />
+      </div>
+      <div class="appFilterActions"><a-button @click="resetFilters">重置</a-button><a-button type="primary" @click="search">查询</a-button></div>
+    </details>
+    <div v-if="filterCount()" class="appFilterTags"><span>已启用筛选</span><strong>{{ filterCount() }} 项</strong><span>共 {{ page.total }} 条</span></div>
+    <div class="appSummaryGrid">
+      <article><span>操作总数</span><strong>{{ summary.record_count }}</strong></article>
+      <article><span>操作人数</span><strong>{{ summary.operator_count }}</strong></article>
+      <article><span>涉及对象</span><strong>{{ summary.target_count }}</strong></article>
+      <article><span>高风险</span><strong class="risk">{{ summary.high_risk_count }}</strong></article>
+    </div>
+    <div v-if="loading && !items.length" class="appLoadingState"><a-spin /><span>加载中</span></div>
+    <div v-else-if="items.length" class="appAuditList">
+      <article v-for="row in items" :key="row.id" class="appAuditCard" tabindex="0" @click="openDetail(row)" @keydown.enter="openDetail(row)">
+        <div class="appAuditHead"><a-tag :color="actionTagProps[row.action]?.color || 'default'">{{ actionLabel(row.action) }}</a-tag><time>{{ row.created_at || '-' }}</time></div>
+        <strong>{{ row.admin_name || '系统' }}</strong>
+        <div class="appAuditMeta"><span>{{ targetLabel(row.target_type) }} #{{ row.target_id || '-' }}</span><span>{{ row.ip || '-' }}</span></div>
+        <a-button type="link" size="small" @click.stop="openDetail(row)">查看详情</a-button>
+      </article>
+    </div>
+    <a-empty v-else-if="!loading" description="暂无审计日志" />
+    <div v-if="hasMore()" class="appLoadMore"><a-button :loading="loading" block @click="loadMore">加载更多</a-button></div>
+    </template>
+
+    <template v-else>
     <div class="filterBar">
       <a-select v-model:value="filters.action" class="filterAction" placeholder="操作类型" allow-clear><a-select-option value="">全部操作</a-select-option><a-select-option v-for="(label, key) in actionLabels" :key="key" :value="key">{{ label }}</a-select-option></a-select>
       <a-select v-model:value="filters.admin_id" class="filterLg" placeholder="操作人" allow-clear><a-select-option v-for="row in adminOptions" :key="row.id" :value="row.id">{{ row.name }}（{{ row.email }}）</a-select-option></a-select>
@@ -268,12 +345,13 @@ onMounted(loadItems)
         </template>
       </template>
     </a-table>
+    </template>
 
     <!-- 审计详情 Drawer -->
     <a-drawer
       v-model:open="drawerOpen"
       title="审计详情"
-      width="580"
+      :width="isAppMode ? '100%' : 580"
     >
       <template v-if="selected">
         <!-- 头部信息卡 -->
@@ -334,12 +412,16 @@ onMounted(loadItems)
 </template>
 
 <style scoped>
+.appLoadError { margin-bottom: 10px; }.appFilterPanel { padding: 12px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 10px; background: var(--card-bg, #fff); }
+.appFilterPanel summary { cursor: pointer; font-weight: 600; }.appFilterPanel summary span { color: var(--text-secondary, #7a8395); font-weight: 400; }.appFilterGrid { display: grid; gap: 8px; margin-top: 12px; }.appFilterActions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }.appFilterTags { display: flex; align-items: center; gap: 8px; margin: 10px 0; color: var(--text-secondary, #7a8395); font-size: 12px; }.appFilterTags strong { color: var(--primary); }
+.appSummaryGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }.appSummaryGrid article { padding: 11px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 9px; background: var(--card-bg, #fff); }.appSummaryGrid span { display: block; color: var(--text-secondary, #7a8395); font-size: 12px; }.appSummaryGrid strong { display: block; margin-top: 4px; font-size: 20px; }.appSummaryGrid .risk { color: var(--danger); }
+.appLoadingState { display: grid; place-items: center; gap: 8px; min-height: 120px; color: var(--text-secondary, #7a8395); }.appAuditList { display: grid; gap: 10px; }.appAuditCard { padding: 12px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 10px; background: var(--card-bg, #fff); }.appAuditCard:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }.appAuditHead, .appAuditMeta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }.appAuditHead time, .appAuditMeta { color: var(--text-secondary, #7a8395); font-size: 12px; }.appAuditCard > strong { display: block; margin: 9px 0 6px; }.appAuditMeta span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.appLoadMore { margin-top: 10px; }
 .filterBar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
 .filterId { flex: 0 0 120px; }.filterIp, .filterSm { flex: 0 0 150px; }.filterAction { flex: 0 0 190px; }.filterLg { flex: 0 0 220px; }.filterDate { flex: 0 0 250px; }.filterGrow { flex: 1 1 190px; max-width: 300px; }
 .summaryGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
 .summaryGrid section { padding: 14px 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); }
 .summaryGrid span { display: block; color: var(--text-secondary, #7a8395); font-size: 12px; margin-bottom: 6px; }
-.summaryGrid strong { font-size: 21px; } .risk { color: #cf1322; }
+.summaryGrid strong { font-size: 21px; } .risk { color: var(--danger); }
 @media (max-width: 760px) { .filterBar > * { flex: 1 1 100%; width: 100% !important; max-width: none; } .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 420px) { .summaryGrid { grid-template-columns: 1fr; } }
 </style>

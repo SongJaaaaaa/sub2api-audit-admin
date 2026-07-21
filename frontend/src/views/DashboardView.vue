@@ -7,7 +7,7 @@ import {
   RiseOutlined,
   TeamOutlined,
 } from '@ant-design/icons-vue'
-import { message } from 'ant-design-vue'
+import { App as AntApp } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
 import dayjs from 'dayjs'
 import { BarChart, LineChart } from 'echarts/charts'
@@ -16,6 +16,7 @@ import { init, use, type ECharts } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
+import { useAppMode } from '../app/composables/useAppMode'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useTableColumns } from '../composables/useTableColumns'
 import {
@@ -32,6 +33,8 @@ type RangeKey = 'today' | 'week' | 'month' | 'seven' | 'thirty' | 'custom'
 
 use([BarChart, LineChart, DataZoomComponent, GraphicComponent, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
 
+const { message } = AntApp.useApp()
+const { isAppMode } = useAppMode()
 const themeStore = useThemeStore()
 const loading = ref(false)
 const rangeKey = ref<RangeKey>('seven')
@@ -146,14 +149,19 @@ function renderCharts() {
 }
 
 function drawFinance() {
-  if (!financeEl.value || !stats.value) return
-  financeChart ||= init(financeEl.value)
+  if (!stats.value) return
   const rows = stats.value.finance.trend
+  if (!financeEl.value || rows.length === 0) {
+    financeChart?.dispose()
+    financeChart = null
+    return
+  }
+  financeChart ||= init(financeEl.value)
 
   financeChart.setOption({
     backgroundColor: 'transparent',
     color: ['#1677ff', '#9254de', '#52c41a', '#ff4d4f'],
-    tooltip: { trigger: 'axis' },
+    tooltip: { trigger: 'axis', ...tooltipTheme() },
     legend: { top: 0, textStyle: { color: labelColor() } },
     grid: { left: 18, right: 18, top: 44, bottom: 18, containLabel: true },
     xAxis: {
@@ -165,6 +173,7 @@ function drawFinance() {
     yAxis: {
       type: 'value',
       name: '金额',
+      nameTextStyle: { color: labelColor() },
       axisLabel: { color: labelColor(), formatter: moneyAxis },
       splitLine: { lineStyle: { color: splitColor() } },
     },
@@ -178,14 +187,19 @@ function drawFinance() {
 }
 
 function drawCost() {
-  if (!costEl.value || !stats.value) return
-  costChart ||= init(costEl.value)
+  if (!stats.value) return
   const rows = stats.value.usage.trend
+  if (!costEl.value || rows.length === 0) {
+    costChart?.dispose()
+    costChart = null
+    return
+  }
+  costChart ||= init(costEl.value)
 
   costChart.setOption({
     backgroundColor: 'transparent',
     color: ['#fa8c16'],
-    tooltip: { trigger: 'axis' },
+    tooltip: { trigger: 'axis', ...tooltipTheme() },
     grid: { left: 12, right: 16, top: 28, bottom: 16, containLabel: true },
     xAxis: {
       type: 'category',
@@ -196,6 +210,7 @@ function drawCost() {
     yAxis: {
       type: 'value',
       name: '实际消费',
+      nameTextStyle: { color: labelColor() },
       axisLabel: { color: labelColor(), formatter: moneyAxis },
       splitLine: { lineStyle: { color: splitColor() } },
     },
@@ -233,13 +248,21 @@ function drawRankChart<T extends RechargeUserRank | UserActualCostRank | UserTok
   color: string,
   details: (row: T) => string[],
 ) {
-  if (!el) return chart
+  if (!el || source.length === 0) {
+    chart?.dispose()
+    return null
+  }
+  if (chart && chart.getDom() !== el) {
+    chart.dispose()
+    chart = null
+  }
   chart ||= init(el)
   const rows = [...source].sort((a, b) => value(b) - value(a))
   chart.setOption({
     grid: { left: 16, right: 18, top: 18, bottom: rows.length > 8 ? 66 : 48, containLabel: true },
     tooltip: {
       trigger: 'item',
+      ...tooltipTheme(),
       formatter: ({ dataIndex }: { dataIndex: number }) => {
         const row = rows[dataIndex]
         return row ? [`<strong>${userLabel(row)}</strong>`, ...details(row)].join('<br>') : ''
@@ -247,7 +270,7 @@ function drawRankChart<T extends RechargeUserRank | UserActualCostRank | UserTok
     },
     xAxis: { type: 'category', data: rows.map(userLabel), axisLabel: { color: labelColor(), rotate: -28, interval: 0, formatter: (val: string) => shortLabel(val) }, axisLine: { lineStyle: { color: axisColor() } } },
     yAxis: { type: 'value', axisLabel: { color: labelColor(), formatter: compactAxis }, splitLine: { lineStyle: { color: splitColor() } } },
-    dataZoom: rows.length > 8 ? [{ type: 'slider', xAxisIndex: 0, bottom: 4, startValue: 0, endValue: 7 }, { type: 'inside', xAxisIndex: 0 }] : [],
+    dataZoom: rows.length > 8 ? [{ type: 'slider', xAxisIndex: 0, bottom: 4, startValue: 0, endValue: 7, ...zoomTheme() }, { type: 'inside', xAxisIndex: 0 }] : [],
     series: [{ type: 'bar', data: rows.map(value), barMaxWidth: 38, itemStyle: { color, borderRadius: [6, 6, 0, 0] }, emphasis: { itemStyle: { shadowBlur: 12, shadowColor: `${color}66` } } }],
   }, true)
   return chart
@@ -316,6 +339,31 @@ function splitColor() {
   return themeStore.themeName === 'dark' ? '#2d313b' : '#eef0f4'
 }
 
+function tooltipTheme() {
+  const dark = themeStore.themeName === 'dark'
+  return {
+    backgroundColor: dark ? 'rgba(17, 24, 39, 0.96)' : 'rgba(255, 255, 255, 0.96)',
+    borderColor: dark ? '#374151' : '#e5e7eb',
+    textStyle: { color: dark ? '#f8fafc' : '#172033' },
+  }
+}
+
+function zoomTheme() {
+  const dark = themeStore.themeName === 'dark'
+  const primary = dark ? '#60a5fa' : '#2563eb'
+  const fill = dark ? 'rgba(96, 165, 250, 0.2)' : 'rgba(37, 99, 235, 0.14)'
+  return {
+    backgroundColor: 'transparent',
+    borderColor: axisColor(),
+    fillerColor: fill,
+    textStyle: { color: labelColor() },
+    handleStyle: { color: primary, borderColor: primary },
+    moveHandleStyle: { color: primary },
+    dataBackground: { lineStyle: { color: axisColor() }, areaStyle: { color: splitColor() } },
+    selectedDataBackground: { lineStyle: { color: primary }, areaStyle: { color: fill } },
+  }
+}
+
 function resizeCharts() {
   financeChart?.resize()
   costChart?.resize()
@@ -380,6 +428,79 @@ onBeforeUnmount(() => {
 
     <a-spin :spinning="loading">
       <template v-if="stats">
+        <template v-if="isAppMode">
+          <div class="appDashboardKpis">
+            <article class="appKpiCard appKpiCash">
+              <span>实收入账</span>
+              <strong>{{ money(stats.finance.cash_total) }}</strong>
+              <small>本地现金账</small>
+            </article>
+            <article class="appKpiCard appKpiSource">
+              <span>累计充值</span>
+              <strong>{{ money(stats.balance.total_recharged) }}</strong>
+              <small>Sub2API 当前快照</small>
+            </article>
+            <article class="appKpiCard appKpiCost">
+              <span>实际消费</span>
+              <strong>{{ money(stats.usage.actual_cost) }}</strong>
+              <small>{{ count(stats.usage.request_count) }} 次请求</small>
+            </article>
+            <article class="appKpiCard appKpiBalance">
+              <span>启用用户余额</span>
+              <strong>{{ money(stats.balance.active_user_balance) }}</strong>
+              <small>{{ count(stats.balance.active_user_count) }} 位用户</small>
+            </article>
+          </div>
+
+          <section v-if="alertCards.length" class="appPanel appAlertPanel">
+            <div class="appSectionHead"><h2>账务告警</h2><a-badge :count="alertTotal" :overflow-count="9999" /></div>
+            <RouterLink v-for="item in alertCards" :key="item.label" :to="item.path" class="appAlertCard">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </RouterLink>
+          </section>
+
+          <section class="appPanel">
+            <div class="appSectionHead"><h2>财务趋势</h2><span>{{ rangeOptions.find(item => item.value === rangeKey)?.label }}</span></div>
+            <a-empty v-if="stats.finance.trend.length === 0" description="所选范围暂无财务趋势" />
+            <div v-else ref="financeEl" class="appChart appChartFinance"></div>
+          </section>
+          <section class="appPanel">
+            <div class="appSectionHead"><h2>实际消费趋势</h2><span>{{ rangeOptions.find(item => item.value === rangeKey)?.label }}</span></div>
+            <a-empty v-if="stats.usage.trend.length === 0" description="所选范围暂无消费趋势" />
+            <div v-else ref="costEl" class="appChart appChartCost"></div>
+          </section>
+
+          <section class="appPanel">
+            <div class="appSectionHead"><h2>本地现金入账用户榜</h2></div>
+            <a-empty v-if="!stats.rankings.recharge_users.length" description="暂无本地现金入账" />
+            <div v-else ref="rechargeRankEl" class="appChart appChartRank"></div>
+          </section>
+          <section class="appPanel">
+            <div class="appSectionHead"><h2>用户实际消费榜</h2></div>
+            <a-empty v-if="!stats.rankings.user_actual_cost.length" description="暂无消费数据" />
+            <div v-else ref="costRankEl" class="appChart appChartRank"></div>
+          </section>
+
+          <section class="appPanel">
+            <div class="appSectionHead"><h2>最近调额记录</h2><RouterLink to="/ledger">全部记录</RouterLink></div>
+            <div v-if="stats.recent_adjustments.length" class="appRecordList">
+              <article v-for="record in stats.recent_adjustments" :key="record.id" class="appRecordCard">
+                <div class="appRecordHead">
+                  <strong>{{ record.sub2api_user_email || `用户 #${record.sub2api_user_id}` }}</strong>
+                  <a-tag :color="statusColor(record.status)">{{ statusText(record.status) }}</a-tag>
+                </div>
+                <div class="appRecordMetric" :class="record.operation === 'increment' ? 'positive' : 'negative'">{{ signedAmount(record) }}</div>
+                <div class="appRecordMeta"><span>{{ record.event_at || '-' }}</span><span>{{ record.ledger_no || '-' }}</span></div>
+                <div class="appRecordMeta"><span>{{ directionText(record.operation) }}</span><span>{{ record.sub2api_source_id || '未关联' }}</span></div>
+                <p v-if="record.adjust_reason" class="appRecordNote">{{ record.adjust_reason }}</p>
+              </article>
+            </div>
+            <a-empty v-else description="所选范围暂无调额记录" />
+          </section>
+        </template>
+
+        <template v-else>
         <div class="kpiGrid">
           <a-card class="kpiCard cashKpi" :bordered="false">
             <div class="kpiIcon"><DollarOutlined /></div>
@@ -435,13 +556,15 @@ onBeforeUnmount(() => {
             <div class="sectionHead">
               <div><h2>财务趋势</h2></div>
             </div>
-            <div ref="financeEl" class="chart chartWide"></div>
+            <a-empty v-if="stats.finance.trend.length === 0" description="所选范围暂无财务趋势" />
+            <div v-else ref="financeEl" class="chart chartWide"></div>
           </section>
           <section class="panel usagePanel">
             <div class="sectionHead">
               <div><h2>实际消费趋势</h2></div>
             </div>
-            <div ref="costEl" class="chart chartSmall"></div>
+            <a-empty v-if="stats.usage.trend.length === 0" description="所选范围暂无消费趋势" />
+            <div v-else ref="costEl" class="chart chartSmall"></div>
           </section>
         </div>
 
@@ -475,6 +598,7 @@ onBeforeUnmount(() => {
             </template>
           </a-table>
         </section>
+        </template>
       </template>
 
       <a-empty v-else-if="!loading" description="暂无可展示的真实统计数据" />
@@ -483,12 +607,27 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.appDashboardKpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.appKpiCard { min-width: 0; padding: 14px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); box-shadow: var(--shadow-card); }
+.appKpiCard span, .appKpiCard small { display: block; color: var(--text-secondary, #7a8395); }
+.appKpiCard strong { display: block; margin: 6px 0 4px; overflow: hidden; font-size: 22px; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.appKpiCash strong { color: var(--primary); }.appKpiSource strong { color: var(--text); }.appKpiCost strong { color: var(--warning); }.appKpiBalance strong { color: var(--teal); }
+.appPanel { min-width: 0; padding: 14px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 12px; background: var(--card-bg, #fff); box-shadow: var(--shadow-card); }
+.appSectionHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.appSectionHead h2 { margin: 0; font-size: 16px; }
+.appChart { width: 100%; min-width: 0; }.appChartFinance { height: 280px; }.appChartCost { height: 250px; }.appChartRank { height: 290px; }
+.appAlertCard { display: flex; align-items: center; justify-content: space-between; min-height: 56px; padding: 12px; border-left: 4px solid var(--warning); border-radius: 8px; color: inherit; background: var(--surface2); }
+.appAlertCard strong { font-size: 22px; }
+.appRecordList { display: grid; gap: 10px; }.appRecordCard { min-width: 0; padding: 12px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 10px; background: var(--surface2); }
+.appRecordHead, .appRecordMeta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.appRecordHead strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.appRecordMetric { margin: 8px 0 5px; font-size: 20px; font-weight: 700; }.appRecordMetric.positive { color: var(--success); }.appRecordMetric.negative { color: var(--danger); }
+.appRecordMeta { color: var(--text-secondary, #7a8395); font-size: 12px; }.appRecordMeta span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.appRecordNote { margin: 8px 0 0; overflow: hidden; color: var(--text-secondary, #7a8395); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .dashboardV2 { display: grid; gap: 18px; }
 .dashboardHead { gap: 18px; }
 .statsAlert { margin-bottom: 2px; }
 .kpiGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
 .kpiCard :deep(.ant-card-body) { display: flex; align-items: center; gap: 16px; min-height: 138px; }
-.kpiCard { overflow: hidden; box-shadow: 0 10px 28px rgba(30, 42, 70, .08); }
+.kpiCard { overflow: hidden; box-shadow: var(--shadow-card); }
 .kpiIcon { display: grid; place-items: center; flex: 0 0 50px; width: 50px; height: 50px; border-radius: 15px; color: #fff; font-size: 22px; }
 .cashKpi .kpiIcon { background: linear-gradient(135deg, #1677ff, #69b1ff); }
 .sourceKpi .kpiIcon { background: #5b6472; }
@@ -498,12 +637,12 @@ onBeforeUnmount(() => {
 .kpiBody span { color: var(--text-secondary, #6f7788); }
 .kpiBody strong { font-size: clamp(24px, 2.2vw, 34px); line-height: 1.15; font-variant-numeric: tabular-nums; }
 .kpiBody em { color: var(--text-secondary, #7a8395); font-size: 13px; font-style: normal; }
-.panel, .alertPanel { padding: 18px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 14px; background: var(--card-bg, #fff); box-shadow: 0 8px 24px rgba(30, 42, 70, .05); }
+.panel, .alertPanel { padding: 18px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 14px; background: var(--card-bg, #fff); box-shadow: var(--shadow-card); }
 .alertPanel { margin-top: 16px; }
 .sectionHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .sectionHead h2 { margin: 0; font-size: 17px; }
 .alertGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.alertItem { display: flex; align-items: center; justify-content: space-between; min-height: 70px; padding: 14px; border-radius: 10px; color: inherit; background: #f6f8fb; }
+.alertItem { display: flex; align-items: center; justify-content: space-between; min-height: 70px; padding: 14px; border-radius: 10px; color: inherit; background: var(--surface2); }
 .alertItem strong { font-size: 25px; }
 .alertItem.orange { border-left: 4px solid #fa8c16; }
 .alertItem.red { border-left: 4px solid #ff4d4f; }
@@ -519,7 +658,7 @@ onBeforeUnmount(() => {
 .rankPanel :deep(.ant-table-cell strong) { display: block; font-weight: 600; }
 .rankPanel :deep(.ant-table-cell small) { display: block; margin-top: 2px; color: var(--text-secondary, #7a8395); }
 .money { font-variant-numeric: tabular-nums; font-weight: 600; }
-.money { color: #d46b08; }
+.money { color: var(--warning); }
 .recentPanel { margin-top: 16px; }
 @media (max-width: 1180px) {
   .kpiGrid, .alertGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -548,5 +687,9 @@ onBeforeUnmount(() => {
   .chartWide, .chartSmall { height: 285px; }
   .rankChart { height: 310px; }
   .recentPanel { margin-top: 10px; overflow: hidden; }
+}
+@media (max-width: 360px) {
+  .appDashboardKpis { grid-template-columns: 1fr; }
+  .appKpiCard strong { font-size: 20px; }
 }
 </style>

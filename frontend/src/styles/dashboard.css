@@ -277,17 +277,17 @@
 }
 
 .rankBadge.gold {
-  color: #d97706;
+  color: var(--warning);
   background: rgba(245, 158, 11, 0.16);
 }
 
 .rankBadge.silver {
-  color: #64748b;
+  color: var(--silver);
   background: rgba(148, 163, 184, 0.18);
 }
 
 .rankBadge.bronze {
-  color: #b45309;
+  color: var(--warning);
   background: rgba(180, 83, 9, 0.16);
 }
 
@@ -386,7 +386,7 @@
 
 .tokenModelItem strong {
   flex: 0 0 auto;
-  color: #d97706;
+  color: var(--warning);
   font-size: 13px;
 }
 
@@ -652,7 +652,7 @@
 
 .adminTimelineItem > .money {
   align-self: center;
-  color: #13a66b;
+  color: var(--success);
   white-space: nowrap;
 }
 
@@ -716,32 +716,32 @@
 }
 
 .statIcon.blue {
-  color: #2563eb;
+  color: var(--info);
   background: rgba(37, 99, 235, 0.12);
 }
 
 .statIcon.green {
-  color: #13a66b;
+  color: var(--success);
   background: rgba(19, 166, 107, 0.14);
 }
 
 .statIcon.orange {
-  color: #d97706;
+  color: var(--warning);
   background: rgba(245, 158, 11, 0.15);
 }
 
 .statIcon.purple {
-  color: #7c3aed;
+  color: var(--purple);
   background: rgba(124, 58, 237, 0.13);
 }
 
 .statIcon.cyan {
-  color: #0891b2;
+  color: var(--teal);
   background: rgba(8, 145, 178, 0.14);
 }
 
 .statIcon.red {
-  color: #dc2626;
+  color: var(--danger);
   background: rgba(220, 38, 38, 0.12);
 }
 

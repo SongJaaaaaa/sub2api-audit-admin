@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { DownloadOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import { DownloadOutlined, FilterOutlined, RightOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
-import { message } from 'ant-design-vue'
+import { App as AntApp } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import {
   exportFinanceHistoryExcel,
   getFinanceHistory,
@@ -13,23 +13,33 @@ import {
   type FinanceHistorySummary,
   type FinanceHistoryType,
 } from '../api/finance'
+import MobileFilterSheet from '../app/components/MobileFilterSheet.vue'
+import MobileListState from '../app/components/MobileListState.vue'
+import MobileLoadMore from '../app/components/MobileLoadMore.vue'
+import { useAppMode } from '../app/composables/useAppMode'
+import { saveBlob } from '../app/services/nativeFiles'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useAdminOptions } from '../composables/useAdminOptions'
 import { useTableColumns } from '../composables/useTableColumns'
 
+const { message } = AntApp.useApp()
+const { isAppMode } = useAppMode()
 const adminOptions = useAdminOptions()
 const loading = ref(false)
+const loadError = ref('')
 const exporting = ref(false)
 const items = ref<FinanceHistoryItem[]>([])
 const dateRange = ref<[Dayjs, Dayjs] | null>(null)
 const dateMode = ref<'day' | 'week' | 'month' | ''>('')
 const detailOpen = ref(false)
 const detail = ref<FinanceHistoryItem | null>(null)
+const filterOpen = ref(false)
 const type = ref<FinanceHistoryType | undefined>()
 const userId = ref('')
 const keyword = ref('')
 const operator = ref<number | undefined>()
 const page = reactive({ current: 1, pageSize: 20, total: 0, showSizeChanger: true })
+let requestVersion = 0
 const summary = reactive<FinanceHistorySummary>({
   record_count: 0,
   income_count: 0,
@@ -53,6 +63,19 @@ const allColumns = [
 ] as const
 const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('finance-history-columns', allColumns, 1440)
 
+const activeFilters = computed(() => {
+  const values = [
+    type.value ? `类型：${typeMeta(type.value).text}` : '',
+    dateRange.value ? `日期：${dateRange.value[0].format('MM-DD')} 至 ${dateRange.value[1].format('MM-DD')}` : '',
+    userId.value.trim() ? `用户 ID：${userId.value.trim()}` : '',
+    operator.value ? `操作人：${adminOptions.value.find(row => row.id === operator.value)?.name || operator.value}` : '',
+    keyword.value.trim() ? `关键词：${keyword.value.trim()}` : '',
+  ]
+  return values.filter(Boolean)
+})
+
+const hasMore = computed(() => items.value.length < page.total)
+
 function params(withPage = true): FinanceHistoryParams {
   const val: FinanceHistoryParams = {
     type: type.value,
@@ -69,20 +92,30 @@ function params(withPage = true): FinanceHistoryParams {
   return val
 }
 
-async function loadItems(reset = false) {
+async function loadItems(reset = false, append = false) {
+  if (loading.value && !reset) return
   if (reset) page.current = 1
+  const version = ++requestVersion
   loading.value = true
+  loadError.value = ''
   try {
-    const res = await getFinanceHistory(params())
-    items.value = res.items
+    const requestPage = append ? page.current + 1 : page.current
+    const request = params()
+    request.page = requestPage
+    request.page_size = isAppMode.value ? 20 : page.pageSize
+    const res = await getFinanceHistory(request)
+    if (version !== requestVersion) return
+    items.value = append ? [...items.value, ...res.items] : res.items
     page.total = res.total
     page.current = res.page
     page.pageSize = res.page_size
     Object.assign(summary, res.summary)
   } catch (err) {
-    message.error(apiMessage(err, '读取历史账失败'))
+    if (version !== requestVersion) return
+    loadError.value = apiMessage(err, '读取历史账失败')
+    message.error(loadError.value)
   } finally {
-    loading.value = false
+    if (version === requestVersion) loading.value = false
   }
 }
 
@@ -90,16 +123,9 @@ async function downloadExcel() {
   exporting.value = true
   try {
     const blob = await exportFinanceHistoryExcel(params(false))
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
     const start = dateRange.value?.[0].format('YYYY-MM-DD') || 'all'
     const end = dateRange.value?.[1].format('YYYY-MM-DD') || 'all'
-    link.href = url
-    link.download = `finance-history-${start}-${end}.xlsx`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
+    await saveBlob(blob, `finance-history-${start}-${end}.xlsx`, '历史账导出')
   } catch (err) {
     message.error(apiMessage(err, '导出历史账失败'))
   } finally {
@@ -117,12 +143,21 @@ function resetFilters() {
   loadItems(true)
 }
 
+function resetMobileFilters() {
+  dateRange.value = null
+  dateMode.value = ''
+  type.value = undefined
+  userId.value = ''
+  keyword.value = ''
+  operator.value = undefined
+}
+
 function changeDateMode(mode: 'day' | 'week' | 'month') {
   dateMode.value = mode
   const now = dayjs()
   const start = mode === 'week' ? now.startOf('week') : mode === 'month' ? now.startOf('month') : now
   dateRange.value = [start, now]
-  loadItems(true)
+  if (!isAppMode.value) loadItems(true)
 }
 
 function changeDates() {
@@ -133,6 +168,10 @@ function changePage(pager: TablePaginationConfig) {
   page.current = pager.current || 1
   page.pageSize = pager.pageSize || 20
   loadItems()
+}
+
+function loadMore() {
+  if (hasMore.value) loadItems(false, true)
 }
 
 function rowKey(row: FinanceHistoryItem) {
@@ -172,94 +211,156 @@ onMounted(() => loadItems())
 
 <template>
   <section class="page historyPage">
-    <section class="filterPanel">
-      <div class="filterGrid">
-        <label class="filterDate">
-          <span>时间</span>
-          <div class="dateQuickFilter">
-            <a-segmented
-              :value="dateMode"
-              :options="[{ label: '今日', value: 'day' }, { label: '本周', value: 'week' }, { label: '本月', value: 'month' }]"
-              @change="changeDateMode"
-            />
-            <a-range-picker v-model:value="dateRange" @change="changeDates" />
-          </div>
-        </label>
-        <label class="filterType">
-          <span>类型</span>
-          <a-select v-model:value="type" allow-clear placeholder="全部类型">
-            <a-select-option value="income">收入</a-select-option>
-            <a-select-option value="expense">支出</a-select-option>
-            <a-select-option value="gift">赠送</a-select-option>
-          </a-select>
-        </label>
-        <label class="filterId"><span>用户 ID</span><a-input v-model:value="userId" allow-clear placeholder="精确用户 ID" @press-enter="loadItems(true)" /></label>
-        <label class="filterGrow"><span>关键词</span><a-input v-model:value="keyword" allow-clear placeholder="账单号 / 邮箱 / 分类 / 备注" @press-enter="loadItems(true)" /></label>
-        <label class="filterOperator">
-          <span>操作人</span>
-          <a-select v-model:value="operator" allow-clear placeholder="全部操作人" :options="adminOptions.map(row => ({ label: `${row.name}（${row.email}）`, value: row.id }))" />
-        </label>
-        <div class="filterActions">
-          <a-button :loading="exporting" @click="downloadExcel"><template #icon><DownloadOutlined /></template>导出 Excel</a-button>
-          <a-button type="primary" :loading="loading" @click="loadItems(true)"><template #icon><SearchOutlined /></template>查询</a-button>
-          <a-button @click="resetFilters">重置</a-button>
-        </div>
+    <template v-if="isAppMode">
+      <div class="appFilterBar">
+        <input v-model="keyword" class="appSearchInput" type="search" placeholder="账单号 / 邮箱 / 备注" @keyup.enter="loadItems(true)" />
+        <button class="appSecondaryButton appFilterButton" type="button" @click="filterOpen = true"><FilterOutlined />筛选<span v-if="activeFilters.length">（{{ activeFilters.length }}）</span></button>
+        <button class="appSecondaryButton appIconOnly" type="button" title="导出 Excel" aria-label="导出 Excel" :disabled="exporting" @click="downloadExcel"><DownloadOutlined /></button>
       </div>
-    </section>
+      <div v-if="activeFilters.length" class="appFilterTags"><span v-for="tag in activeFilters" :key="tag" class="appFilterTag">{{ tag }}</span></div>
+      <div class="appSummaryGrid">
+        <article class="appSummaryCard"><span>收入 · {{ summary.income_count }} 笔</span><strong class="income">{{ signedMoney(summary.income_total, 'income') }}</strong></article>
+        <article class="appSummaryCard"><span>支出 · {{ summary.expense_count }} 笔</span><strong class="expense">{{ signedMoney(summary.expense_total, 'expense') }}</strong></article>
+        <article class="appSummaryCard"><span>赠送 · {{ summary.gift_count }} 笔</span><strong class="gift">{{ signedMoney(summary.gift_total, 'gift') }}</strong></article>
+        <article class="appSummaryCard"><span>全部账单</span><strong>{{ summary.record_count }}</strong></article>
+      </div>
+      <div class="appResultMeta">共 {{ page.total }} 条账单</div>
+      <MobileListState :loading="loading && !items.length" :error="items.length ? '' : loadError" :empty="!loading && !loadError && !items.length" empty-text="当前筛选范围暂无账单" @retry="loadItems(true)" />
+      <div v-if="items.length" class="appCardList">
+        <article
+          v-for="row in items"
+          :key="rowKey(row)"
+          class="appRecordCard"
+          role="button"
+          tabindex="0"
+          @click="detail = row; detailOpen = true"
+          @keydown.enter="detail = row; detailOpen = true"
+        >
+          <div class="appCardTop"><strong>{{ row.bill_no }}</strong><span class="appStatus" :class="row.type === 'expense' ? 'danger' : 'success'">{{ typeMeta(row.type).text }}</span></div>
+          <div class="appCardMetric"><strong class="money" :class="row.type">{{ signedMoney(row.amount, row.type) }}</strong><RightOutlined class="appCardArrow" /></div>
+          <div class="appCardBottom"><span class="appCardMeta">{{ row.biz_date }} · {{ row.category || '未分类' }}</span><span class="appCardMeta">{{ row.operator_name || row.operator_email || '-' }}</span></div>
+          <div class="appCardMeta wrap">{{ row.sub2api_user_email || (row.sub2api_user_id ? `用户 #${row.sub2api_user_id}` : row.remark || '-') }}</div>
+        </article>
+      </div>
+      <MobileLoadMore :loading="loading && !!items.length" :has-more="hasMore" :loaded="items.length" :total="page.total" @load="loadMore" />
 
-    <div class="summaryGrid">
-      <section><span>收入 · {{ summary.income_count }} 笔</span><strong class="income">{{ signedMoney(summary.income_total, 'income') }}</strong></section>
-      <section><span>支出 · {{ summary.expense_count }} 笔</span><strong class="expense">{{ signedMoney(summary.expense_total, 'expense') }}</strong></section>
-      <section><span>赠送 · {{ summary.gift_count }} 笔</span><strong class="gift">{{ signedMoney(summary.gift_total, 'gift') }}</strong></section>
-      <section><span>全部账单</span><strong>{{ summary.record_count }}</strong></section>
-    </div>
+      <MobileFilterSheet v-model:open="filterOpen" :active-count="activeFilters.length" @reset="resetMobileFilters" @apply="loadItems(true)">
+        <div class="appFormStack">
+          <label>快捷日期<a-segmented :value="dateMode" :options="[{ label: '今日', value: 'day' }, { label: '本周', value: 'week' }, { label: '本月', value: 'month' }]" @change="changeDateMode" /></label>
+          <label>日期范围<a-range-picker v-model:value="dateRange" class="appFullControl" @change="changeDates" /></label>
+          <label>
+            类型
+            <a-select v-model:value="type" allow-clear placeholder="全部类型">
+              <a-select-option value="income">收入</a-select-option>
+              <a-select-option value="expense">支出</a-select-option>
+              <a-select-option value="gift">赠送</a-select-option>
+            </a-select>
+          </label>
+          <label>用户 ID<a-input v-model:value="userId" inputmode="numeric" allow-clear placeholder="精确用户 ID" /></label>
+          <label>操作人<a-select v-model:value="operator" allow-clear placeholder="全部操作人" :options="adminOptions.map(row => ({ label: `${row.name}（${row.email}）`, value: row.id }))" /></label>
+        </div>
+      </MobileFilterSheet>
 
-    <div class="tableTools"><ColumnSettings v-model:value="visibleCols" v-model:width="tableWidth" :options="colOptions" @reset="resetColumns" /></div>
-    <a-table
-      :row-key="rowKey"
-      :custom-row="rowProps"
-      :columns="columns"
-      :data-source="items"
-      :loading="loading"
-      :pagination="page"
-      :scroll="{ x: tableWidth }"
-      :locale="{ emptyText: '当前筛选范围暂无账单' }"
-      @resize-column="resizeColumn"
-      @change="changePage"
-    >
-      <template #bodyCell="{ column, record }">
-        <template v-if="column.dataIndex === 'type'"><a-tag :color="typeMeta(record.type).color">{{ typeMeta(record.type).text }}</a-tag></template>
-        <template v-else-if="column.dataIndex === 'user'">
-          <template v-if="record.sub2api_user_id"><strong>{{ record.sub2api_user_email || `用户 #${record.sub2api_user_id}` }}</strong><small>ID：{{ record.sub2api_user_id }}</small></template>
-          <span v-else>-</span>
+      <a-drawer v-if="detail" v-model:open="detailOpen" placement="right" :width="'100%'" title="账单详情">
+        <div class="appDetailBody">
+          <div class="appDetailList">
+            <div><span>业务日期</span><strong>{{ detail.biz_date }}</strong></div>
+            <div><span>类型</span><strong>{{ typeMeta(detail.type).text }}</strong></div>
+            <div><span>账单号</span><strong>{{ detail.bill_no }}</strong></div>
+            <div><span>用户</span><strong>{{ detail.sub2api_user_email || (detail.sub2api_user_id ? `用户 #${detail.sub2api_user_id}` : '-') }}</strong></div>
+            <div><span>分类</span><strong>{{ detail.category || '-' }}</strong></div>
+            <div><span>金额</span><strong class="money" :class="detail.type">{{ signedMoney(detail.amount, detail.type) }}</strong></div>
+            <div><span>操作人</span><strong>{{ detail.operator_name || detail.operator_email || '-' }}</strong></div>
+            <div><span>备注</span><strong>{{ detail.remark || '-' }}</strong></div>
+            <div><span>创建时间</span><strong>{{ detail.created_at || '-' }}</strong></div>
+          </div>
+        </div>
+      </a-drawer>
+    </template>
+
+    <template v-else>
+      <section class="filterPanel">
+        <div class="filterGrid">
+          <label class="filterDate">
+            <span>时间</span>
+            <div class="dateQuickFilter">
+              <a-segmented :value="dateMode" :options="[{ label: '今日', value: 'day' }, { label: '本周', value: 'week' }, { label: '本月', value: 'month' }]" @change="changeDateMode" />
+              <a-range-picker v-model:value="dateRange" @change="changeDates" />
+            </div>
+          </label>
+          <label class="filterType">
+            <span>类型</span>
+            <a-select v-model:value="type" allow-clear placeholder="全部类型">
+              <a-select-option value="income">收入</a-select-option>
+              <a-select-option value="expense">支出</a-select-option>
+              <a-select-option value="gift">赠送</a-select-option>
+            </a-select>
+          </label>
+          <label class="filterId"><span>用户 ID</span><a-input v-model:value="userId" allow-clear placeholder="精确用户 ID" @press-enter="loadItems(true)" /></label>
+          <label class="filterGrow"><span>关键词</span><a-input v-model:value="keyword" allow-clear placeholder="账单号 / 邮箱 / 分类 / 备注" @press-enter="loadItems(true)" /></label>
+          <label class="filterOperator"><span>操作人</span><a-select v-model:value="operator" allow-clear placeholder="全部操作人" :options="adminOptions.map(row => ({ label: `${row.name}（${row.email}）`, value: row.id }))" /></label>
+          <div class="filterActions">
+            <a-button :loading="exporting" @click="downloadExcel"><template #icon><DownloadOutlined /></template>导出 Excel</a-button>
+            <a-button type="primary" :loading="loading" @click="loadItems(true)"><template #icon><SearchOutlined /></template>查询</a-button>
+            <a-button @click="resetFilters">重置</a-button>
+          </div>
+        </div>
+      </section>
+
+      <div class="summaryGrid">
+        <section><span>收入 · {{ summary.income_count }} 笔</span><strong class="income">{{ signedMoney(summary.income_total, 'income') }}</strong></section>
+        <section><span>支出 · {{ summary.expense_count }} 笔</span><strong class="expense">{{ signedMoney(summary.expense_total, 'expense') }}</strong></section>
+        <section><span>赠送 · {{ summary.gift_count }} 笔</span><strong class="gift">{{ signedMoney(summary.gift_total, 'gift') }}</strong></section>
+        <section><span>全部账单</span><strong>{{ summary.record_count }}</strong></section>
+      </div>
+
+      <div class="tableTools"><ColumnSettings v-model:value="visibleCols" v-model:width="tableWidth" :options="colOptions" @reset="resetColumns" /></div>
+      <a-table
+        :row-key="rowKey"
+        :custom-row="rowProps"
+        :columns="columns"
+        :data-source="items"
+        :loading="loading"
+        :pagination="page"
+        :scroll="{ x: tableWidth }"
+        :locale="{ emptyText: '当前筛选范围暂无账单' }"
+        @resize-column="resizeColumn"
+        @change="changePage"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.dataIndex === 'type'"><a-tag :color="typeMeta(record.type).color">{{ typeMeta(record.type).text }}</a-tag></template>
+          <template v-else-if="column.dataIndex === 'user'">
+            <template v-if="record.sub2api_user_id"><strong>{{ record.sub2api_user_email || `用户 #${record.sub2api_user_id}` }}</strong><small>ID：{{ record.sub2api_user_id }}</small></template>
+            <span v-else>-</span>
+          </template>
+          <template v-else-if="column.dataIndex === 'category'">{{ record.category || '-' }}</template>
+          <template v-else-if="column.dataIndex === 'amount'"><span class="money" :class="record.type">{{ signedMoney(record.amount, record.type) }}</span></template>
+          <template v-else-if="column.dataIndex === 'operator'">{{ record.operator_name || record.operator_email || '-' }}</template>
+          <template v-else-if="column.dataIndex === 'remark'">{{ record.remark || '-' }}</template>
         </template>
-        <template v-else-if="column.dataIndex === 'category'">{{ record.category || '-' }}</template>
-        <template v-else-if="column.dataIndex === 'amount'"><span class="money" :class="record.type">{{ signedMoney(record.amount, record.type) }}</span></template>
-        <template v-else-if="column.dataIndex === 'operator'">{{ record.operator_name || record.operator_email || '-' }}</template>
-        <template v-else-if="column.dataIndex === 'remark'">{{ record.remark || '-' }}</template>
-      </template>
-    </a-table>
+      </a-table>
 
-    <a-drawer v-model:open="detailOpen" title="账单详情" width="560">
-      <a-descriptions v-if="detail" :column="1" bordered size="small">
-        <a-descriptions-item label="业务日期">{{ detail.biz_date }}</a-descriptions-item>
-        <a-descriptions-item label="类型"><a-tag :color="typeMeta(detail.type).color">{{ typeMeta(detail.type).text }}</a-tag></a-descriptions-item>
-        <a-descriptions-item label="账单号">{{ detail.bill_no }}</a-descriptions-item>
-        <a-descriptions-item label="用户">{{ detail.sub2api_user_email || (detail.sub2api_user_id ? `用户 #${detail.sub2api_user_id}` : '-') }}</a-descriptions-item>
-        <a-descriptions-item label="分类">{{ detail.category || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="金额"><strong class="money" :class="detail.type">{{ signedMoney(detail.amount, detail.type) }}</strong></a-descriptions-item>
-        <a-descriptions-item label="操作人">{{ detail.operator_name || detail.operator_email || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="备注">{{ detail.remark || '-' }}</a-descriptions-item>
-        <a-descriptions-item label="创建时间">{{ detail.created_at || '-' }}</a-descriptions-item>
-      </a-descriptions>
-    </a-drawer>
+      <a-drawer v-model:open="detailOpen" title="账单详情" width="560">
+        <a-descriptions v-if="detail" :column="1" bordered size="small">
+          <a-descriptions-item label="业务日期">{{ detail.biz_date }}</a-descriptions-item>
+          <a-descriptions-item label="类型"><a-tag :color="typeMeta(detail.type).color">{{ typeMeta(detail.type).text }}</a-tag></a-descriptions-item>
+          <a-descriptions-item label="账单号">{{ detail.bill_no }}</a-descriptions-item>
+          <a-descriptions-item label="用户">{{ detail.sub2api_user_email || (detail.sub2api_user_id ? `用户 #${detail.sub2api_user_id}` : '-') }}</a-descriptions-item>
+          <a-descriptions-item label="分类">{{ detail.category || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="金额"><strong class="money" :class="detail.type">{{ signedMoney(detail.amount, detail.type) }}</strong></a-descriptions-item>
+          <a-descriptions-item label="操作人">{{ detail.operator_name || detail.operator_email || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="备注">{{ detail.remark || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="创建时间">{{ detail.created_at || '-' }}</a-descriptions-item>
+        </a-descriptions>
+      </a-drawer>
+    </template>
   </section>
 </template>
 
 <style scoped>
 .historyPage { display: grid; gap: 16px; }
 :deep(.clickableRow) { cursor: pointer; }
-:deep(.clickableRow:hover) > td { background: rgba(22, 119, 255, .06) !important; }
+:deep(.clickableRow:hover) > td { background: var(--row-hover) !important; }
 .filterPanel { padding: 16px; border: 1px solid var(--border-color, #e8eaf0); border-radius: 8px; background: var(--card-bg, #fff); }
 .filterGrid { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; }
 .filterGrid label { display: grid; gap: 6px; min-width: 0; }
@@ -278,10 +379,24 @@ onMounted(() => loadItems())
 .summaryGrid span { display: block; margin-bottom: 5px; color: var(--text-secondary, #70798c); font-size: 13px; }
 .summaryGrid strong { font-size: 22px; font-variant-numeric: tabular-nums; }
 .money { font-weight: 700; font-variant-numeric: tabular-nums; }
-.income { color: #389e0d; }
-.expense { color: #cf1322; }
-.gift { color: #1677ff; }
+.income { color: var(--success); }
+.expense { color: var(--danger); }
+.gift { color: var(--info); }
 small { display: block; margin-top: 3px; color: var(--text-secondary, #7a8395); }
+.appSummaryGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.appSummaryCard { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.appSummaryCard span { display: block; margin-bottom: 4px; color: var(--muted); font-size: 12px; }
+.appSummaryCard strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.appCardList .appRecordCard { min-height: 128px; }
+.appDetailBody { padding: 16px; padding-bottom: calc(28px + var(--app-safe-bottom)); }
+.appDetailList { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--border); }
+.appDetailList > div { display: flex; justify-content: space-between; gap: 12px; padding: 13px 12px; background: var(--surface); }
+.appDetailList span { color: var(--muted); font-size: 13px; }
+.appDetailList strong { min-width: 0; color: var(--heading); text-align: right; overflow-wrap: anywhere; }
+.appFormStack { display: grid; gap: 14px; }
+.appFormStack label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
+.appFullControl { width: 100%; }
+.appIconOnly { width: 42px; padding: 0; }
 @media (max-width: 760px) {
   .filterGrid label { flex: 1 1 100%; max-width: none; }
   .dateQuickFilter { flex-direction: column; }

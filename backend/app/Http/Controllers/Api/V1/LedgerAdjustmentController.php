@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 class LedgerAdjustmentController extends Controller
 {
@@ -139,5 +140,19 @@ class LedgerAdjustmentController extends Controller
             'adjustment' => $service->row($adj),
             'message' => $ok ? '原单重试成功，Sub2API 已入账并确认' : '原单重试后仍未确认成功',
         ], $ok ? 200 : 409);
+    }
+
+    public function markVoided(Request $req, LedgerAdjustment $adjustment, LedgerAdjustmentService $service): JsonResponse
+    {
+        try {
+            $adj = $service->voidAdjustment($req->user(), $adjustment);
+        } catch (RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
+        }
+
+        return response()->json([
+            'adjustment' => $service->row($adj),
+            'message' => '异常调额已作废',
+        ]);
     }
 }

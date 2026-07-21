@@ -5,10 +5,12 @@ import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { login } from '../api/auth'
 import { useAuthStore } from '../stores/auth'
+import { useAppMode } from '../app/composables/useAppMode'
 
 const route = useRoute()
 const router = useRouter()
 const adminAuth = useAuthStore()
+const { isAppMode } = useAppMode()
 const loading = ref(false)
 const error = ref('')
 const form = reactive({
@@ -30,9 +32,13 @@ async function submit() {
     const account = form.account.trim()
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
     const res = await login(account, form.password)
-    adminAuth.clear()
-    adminAuth.save(res.token, res.admin)
-    await router.replace(redirect.startsWith('/') ? redirect : '/')
+    await adminAuth.clear()
+    await adminAuth.save(res.token, res.admin)
+    const fallback = isAppMode.value ? '/app' : '/'
+    const target = isAppMode.value && redirect === '/'
+      ? fallback
+      : redirect.startsWith('/') ? redirect : fallback
+    await router.replace(target)
   } catch (err) {
     error.value = errorMessage(err)
   } finally {
