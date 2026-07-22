@@ -11,7 +11,8 @@ const admin = {
 
 test('App mode opens the module home without desktop navigation and renders mobile ranking cards', async ({ page }) => {
   await page.route('**/api/v1/**', (route) => {
-    const path = new URL(route.request().url()).pathname
+    const url = new URL(route.request().url())
+    const path = url.pathname
     if (path.endsWith('/auth/login')) {
       return route.fulfill({
         status: 200,
@@ -39,16 +40,17 @@ test('App mode opens the module home without desktop navigation and renders mobi
       })
     }
     if (path.endsWith('/sub2api/model-stats')) {
+      const selectedModel = url.searchParams.get('model')
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
           range: { start_date: '2026-07-14', end_date: '2026-07-20', timezone: 'Asia/Shanghai' },
           model_source: 'requested',
-          selected_model: null,
+          selected_model: selectedModel,
           summary: { model_count: 1, request_count: 2, total_tokens: 300, cache_tokens: 0, cache_rate: 0, standard_cost: '0.00', actual_cost: '0.00', top3_token_rate: 1 },
-          models: [{ model: 'claude-3-7-sonnet', request_count: 2, input_tokens: 100, output_tokens: 200, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 300, standard_cost: '0.00', actual_cost: '0.00' }],
-          users: [],
+          models: selectedModel ? [] : [{ model: 'claude-3-7-sonnet', request_count: 2, input_tokens: 100, output_tokens: 200, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: 300, standard_cost: '0.00', actual_cost: '0.00' }],
+          users: selectedModel ? [{ user_id: 10, email: 'user@example.com', request_count: 2, input_tokens: 100, output_tokens: 200, cache_tokens: 0, total_tokens: 300, standard_cost: '0.00', actual_cost: '1.25' }] : [],
         }),
       })
     }
@@ -72,6 +74,11 @@ test('App mode opens the module home without desktop navigation and renders mobi
   await page.goto('/login')
   await page.getByPlaceholder('请输入账号').fill(admin.email)
   await page.getByPlaceholder('请输入密码').fill('secret123')
+  const loginBox = await page.locator('.appLoginContent').boundingBox()
+  const viewport = page.viewportSize()
+  expect(loginBox).not.toBeNull()
+  expect(viewport).not.toBeNull()
+  expect(Math.abs((loginBox?.x || 0) + (loginBox?.width || 0) / 2 - (viewport?.width || 0) / 2)).toBeLessThanOrEqual(1)
   await page.locator('button[type="submit"]').click()
 
   await expect(page).toHaveURL(/\/app$/)
@@ -88,6 +95,11 @@ test('App mode opens the module home without desktop navigation and renders mobi
   await expect(page.locator('.appStatCard')).toContainText('claude-3-7-sonnet')
   await expect(page.locator('.soySider')).toHaveCount(0)
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy()
+  await page.locator('.appStatCard').click()
+  await expect(page).toHaveURL(/\/sub2api\/models\/detail\?.*model=claude-3-7-sonnet/)
+  await expect(page.getByText('user@example.com', { exact: true })).toBeVisible()
+  await page.goBack()
+  await expect(page).toHaveURL(/\/sub2api\/models$/)
   await page.getByRole('button', { name: '返回' }).click()
   await expect(page).toHaveURL(/\/app$/)
 
@@ -98,8 +110,113 @@ test('App mode opens the module home without desktop navigation and renders mobi
   await page.goto('/audit-log')
   await expect(page.locator('.appAuditCard')).toContainText('管理员')
   await expect(page.locator('.soySider')).toHaveCount(0)
+  await page.locator('.appAuditCard').click()
+  await expect(page).toHaveURL(/\/audit-log\/1$/)
+  await expect(page.getByText('新管理员', { exact: true })).toBeVisible()
+  await expect(page.locator('.ant-drawer-open')).toHaveCount(0)
+  await page.goBack()
+  await expect(page).toHaveURL(/\/audit-log$/)
   await page.goto('/admins')
   await expect(page.locator('.appAdminCard')).toContainText('admin@example.com')
+  await page.getByRole('button', { name: '查看详情' }).click()
+  await expect(page).toHaveURL(/\/admins\/1$/)
+  await expect(page.locator('.adminDetailList')).toContainText('admin@example.com')
+  await page.goBack()
+  await expect(page).toHaveURL(/\/admins$/)
+})
+
+test('App quota detail routes preserve a real two-level history stack', async ({ page }) => {
+  const user = {
+    id: 10,
+    email: 'user@example.com',
+    username: '测试用户',
+    role: 'user',
+    balance: '88.00',
+    total_recharged: '100.00',
+    status: 'active',
+    last_used_at: '2026-07-20 10:00:00',
+    created_at: '2026-07-01 10:00:00',
+    updated_at: '2026-07-20 10:00:00',
+  }
+  const history = {
+    id: 99,
+    ledger_adjustment_id: 1,
+    ledger_no: 'ADJ-99',
+    type: 'admin_adjustment',
+    value: '12.00',
+    operation: 'increment',
+    operator_name: '管理员',
+    operator_email: 'admin@example.com',
+    adjusted_account: user.email,
+    adjusted_user_id: user.id,
+    before_balance: '76.00',
+    after_balance: '88.00',
+    adjust_reason: '充值',
+    admin_notes: null,
+    status: 'succeeded',
+    used_at: '2026-07-20 10:00:00',
+    created_at: '2026-07-20 10:00:00',
+    notes: '[sub2api-audit ledger_no=ADJ-99 idempotency_key=idem-99]',
+  }
+
+  await page.route('**/api/v1/**', (route) => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/auth/login')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ identity_type: 'admin', token: 'app-e2e-token', admin }) })
+    }
+    if (path.endsWith('/auth/me')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ admin }) })
+    }
+    if (path.endsWith('/sub2api/users/10/balance-history')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [history], total: 1, page: 1, page_size: 8, total_recharged: '100.00' }) })
+    }
+    if (path.endsWith('/sub2api/users')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [user], total: 1, page: 1, page_size: 10, summary: { user_count: 1, active_count: 1, disabled_count: 0, balance_total: '88.00', average_balance: '88.00', negative_balance_count: 0, zero_balance_count: 0 } }) })
+    }
+    if (path.endsWith('/finance/users/10/summary')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ total_recharge: '100.00', total_gift: '12.00' }) })
+    }
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+  })
+
+  await page.goto('/login')
+  await page.getByPlaceholder('请输入账号').fill(admin.email)
+  await page.getByPlaceholder('请输入密码').fill('secret123')
+  await page.locator('button[type="submit"]').click()
+  await page.getByText('用户充值', { exact: true }).first().click()
+  await expect(page).toHaveURL(/\/users-quota$/)
+
+  const listStyle = await page.locator('.app-card-list').evaluate((el) => {
+    const style = getComputedStyle(el)
+    return { display: style.display, gap: style.rowGap, top: style.paddingTop, bottom: style.paddingBottom }
+  })
+  expect(listStyle).toEqual({ display: 'grid', gap: '16px', top: '12px', bottom: '12px' })
+
+  await expect(page.locator('.app-quota-user-card')).toContainText('user@example.com')
+  await page.locator('.app-quota-user-card').click()
+  await expect(page).toHaveURL(/\/users-quota\/10$/)
+  await expect(page.getByRole('heading', { name: '充值入账' })).toBeVisible()
+  await expect(page.locator('.ant-drawer-open')).toHaveCount(0)
+
+  await page.locator('.quotaForm input[inputmode="decimal"]').first().fill('10')
+  await page.locator('.app-action-confirm').click()
+  await expect(page.locator('.app-confirm-summary p').nth(5).locator('strong')).toContainText('98.00')
+  await page.locator('.ant-modal-close').click()
+  await expect(page.locator('.ant-modal-wrap')).toBeHidden()
+
+  await page.locator('.app-history-button').click()
+  await expect(page).toHaveURL(/\/users-quota\/10\/history\/99$/)
+  await expect(page.getByText('ADJ-99', { exact: true })).toBeVisible()
+  await expect(page.locator('pre').filter({ hasText: '[sub2api-audit' })).toHaveCount(0)
+
+  await page.goBack()
+  await expect(page).toHaveURL(/\/users-quota\/10$/)
+  await expect(page.getByRole('heading', { name: '充值入账' })).toBeVisible()
+  await page.goBack()
+  await expect(page).toHaveURL(/\/users-quota$/)
+  await expect(page.locator('.app-quota-user-card')).toBeVisible()
+  await page.goBack()
+  await expect(page).toHaveURL(/\/app$/)
 })
 
 test('App quota paste fallback sends one request after repeated clicks and paste input events', async ({ page }) => {

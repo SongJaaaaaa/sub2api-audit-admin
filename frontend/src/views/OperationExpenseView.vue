@@ -3,7 +3,8 @@ import { FilterOutlined, PlusOutlined, RightOutlined } from '@ant-design/icons-v
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { App as AntApp } from 'ant-design-vue'
 import dayjs, { type Dayjs } from 'dayjs'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { createOperationExpense, getOperationExpenses, type ExpenseSummary, type OperationExpense } from '../api/finance'
 import MobileActionBar from '../app/components/MobileActionBar.vue'
 import MobileFilterSheet from '../app/components/MobileFilterSheet.vue'
@@ -19,6 +20,8 @@ import { useTableColumns } from '../composables/useTableColumns'
 
 const { message, modal } = AntApp.useApp()
 const { isAppMode } = useAppMode()
+const route = useRoute()
+const router = useRouter()
 const adminOptions = useAdminOptions()
 const loading = ref(false)
 const loadError = ref('')
@@ -61,6 +64,16 @@ const activeFilters = computed(() => {
 })
 
 const hasMore = computed(() => items.value.length < page.total)
+const isAppDetail = computed(() => isAppMode.value && route.name === 'expense-detail')
+
+function restoreDetail() {
+  if (!isAppDetail.value) return
+  const id = Number(route.params.expenseId)
+  const stateDetail = window.history.state?.detail as OperationExpense | undefined
+  selected.value = Number(stateDetail?.id) === id
+    ? stateDetail || null
+    : items.value.find(row => row.id === id) || null
+}
 
 async function loadItems(reset = false, append = false) {
   if (loading.value && !reset) return
@@ -86,6 +99,7 @@ async function loadItems(reset = false, append = false) {
     page.current = res.page
     page.pageSize = res.page_size
     Object.assign(summary, res.summary)
+    restoreDetail()
   } catch (err) {
     if (version !== requestVersion) return
     loadError.value = err instanceof Error ? err.message : '读取支出失败'
@@ -136,12 +150,18 @@ async function saveExpense() {
     const res = await createOperationExpense(form)
     message.success(res.message)
     modalOpen.value = false
-    selected.value = res.expense
-    drawerOpen.value = true
+    await openDetail(res.expense)
     await loadItems(true)
   } catch { message.error('保存支出失败') } finally { submitting.value = false }
 }
-function openDetail(row: OperationExpense) { selected.value = row; drawerOpen.value = true }
+async function openDetail(row: OperationExpense) {
+  selected.value = row
+  if (isAppMode.value) {
+    await router.push({ name: 'expense-detail', params: { expenseId: row.id }, state: { detail: { ...row } } })
+    return
+  }
+  drawerOpen.value = true
+}
 function rowProps(row: OperationExpense) {
   return { class: 'clickableRow', onClick: () => openDetail(row) }
 }
@@ -150,12 +170,33 @@ function signedExpense(value: string | number) {
   return amount === 0 ? '0.00' : `-${Math.abs(amount).toFixed(2)}`
 }
 
+watch(() => [isAppDetail.value, route.params.expenseId] as const, ([show]) => {
+  if (show) restoreDetail()
+}, { immediate: true })
+
 onMounted(loadItems)
 </script>
 
 <template>
   <section class="page">
     <template v-if="isAppMode">
+      <template v-if="isAppDetail">
+        <div v-if="selected" class="appDetailBody appRouteDetail">
+          <div class="appDetailList">
+            <div><span>单号</span><strong>{{ selected.expense_no }}</strong></div>
+            <div><span>金额</span><strong class="expenseMoney">{{ signedExpense(selected.amount) }}</strong></div>
+            <div><span>日期</span><strong>{{ selected.paid_at || '-' }}</strong></div>
+            <div><span>分类</span><strong>{{ selected.category || '-' }}</strong></div>
+            <div><span>操作人</span><strong>{{ selected.operator_name || selected.operator_email || '-' }}</strong></div>
+            <div><span>创建时间</span><strong>{{ selected.created_at || '-' }}</strong></div>
+          </div>
+          <div v-if="selected.content_html" class="detailNotes"><h3>备注</h3><SafeRichTextDisplay :value="selected.content_html" /></div>
+          <div class="drawerBlock"><h3>附件</h3><AttachmentUploader attachable-type="operation_expense" :attachable-id="selected.id" /></div>
+        </div>
+        <MobileListState v-else :loading="loading" :error="loadError" :empty="!loading && !loadError" empty-text="未找到该支出记录" @retry="loadItems(true)" />
+      </template>
+
+      <template v-else>
       <div class="appFilterBar">
         <input v-model="filters.keyword" class="appSearchInput" type="search" placeholder="搜索备注关键词" @keyup.enter="search" />
         <button class="appSecondaryButton appFilterButton" type="button" @click="filterOpen = true"><FilterOutlined />筛选<span v-if="activeFilters.length">（{{ activeFilters.length }}）</span></button>
@@ -197,21 +238,6 @@ onMounted(loadItems)
         </div>
       </MobileFilterSheet>
 
-      <a-drawer v-if="selected" v-model:open="drawerOpen" placement="right" :width="'100%'" title="支出详情">
-        <div class="appDetailBody">
-          <div class="appDetailList">
-            <div><span>单号</span><strong>{{ selected.expense_no }}</strong></div>
-            <div><span>金额</span><strong class="expenseMoney">{{ signedExpense(selected.amount) }}</strong></div>
-            <div><span>日期</span><strong>{{ selected.paid_at || '-' }}</strong></div>
-            <div><span>分类</span><strong>{{ selected.category || '-' }}</strong></div>
-            <div><span>操作人</span><strong>{{ selected.operator_name || selected.operator_email || '-' }}</strong></div>
-            <div><span>创建时间</span><strong>{{ selected.created_at || '-' }}</strong></div>
-          </div>
-          <div v-if="selected.content_html" class="detailNotes"><h3>备注</h3><SafeRichTextDisplay :value="selected.content_html" /></div>
-          <div class="drawerBlock"><h3>附件</h3><AttachmentUploader attachable-type="operation_expense" :attachable-id="selected.id" /></div>
-        </div>
-      </a-drawer>
-
       <a-drawer v-model:open="modalOpen" placement="right" :width="'100%'" title="新增支出">
         <div class="appDetailBody">
           <a-form layout="vertical">
@@ -222,6 +248,7 @@ onMounted(loadItems)
         </div>
         <MobileActionBar><button class="appPrimaryButton" type="button" :disabled="submitting" @click="requestSubmit">{{ submitting ? '保存中…' : '确认保存' }}</button></MobileActionBar>
       </a-drawer>
+      </template>
     </template>
 
     <template v-else>
@@ -292,6 +319,7 @@ onMounted(loadItems)
 .appSummaryCard strong { font-size: 19px; font-variant-numeric: tabular-nums; }
 .appCardList .appRecordCard { min-height: 128px; }
 .appDetailBody { padding: 16px; padding-bottom: calc(28px + var(--app-safe-bottom)); }
+.appRouteDetail { padding: 8px 0 calc(28px + var(--app-safe-bottom)); }
 .appDetailList { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--border); }
 .appDetailList > div { display: flex; justify-content: space-between; gap: 12px; padding: 13px 12px; background: var(--surface); }
 .appDetailList span { color: var(--muted); font-size: 13px; }

@@ -3,8 +3,8 @@ import { GiftOutlined, HistoryOutlined, ImportOutlined, MinusCircleOutlined, Plu
 import type { TableProps } from 'ant-design-vue'
 import { App as AntApp } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
-import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { createBatchGift } from '../api/ledger'
 import { getSub2BalanceHistory, getSub2Users, type Sub2BalanceHistoryItem, type Sub2User, type UserSummary } from '../api/sub2api'
 
@@ -14,6 +14,7 @@ import { useTableColumns } from '../composables/useTableColumns'
 import { useAppMode } from '../app/composables/useAppMode'
 const { message } = AntApp.useApp()
 const { isAppMode } = useAppMode()
+const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const historyLoading = ref(false)
@@ -40,7 +41,8 @@ const batchMode = ref<'selected' | 'all' | 'imported'>('selected')
 const batchProgress = ref('')
 const batchForm = reactive({ amount: '', admin_notes: '', include_revenue: false })
 const mobileFiltersOpen = ref(false)
-const mobileDetailOpen = ref(false)
+const detailLoading = ref(false)
+const detailError = ref('')
 const mobileHistoryLoadingMore = ref(false)
 const mobileLoadingMore = ref(false)
 let historyVersion = 0
@@ -76,6 +78,8 @@ const actionName = computed(() => batchForm.include_revenue ? '入账' : '赠送
 const batchTotalAmount = computed(() => moneyText(Number(batchForm.amount || 0) * batchCount.value))
 const hasMoreUsers = computed(() => page.current * page.pageSize < page.total)
 const hasMoreHistory = computed(() => historyPage.current * historyPage.pageSize < historyPage.total)
+const isAppDetail = computed(() => isAppMode.value && route.name === 'sub2-user-detail')
+const detailUserId = computed(() => Number(route.params.userId) || 0)
 const mobileFilterTags = computed(() => {
   const tags: Array<{ key: string; label: string }> = []
   if (keyword.value.trim()) tags.push({ key: 'keyword', label: `关键词：${keyword.value.trim()}` })
@@ -192,12 +196,35 @@ function openHistory(row: Sub2User) {
   loadHistory(row.id)
 }
 
-function openMobileUser(row: Sub2User) {
+async function openMobileUser(row: Sub2User) {
   selectedUser.value = row
-  mobileDetailOpen.value = true
   history.value = []
   historyPage.current = 1
-  loadHistory(row.id)
+  await router.push({ name: 'sub2-user-detail', params: { userId: row.id } })
+}
+
+async function loadUserDetail(userId: number) {
+  if (!userId) return
+  detailLoading.value = true
+  detailError.value = ''
+  history.value = []
+  historyPage.current = 1
+  try {
+    if (selectedUser.value?.id !== userId) {
+      selectedUser.value = null
+      const res = await getSub2Users({ page: 1, page_size: 1, user_id: userId })
+      selectedUser.value = res.items[0] || null
+    }
+    if (!selectedUser.value) {
+      detailError.value = '未找到该用户'
+      return
+    }
+    await loadHistory(userId)
+  } catch {
+    detailError.value = '读取用户详情失败'
+  } finally {
+    detailLoading.value = false
+  }
 }
 
 function toggleMobileSelection(row: Sub2User, event: Event) {
@@ -413,11 +440,19 @@ function typeLabel(type: string) {
   return map[type] || type || '-'
 }
 
-onMounted(loadUsers)
+watch(
+  () => [isAppDetail.value, detailUserId.value] as const,
+  ([detail, userId]) => {
+    if (detail) void loadUserDetail(userId)
+    else if (!loaded.value) void loadUsers()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
   <section v-if="isAppMode" class="app-page app-sub2-users">
+    <template v-if="!isAppDetail">
     <header class="app-header">
       <div>
         <span class="app-eyebrow">Sub2API</span>
@@ -585,13 +620,11 @@ onMounted(loadUsers)
         <a-alert v-if="batchProgress" type="info" show-icon :message="batchProgress" />
       </a-form>
     </a-modal>
+    </template>
 
-    <a-drawer
-      v-model:open="mobileDetailOpen"
-      placement="right"
-      :width="'100%'"
-      :title="selectedUser ? `${selectedUser.username || selectedUser.email} · 用户详情` : '用户详情'"
-    >
+    <template v-else>
+      <a-alert v-if="detailError" type="error" show-icon :message="detailError" />
+      <a-spin :spinning="detailLoading && !selectedUser">
       <template v-if="selectedUser">
         <div class="app-detail">
           <div class="app-detail-hero">
@@ -625,7 +658,9 @@ onMounted(loadUsers)
           </section>
         </div>
       </template>
-    </a-drawer>
+      <a-empty v-else-if="!detailLoading" description="未找到用户" />
+      </a-spin>
+    </template>
   </section>
 
   <section v-else class="page">

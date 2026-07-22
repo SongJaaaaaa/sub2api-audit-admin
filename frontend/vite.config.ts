@@ -1,3 +1,4 @@
+import { Agent } from 'node:https'
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -50,6 +51,7 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: apiTarget,
           changeOrigin: true,
+          agent: apiTarget.startsWith('https://') ? new Agent({ keepAlive: true }) : undefined,
           // 允许把请求转发到 https 的线上后端（自签/正式证书均可），供 app 模式开发代理使用
           secure: false,
         },

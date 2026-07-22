@@ -218,7 +218,7 @@ class Sub2ApiDataController extends Controller
             'status' => $row['status'] ?? null,
             'used_at' => ChinaTime::fmt($row['used_at'] ?? null),
             'created_at' => ChinaTime::fmt($row['created_at'] ?? null),
-            'notes' => $row['notes'] ?? null,
+            'notes' => Sub2ApiNoteTag::visibleNotes($row['notes'] ?? null),
         ];
     }
 

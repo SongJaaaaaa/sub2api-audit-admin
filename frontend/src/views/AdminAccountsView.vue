@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { App as AntApp } from 'ant-design-vue'
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAppMode } from '../app/composables/useAppMode'
 import { getAdmins, type AdminAccount, type AdminSummary } from '../api/admin'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
@@ -9,9 +10,11 @@ import { useTableColumns } from '../composables/useTableColumns'
 
 const { message } = AntApp.useApp()
 const { isAppMode } = useAppMode()
+const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const loadError = ref('')
-const selected = ref<AdminAccount | null>(null)
+const selected = ref<AdminAccount | null>((window.history.state?.appDetail as AdminAccount | undefined) || null)
 const detailOpen = ref(false)
 let loadSeq = 0
 const items = ref<AdminAccount[]>([])
@@ -27,6 +30,7 @@ const allColumns = [
   { title: '创建时间', dataIndex: 'created_at', width: 180 },
 ] as const
 const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('admin-account-columns', allColumns, 800)
+const appDetailPage = computed(() => route.name === 'admin-detail')
 
 async function loadItems(append = false) {
   const seq = ++loadSeq
@@ -42,6 +46,9 @@ async function loadItems(append = false) {
     })
     if (seq !== loadSeq) return
     items.value = append ? [...items.value, ...res.items] : res.items
+    if (appDetailPage.value && !selected.value) {
+      selected.value = res.items.find(item => item.id === Number(route.params.adminId)) || null
+    }
     page.total = res.total
     Object.assign(summary, res.summary)
   } catch {
@@ -83,7 +90,15 @@ function loadMore() {
 
 function openDetail(row: AdminAccount) {
   selected.value = row
-  detailOpen.value = true
+  if (isAppMode.value) {
+    void router.push({
+      name: 'admin-detail',
+      params: { adminId: row.id },
+      state: { appDetail: { ...row } },
+    })
+  } else {
+    detailOpen.value = true
+  }
 }
 
 onMounted(loadItems)
@@ -95,7 +110,7 @@ onMounted(loadItems)
       <template #description><a-button size="small" @click="loadItems">重试</a-button></template>
     </a-alert>
 
-    <template v-if="isAppMode">
+    <template v-if="isAppMode && !appDetailPage">
     <div class="appAdminFilters">
       <a-input v-model:value="filters.keyword" placeholder="姓名或登录邮箱" allow-clear @press-enter="search" />
       <a-select v-model:value="filters.status" placeholder="全部状态" allow-clear>
@@ -123,7 +138,7 @@ onMounted(loadItems)
     <div v-if="hasMore()" class="appLoadMore"><a-button :loading="loading" block @click="loadMore">加载更多</a-button></div>
     </template>
 
-    <template v-else>
+    <template v-else-if="!isAppMode">
     <div class="adminFilterBar">
       <a-input v-model:value="filters.keyword" class="filterGrow" placeholder="姓名或登录邮箱" allow-clear @press-enter="search" />
       <a-select v-model:value="filters.status" class="filterStatus" placeholder="全部状态">
@@ -167,7 +182,17 @@ onMounted(loadItems)
     </a-table>
     </template>
 
-    <a-modal v-model:open="detailOpen" title="管理员详情" :footer="null" destroy-on-close>
+    <dl v-else-if="selected" class="adminDetailList appRouteDetail">
+      <div><dt>姓名</dt><dd>{{ selected.name || '-' }}</dd></div>
+      <div><dt>登录邮箱</dt><dd>{{ selected.email || '-' }}</dd></div>
+      <div><dt>Sub2API ID</dt><dd>{{ selected.sub2api_user_id || '-' }}</dd></div>
+      <div><dt>状态</dt><dd>{{ selected.status === 'active' ? '启用' : '停用' }}</dd></div>
+      <div><dt>创建时间</dt><dd>{{ selected.created_at || '-' }}</dd></div>
+    </dl>
+    <div v-else-if="loading" class="appLoadingState"><a-spin /><span>正在加载管理员详情</span></div>
+    <a-empty v-else description="未找到该管理员，请返回列表重新打开" />
+
+    <a-modal v-if="!isAppMode" v-model:open="detailOpen" title="管理员详情" :footer="null" destroy-on-close>
       <template v-if="selected">
         <dl class="adminDetailList">
           <div><dt>姓名</dt><dd>{{ selected.name || '-' }}</dd></div>

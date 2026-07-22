@@ -5,6 +5,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import AppPageHeader from '../components/AppPageHeader.vue'
 import { useAppMode } from '../composables/useAppMode'
+import { appParentRoute, hasAppBackEntry } from '../services/appNavigation'
 import { initNativeRuntime, networkOnline, syncNativeTheme } from '../services/nativeRuntime'
 import { useAuthStore } from '../../stores/auth'
 import { useThemeStore, type ThemeMode } from '../../stores/theme'
@@ -30,8 +31,8 @@ const themeOptions: Array<{ value: ThemeMode; label: string }> = [
 ]
 
 function goBack() {
-  if (window.history.length > 1 && route.path !== '/app') router.back()
-  else router.replace('/app')
+  if (hasAppBackEntry() && route.path !== '/app') router.back()
+  else router.replace(appParentRoute(route))
 }
 
 async function logout() {

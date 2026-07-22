@@ -4,7 +4,8 @@ import type { TablePaginationConfig } from 'ant-design-vue'
 import { App as AntApp } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   createIncome,
   getCashEntries,
@@ -24,6 +25,8 @@ import { useTableColumns } from '../composables/useTableColumns'
 
 const { message, modal } = AntApp.useApp()
 const { isAppMode } = useAppMode()
+const route = useRoute()
+const router = useRouter()
 const adminOptions = useAdminOptions()
 const loading = ref(false)
 const loadError = ref('')
@@ -65,6 +68,16 @@ const activeFilters = computed(() => {
 })
 
 const hasMore = computed(() => items.value.length < page.total)
+const isAppDetail = computed(() => isAppMode.value && route.name === 'income-detail')
+
+function restoreDetail() {
+  if (!isAppDetail.value) return
+  const id = Number(route.params.entryId)
+  const stateDetail = window.history.state?.detail as CashEntry | undefined
+  detail.value = Number(stateDetail?.id) === id
+    ? stateDetail || null
+    : items.value.find(row => row.id === id) || null
+}
 
 function filterParams() {
   return {
@@ -94,6 +107,7 @@ async function loadItems(reset = false, append = false) {
     page.current = res.page
     page.pageSize = res.page_size
     Object.assign(summary, res.summary)
+    restoreDetail()
   } catch (err) {
     if (version !== requestVersion) return
     loadError.value = err instanceof Error ? err.message : '读取收入记录失败'
@@ -144,13 +158,19 @@ function changeDates() {
   dateMode.value = ''
 }
 
+async function openDetail(row: CashEntry) {
+  detail.value = row
+  if (isAppMode.value) {
+    await router.push({ name: 'income-detail', params: { entryId: row.id }, state: { detail: { ...row } } })
+    return
+  }
+  detailOpen.value = true
+}
+
 function rowProps(row: CashEntry) {
   return {
     class: 'clickableRow',
-    onClick: () => {
-      detail.value = row
-      detailOpen.value = true
-    },
+    onClick: () => openDetail(row),
   }
 }
 
@@ -190,8 +210,7 @@ async function saveIncome() {
     const res = await createIncome(form)
     message.success(res.message)
     modalOpen.value = false
-    detail.value = res.income
-    detailOpen.value = true
+    await openDetail(res.income)
     await loadItems(true)
   } catch {
     message.error('保存收入失败')
@@ -200,12 +219,34 @@ async function saveIncome() {
   }
 }
 
+watch(() => [isAppDetail.value, route.params.entryId] as const, ([show]) => {
+  if (show) restoreDetail()
+}, { immediate: true })
+
 onMounted(loadItems)
 </script>
 
 <template>
   <section class="page">
     <template v-if="isAppMode">
+      <template v-if="isAppDetail">
+        <div v-if="detail" class="appDetailBody appRouteDetail">
+          <div class="appDetailList">
+            <div><span>收入单号</span><strong>{{ detail.entry_no }}</strong></div>
+            <div><span>用户</span><strong>{{ detail.sub2api_user_email || `用户 #${detail.sub2api_user_id || '-'}` }}</strong></div>
+            <div><span>操作人</span><strong>{{ detail.operator_name || detail.operator_email || '-' }}</strong></div>
+            <div><span>收入金额</span><strong class="positive">{{ signedMoney(detail.cash_amount) }}</strong></div>
+            <div><span>收入日期</span><strong>{{ detail.received_at || '-' }}</strong></div>
+            <div><span>来源</span><strong>{{ sourceLabel(detail.source) }}</strong></div>
+            <div><span>记录时间</span><strong>{{ detail.created_at || '-' }}</strong></div>
+          </div>
+          <div v-if="detail.content_html" class="detailNotes"><h3>备注</h3><SafeRichTextDisplay :value="detail.content_html" /></div>
+          <div v-else class="appDetailNote">备注：{{ detail.remark || '-' }}</div>
+        </div>
+        <MobileListState v-else :loading="loading" :error="loadError" :empty="!loading && !loadError" empty-text="未找到该收入记录" @retry="loadItems(true)" />
+      </template>
+
+      <template v-else>
       <div class="appFilterBar">
         <input v-model="email" class="appSearchInput" type="search" placeholder="搜索用户邮箱" @keyup.enter="search" />
         <button class="appSecondaryButton appFilterButton" type="button" @click="filterOpen = true"><FilterOutlined />筛选<span v-if="activeFilters.length">（{{ activeFilters.length }}）</span></button>
@@ -227,8 +268,8 @@ onMounted(loadItems)
           class="appRecordCard"
           role="button"
           tabindex="0"
-          @click="detail = row; detailOpen = true"
-          @keydown.enter="detail = row; detailOpen = true"
+          @click="openDetail(row)"
+          @keydown.enter="openDetail(row)"
         >
           <div class="appCardTop"><strong>{{ row.sub2api_user_email || `用户 #${row.sub2api_user_id || '-'}` }}</strong><RightOutlined class="appCardArrow" /></div>
           <div class="appCardMetric"><strong class="positive">{{ signedMoney(row.cash_amount) }}</strong><span class="appStatus success">{{ sourceLabel(row.source) }}</span></div>
@@ -246,22 +287,6 @@ onMounted(loadItems)
         </div>
       </MobileFilterSheet>
 
-      <a-drawer v-if="detail" v-model:open="detailOpen" placement="right" :width="'100%'" title="收入详情">
-        <div class="appDetailBody">
-          <div class="appDetailList">
-            <div><span>收入单号</span><strong>{{ detail.entry_no }}</strong></div>
-            <div><span>用户</span><strong>{{ detail.sub2api_user_email || `用户 #${detail.sub2api_user_id || '-'}` }}</strong></div>
-            <div><span>操作人</span><strong>{{ detail.operator_name || detail.operator_email || '-' }}</strong></div>
-            <div><span>收入金额</span><strong class="positive">{{ signedMoney(detail.cash_amount) }}</strong></div>
-            <div><span>收入日期</span><strong>{{ detail.received_at || '-' }}</strong></div>
-            <div><span>来源</span><strong>{{ sourceLabel(detail.source) }}</strong></div>
-            <div><span>记录时间</span><strong>{{ detail.created_at || '-' }}</strong></div>
-          </div>
-          <div v-if="detail.content_html" class="detailNotes"><h3>备注</h3><SafeRichTextDisplay :value="detail.content_html" /></div>
-          <div v-else class="appDetailNote">备注：{{ detail.remark || '-' }}</div>
-        </div>
-      </a-drawer>
-
       <a-drawer v-model:open="modalOpen" placement="right" :width="'100%'" title="新增收入">
         <div class="appDetailBody">
           <a-form layout="vertical">
@@ -272,6 +297,7 @@ onMounted(loadItems)
         </div>
         <MobileActionBar><button class="appPrimaryButton" type="button" :disabled="submitting" @click="requestSubmit">{{ submitting ? '保存中…' : '确认保存' }}</button></MobileActionBar>
       </a-drawer>
+      </template>
     </template>
 
     <template v-else>
@@ -371,6 +397,7 @@ onMounted(loadItems)
 .appSummaryCard strong { font-size: 19px; font-variant-numeric: tabular-nums; }
 .appCardList .appRecordCard { min-height: 128px; }
 .appDetailBody { padding: 16px; padding-bottom: calc(28px + var(--app-safe-bottom)); }
+.appRouteDetail { padding: 8px 0 calc(28px + var(--app-safe-bottom)); }
 .appDetailList { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--border); }
 .appDetailList > div { display: flex; justify-content: space-between; gap: 12px; padding: 13px 12px; background: var(--surface); }
 .appDetailList span { color: var(--muted); font-size: 13px; }

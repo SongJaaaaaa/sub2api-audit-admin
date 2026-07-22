@@ -4,7 +4,8 @@ import type { TablePaginationConfig } from 'ant-design-vue'
 import { App as AntApp } from 'ant-design-vue'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   exportFinanceHistoryExcel,
   getFinanceHistory,
@@ -24,6 +25,8 @@ import { useTableColumns } from '../composables/useTableColumns'
 
 const { message } = AntApp.useApp()
 const { isAppMode } = useAppMode()
+const route = useRoute()
+const router = useRouter()
 const adminOptions = useAdminOptions()
 const loading = ref(false)
 const loadError = ref('')
@@ -75,6 +78,17 @@ const activeFilters = computed(() => {
 })
 
 const hasMore = computed(() => items.value.length < page.total)
+const isAppDetail = computed(() => isAppMode.value && route.name === 'balance-event-detail')
+
+function restoreDetail() {
+  if (!isAppDetail.value) return
+  const routeType = String(route.params.type || '')
+  const sourceId = String(route.params.sourceId || '')
+  const stateDetail = window.history.state?.detail as FinanceHistoryItem | undefined
+  detail.value = stateDetail?.type === routeType && String(stateDetail.source_id) === sourceId
+    ? stateDetail
+    : items.value.find(row => row.type === routeType && String(row.source_id) === sourceId) || null
+}
 
 function params(withPage = true): FinanceHistoryParams {
   const val: FinanceHistoryParams = {
@@ -110,6 +124,7 @@ async function loadItems(reset = false, append = false) {
     page.current = res.page
     page.pageSize = res.page_size
     Object.assign(summary, res.summary)
+    restoreDetail()
   } catch (err) {
     if (version !== requestVersion) return
     loadError.value = apiMessage(err, '读取历史账失败')
@@ -178,13 +193,23 @@ function rowKey(row: FinanceHistoryItem) {
   return `${row.type}-${row.source_id}`
 }
 
+async function openDetail(row: FinanceHistoryItem) {
+  detail.value = row
+  if (isAppMode.value) {
+    await router.push({
+      name: 'balance-event-detail',
+      params: { type: row.type, sourceId: row.source_id },
+      state: { detail: { ...row } },
+    })
+    return
+  }
+  detailOpen.value = true
+}
+
 function rowProps(row: FinanceHistoryItem) {
   return {
     class: 'clickableRow',
-    onClick: () => {
-      detail.value = row
-      detailOpen.value = true
-    },
+    onClick: () => openDetail(row),
   }
 }
 
@@ -206,12 +231,34 @@ function apiMessage(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } }).response?.data?.message || fallback
 }
 
+watch(() => [isAppDetail.value, route.params.type, route.params.sourceId] as const, ([show]) => {
+  if (show) restoreDetail()
+}, { immediate: true })
+
 onMounted(() => loadItems())
 </script>
 
 <template>
   <section class="page historyPage">
     <template v-if="isAppMode">
+      <template v-if="isAppDetail">
+        <div v-if="detail" class="appDetailBody appRouteDetail">
+          <div class="appDetailList">
+            <div><span>业务日期</span><strong>{{ detail.biz_date }}</strong></div>
+            <div><span>类型</span><strong>{{ typeMeta(detail.type).text }}</strong></div>
+            <div><span>账单号</span><strong>{{ detail.bill_no }}</strong></div>
+            <div><span>用户</span><strong>{{ detail.sub2api_user_email || (detail.sub2api_user_id ? `用户 #${detail.sub2api_user_id}` : '-') }}</strong></div>
+            <div><span>分类</span><strong>{{ detail.category || '-' }}</strong></div>
+            <div><span>金额</span><strong class="money" :class="detail.type">{{ signedMoney(detail.amount, detail.type) }}</strong></div>
+            <div><span>操作人</span><strong>{{ detail.operator_name || detail.operator_email || '-' }}</strong></div>
+            <div><span>备注</span><strong>{{ detail.remark || '-' }}</strong></div>
+            <div><span>创建时间</span><strong>{{ detail.created_at || '-' }}</strong></div>
+          </div>
+        </div>
+        <MobileListState v-else :loading="loading" :error="loadError" :empty="!loading && !loadError" empty-text="未找到该账单记录" @retry="loadItems(true)" />
+      </template>
+
+      <template v-else>
       <div class="appFilterBar">
         <input v-model="keyword" class="appSearchInput" type="search" placeholder="账单号 / 邮箱 / 备注" @keyup.enter="loadItems(true)" />
         <button class="appSecondaryButton appFilterButton" type="button" @click="filterOpen = true"><FilterOutlined />筛选<span v-if="activeFilters.length">（{{ activeFilters.length }}）</span></button>
@@ -233,8 +280,8 @@ onMounted(() => loadItems())
           class="appRecordCard"
           role="button"
           tabindex="0"
-          @click="detail = row; detailOpen = true"
-          @keydown.enter="detail = row; detailOpen = true"
+          @click="openDetail(row)"
+          @keydown.enter="openDetail(row)"
         >
           <div class="appCardTop"><strong>{{ row.bill_no }}</strong><span class="appStatus" :class="row.type === 'expense' ? 'danger' : 'success'">{{ typeMeta(row.type).text }}</span></div>
           <div class="appCardMetric"><strong class="money" :class="row.type">{{ signedMoney(row.amount, row.type) }}</strong><RightOutlined class="appCardArrow" /></div>
@@ -261,21 +308,7 @@ onMounted(() => loadItems())
         </div>
       </MobileFilterSheet>
 
-      <a-drawer v-if="detail" v-model:open="detailOpen" placement="right" :width="'100%'" title="账单详情">
-        <div class="appDetailBody">
-          <div class="appDetailList">
-            <div><span>业务日期</span><strong>{{ detail.biz_date }}</strong></div>
-            <div><span>类型</span><strong>{{ typeMeta(detail.type).text }}</strong></div>
-            <div><span>账单号</span><strong>{{ detail.bill_no }}</strong></div>
-            <div><span>用户</span><strong>{{ detail.sub2api_user_email || (detail.sub2api_user_id ? `用户 #${detail.sub2api_user_id}` : '-') }}</strong></div>
-            <div><span>分类</span><strong>{{ detail.category || '-' }}</strong></div>
-            <div><span>金额</span><strong class="money" :class="detail.type">{{ signedMoney(detail.amount, detail.type) }}</strong></div>
-            <div><span>操作人</span><strong>{{ detail.operator_name || detail.operator_email || '-' }}</strong></div>
-            <div><span>备注</span><strong>{{ detail.remark || '-' }}</strong></div>
-            <div><span>创建时间</span><strong>{{ detail.created_at || '-' }}</strong></div>
-          </div>
-        </div>
-      </a-drawer>
+      </template>
     </template>
 
     <template v-else>
@@ -388,6 +421,7 @@ small { display: block; margin-top: 3px; color: var(--text-secondary, #7a8395); 
 .appCardList .appRecordCard { min-height: 122px; }
 .appDetailList { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--app-radius-sm, 10px); background: var(--border); }
 .appDetailList > div { display: flex; justify-content: space-between; gap: 12px; padding: 13px 12px; background: var(--surface); }
+.appRouteDetail { padding: 8px 0 calc(28px + var(--app-safe-bottom)); }
 @media (max-width: 760px) {
   .filterGrid label { flex: 1 1 100%; max-width: none; }
   .dateQuickFilter { flex-direction: column; }

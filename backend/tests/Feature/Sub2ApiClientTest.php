@@ -269,6 +269,7 @@ class Sub2ApiClientTest extends TestCase
                         'value' => -5,
                         'status' => 'used',
                         'used_at' => '2026-07-07T00:00:00+08:00',
+                        'notes' => Sub2ApiNoteTag::make('ADJ-88', 'idem-88'),
                     ]],
                     'total' => 1,
                 ],
@@ -282,7 +283,8 @@ class Sub2ApiClientTest extends TestCase
             ->assertJsonPath('items.0.value', '-5.00')
             ->assertJsonPath('items.0.adjusted_account', 'alpha@example.com')
             ->assertJsonPath('items.0.before_balance', '50.00')
-            ->assertJsonPath('items.0.after_balance', '45.00');
+            ->assertJsonPath('items.0.after_balance', '45.00')
+            ->assertJsonPath('items.0.notes', null);
     }
 
     public function test_balance_history_does_not_reuse_source_linked_adjustment_by_legacy_key(): void

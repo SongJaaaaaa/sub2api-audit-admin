@@ -6,8 +6,8 @@ import {
   WalletOutlined,
 } from '@ant-design/icons-vue'
 import { App as AntApp } from 'ant-design-vue'
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   createLedgerAdjustment,
   type AdjustmentRes,
@@ -19,9 +19,10 @@ import SafeRichTextDisplay from '../components/richtext/SafeRichTextDisplay.vue'
 import { useAppMode } from '../app/composables/useAppMode'
 import { useHistoryOverlay } from '../app/composables/useHistoryOverlay'
 
-const { message, modal } = AntApp.useApp()
+const { message } = AntApp.useApp()
 const { isAppMode } = useAppMode()
 const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const historyLoading = ref(false)
 const summaryLoading = ref(false)
@@ -35,10 +36,10 @@ const userSummary = reactive<UserFinanceSummary>({ total_recharge: '0.00', total
 const keyword = ref('')
 const adjustPanel = ref<HTMLElement | null>(null)
 const searchRef = ref<any>(null)
-const mobileDetailOpen = ref(false)
 const mobileConfirmOpen = ref(false)
 const mobileLoadingMore = ref(false)
 const mobileHistoryLoadingMore = ref(false)
+const detailLoading = ref(false)
 const loadError = ref('')
 let historyVersion = 0
 let summaryVersion = 0
@@ -60,45 +61,19 @@ const form = reactive<AdjustmentFormState>({
   admin_notes: '',
 })
 
-// 把移动端详情/弹窗接入浏览器历史：侧滑返回时先关闭浮层（退回列表），而不是退回主页。
-const historyDetailOpen = computed({
-  get: () => !!selectedHistory.value,
+const desktopHistoryOpen = computed({
+  get: () => !isAppMode.value && !!selectedHistory.value,
   set: (val: boolean) => { if (!val) selectedHistory.value = null },
 })
-
-function hasUnsavedChanges() {
-  return !!(form.amount || hasNotes(form.admin_notes))
-}
-
-function promptDiscardDetail() {
-  modal.confirm({
-    title: '放弃未提交的充值？',
-    content: '当前表单还有未提交内容。',
-    okText: '放弃',
-    cancelText: '继续编辑',
-    onOk: () => {
-      resetForm()
-      forceCloseDetail()
-    },
-  })
-}
-
-const { forceClose: forceCloseDetail } = useHistoryOverlay(mobileDetailOpen, {
-  guard: () => !hasUnsavedChanges(),
-  onBlocked: promptDiscardDetail,
-})
 useHistoryOverlay(mobileConfirmOpen)
-useHistoryOverlay(historyDetailOpen)
+useHistoryOverlay(desktopHistoryOpen)
 
-function requestCloseDetail() {
-  if (hasUnsavedChanges()) {
-    promptDiscardDetail()
-    return
-  }
-  mobileDetailOpen.value = false
-}
-
+const isAppUserDetail = computed(() => route.name === 'users-quota-detail')
+const isAppHistoryDetail = computed(() => route.name === 'users-quota-history-detail')
 const selectedName = computed(() => selected.value?.username || selected.value?.email || '-')
+const historyNotes = computed(() => String(selectedHistory.value?.notes || '')
+  .replace(/\[sub2api-audit\s+ledger_no=[^\s\]]+\s+idempotency_key=[^\s\]]+\]/, '')
+  .trim())
 const totalQuota = computed(() => Number(userSummary.total_recharge) + Number(userSummary.total_gift))
 const hasMoreUsers = computed(() => page.current * page.pageSize < page.total)
 const hasMoreHistory = computed(() => historyPage.current * historyPage.pageSize < historyPage.total)
@@ -108,6 +83,11 @@ const mobileNextBalance = computed(() => {
   const next = form.operation === 'decrement' ? current - amount : current + amount
   return next.toFixed(2)
 })
+
+function updateForm(value: AdjustmentFormState) {
+  Object.assign(form, value)
+}
+
 async function loadUsers() {
   const version = ++usersVersion
   loading.value = true
@@ -166,14 +146,15 @@ async function selectUser(row: Sub2User) {
   adjustPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-function openMobileUser(row: Sub2User) {
-  selected.value = row
+async function openMobileUser(row: Sub2User, replace = false) {
   resetForm()
-  historyPage.current = 1
-  historyPage.total = 0
-  mobileDetailOpen.value = true
-  loadHistory(row.id)
-  loadUserSummary(row.id)
+  const target = {
+    name: 'users-quota-detail',
+    params: { userId: row.id },
+    state: { user: { ...row } },
+  }
+  if (replace) await router.replace(target)
+  else await router.push(target)
 }
 
 async function pasteAndSearch() {
@@ -387,132 +368,220 @@ function timeText(row: Sub2BalanceHistoryItem) {
   return row.used_at || row.created_at || '-'
 }
 
-function openHistory(row: Sub2BalanceHistoryItem) {
-  selectedHistory.value = row
+async function openHistory(row: Sub2BalanceHistoryItem) {
+  if (!isAppMode.value || !selected.value) {
+    selectedHistory.value = row
+    return
+  }
+
+  await router.push({
+    name: 'users-quota-history-detail',
+    params: { userId: selected.value.id, historyId: row.id },
+    state: { user: { ...selected.value }, history: { ...row } },
+  })
+}
+
+type QuotaRouteState = {
+  user?: Sub2User
+  history?: Sub2BalanceHistoryItem
+}
+
+async function initAppDetail() {
+  const userId = Number(route.params.userId)
+  const historyId = Number(route.params.historyId)
+  const state = (window.history.state || {}) as QuotaRouteState
+  const stateUser = state.user?.id === userId ? state.user : undefined
+  const cachedUser = selected.value?.id === userId ? selected.value : undefined
+  const cachedHistory = cachedUser ? history.value.find(item => item.id === historyId) : undefined
+  const stateHistory = state.history?.id === historyId ? state.history : cachedHistory
+
+  selectedHistory.value = isAppHistoryDetail.value ? stateHistory || null : null
+  let row = stateUser || cachedUser || users.value.find(item => item.id === userId)
+
+  if (!row) {
+    detailLoading.value = true
+    try {
+      const res = await getSub2Users({ page: 1, page_size: 1, user_id: userId })
+      if (Number(route.params.userId) !== userId) return
+      row = res.items[0]
+    } catch {
+      message.error('读取指定用户失败')
+    } finally {
+      detailLoading.value = false
+    }
+  }
+
+  if (!row || Number(route.params.userId) !== userId) {
+    selected.value = null
+    return
+  }
+
+  if (selected.value?.id !== row.id) {
+    resetForm()
+    history.value = []
+    historyPage.current = 1
+    historyPage.total = 0
+    Object.assign(userSummary, { total_recharge: '0.00', total_gift: '0.00' })
+  }
+  selected.value = row
+
+  await Promise.all([loadHistory(userId), loadUserSummary(userId)])
+  if (isAppHistoryDetail.value && Number(route.params.historyId) === historyId && !selectedHistory.value) {
+    selectedHistory.value = history.value.find(item => item.id === historyId) || null
+  }
 }
 
 async function initPage() {
+  if (isAppMode.value && (isAppUserDetail.value || isAppHistoryDetail.value)) {
+    await initAppDetail()
+    return
+  }
+
   await loadUsers()
   const val = Array.isArray(route.query.user_id) ? route.query.user_id[0] : route.query.user_id
   const id = Number(val)
   if (!id) return
 
   const current = users.value.find(row => row.id === id)
-  if (current) return void selectUser(current)
+  if (current) {
+    if (isAppMode.value) await openMobileUser(current, true)
+    else await selectUser(current)
+    return
+  }
 
   try {
     const res = await getSub2Users({ page: 1, page_size: 1, user_id: id })
     if (res.items[0]) {
       users.value = [res.items[0], ...users.value]
-      selectUser(res.items[0])
+      if (isAppMode.value) await openMobileUser(res.items[0], true)
+      else await selectUser(res.items[0])
     }
   } catch {
     message.error('读取指定用户失败')
   }
 }
 
-onMounted(initPage)
+watch(() => route.fullPath, () => { void initPage() }, { immediate: true })
 </script>
 
 <template>
   <section v-if="isAppMode" class="app-page app-quota-page">
-    <div class="app-top-sticky">
-      <header class="app-header">
-        <div><span class="app-eyebrow">Sub2API</span><h1>用户充值</h1></div>
-        <strong class="app-count">{{ page.total }} 人</strong>
-      </header>
-      <div class="app-toolbar">
-        <a-input-search ref="searchRef" v-model:value="keyword" class="app-search" placeholder="邮箱或用户名/ID" allow-clear enter-button @search="search" />
-        <a-button @click="pasteAndSearch" size="small">粘贴搜索</a-button>
+    <template v-if="isAppHistoryDetail">
+      <div v-if="detailLoading || (historyLoading && !selectedHistory)" class="appListState">正在加载充值记录…</div>
+      <div v-else-if="selectedHistory" class="app-detail">
+        <section class="app-detail-section">
+          <div class="app-confirm-summary">
+            <p><span>操作人员</span><strong>{{ selectedHistory.operator_name || 'Sub2API' }}</strong></p>
+            <p><span>充值账号</span><strong>{{ selectedHistory.adjusted_account || selected?.email || '-' }}</strong></p>
+            <p><span>充值金额</span><strong>{{ opSign(selectedHistory) }} {{ absMoneyText(selectedHistory.value) }}</strong></p>
+            <p><span>充值前后</span><strong>{{ selectedHistory.before_balance ?? '-' }} → {{ selectedHistory.after_balance ?? '-' }}</strong></p>
+            <p><span>时间</span><strong>{{ timeText(selectedHistory) }}</strong></p>
+            <p><span>业务单号</span><strong>{{ selectedHistory.ledger_no || '-' }}</strong></p>
+            <p><span>原因</span><strong>{{ selectedHistory.adjust_reason || selectedHistory.type || '-' }}</strong></p>
+            <SafeRichTextDisplay v-if="selectedHistory.admin_notes" :value="selectedHistory.admin_notes" compact />
+            <pre v-else-if="historyNotes">{{ historyNotes }}</pre>
+          </div>
+        </section>
       </div>
-    </div>
-    <div v-if="loadError" class="app-error-bar">
-      <a-alert type="error" show-icon :message="loadError" />
-      <a-button size="small" @click="loadUsers">重试</a-button>
-    </div>
-    <a-spin :spinning="loading && users.length === 0">
-      <a-empty v-if="!loading && !loadError && users.length === 0" description="暂无可充值用户数据" />
-      <div v-else class="app-card-list">
-        <article v-for="item in users" :key="item.id" class="app-card app-quota-user-card" tabindex="0" role="button" @click="openMobileUser(item)" @keydown.enter="openMobileUser(item)">
-          <div class="app-quota-card-head">
-            <strong class="app-quota-name">{{ item.username || item.email }}</strong>
-            <span class="app-status-badge" :class="{ active: item.status === 'active' }">{{ item.status === 'active' ? '正常' : (item.status || '-') }}</span>
-          </div>
-          <div class="app-quota-card-foot">
-            <div class="app-quota-balance">
-              <span>当前余额</span>
-              <strong class="app-money">{{ moneyText(item.balance) }}</strong>
-            </div>
-            <button type="button" class="app-quota-cta" @click.stop="openMobileUser(item)">充值<RightOutlined /></button>
-          </div>
-        </article>
-      </div>
-    </a-spin>
-    <button v-if="hasMoreUsers" type="button" class="app-load-more" :disabled="mobileLoadingMore" @click="loadMoreUsers">{{ mobileLoadingMore ? '加载中…' : '加载更多' }}</button>
-    <p v-else-if="users.length" class="app-end-state">已显示全部用户</p>
+      <a-empty v-else description="未找到该充值记录" />
+    </template>
 
-    <a-drawer
-      :open="mobileDetailOpen"
-      placement="right"
-      :width="'100%'"
-      :title="selected ? `${selectedName} · 充值` : '用户充值'"
-      @close="requestCloseDetail"
-    >
-      <template v-if="selected">
-        <div class="app-detail app-quota-detail">
-          <div class="app-detail-hero">
-            <span class="app-avatar">{{ selectedName.slice(0, 1).toUpperCase() }}</span>
-            <div class="app-detail-userinfo">
-              <h2>{{ selectedName }}</h2>
-              <p class="app-detail-meta">
-                <span class="app-email">{{ selected.email }}</span>
-                <span class="app-id"> · ID {{ selected.id }}</span>
-              </p>
-            </div>
+    <template v-else-if="isAppUserDetail">
+      <div v-if="detailLoading" class="appListState">正在加载用户…</div>
+      <div v-else-if="selected" class="app-detail app-quota-detail">
+        <div class="app-detail-hero">
+          <span class="app-avatar">{{ selectedName.slice(0, 1).toUpperCase() }}</span>
+          <div class="app-detail-userinfo">
+            <h2>{{ selectedName }}</h2>
+            <p class="app-detail-meta">
+              <span class="app-email">{{ selected.email }}</span>
+              <span class="app-id"> · ID {{ selected.id }}</span>
+            </p>
           </div>
-
-          <div class="app-quota-metrics">
-            <div class="app-metric"><span>当前余额</span><strong class="app-money">{{ moneyText(selected.balance) }}</strong></div>
-            <div class="app-metric"><span>累计充值</span><strong>{{ moneyText(userSummary.total_recharge) }}</strong></div>
-            <div class="app-metric"><span>累计赠送</span><strong>{{ moneyText(userSummary.total_gift) }}</strong></div>
-            <div class="app-metric"><span>总额度</span><strong>{{ moneyText(totalQuota) }}</strong></div>
-          </div>
-
-          <section class="app-detail-section">
-            <div class="app-section-head"><h2>充值入账</h2></div>
-            <AdjustmentForm :key="formKey" v-model:value="form" :current-balance="selected.balance" />
-            <div class="app-action-bar">
-              <a-button class="app-action-reset" @click="resetForm">重置</a-button>
-              <a-button class="app-action-confirm" type="primary" :loading="submitting" @click="confirmAdjust">确认充值</a-button>
-            </div>
-            <p class="app-note">充值仅在 Sub2API 真实入账并二次确认成功后记账。</p>
-          </section>
-
-          <section class="app-detail-section">
-            <div class="app-section-head">
-              <h2>充值记录</h2>
-              <span>{{ historyPage.total }} 条</span>
-            </div>
-            <a-spin :spinning="historyLoading && history.length === 0">
-              <a-empty v-if="!historyLoading && history.length === 0" description="暂无充值记录" />
-              <div v-else class="app-history-list">
-                <button v-for="item in history" :key="item.id" type="button" class="app-history-card app-history-button" @click="openHistory(item)">
-                  <div class="app-history-top">
-                    <strong :class="item.operation === 'increment' ? 'app-positive' : 'app-danger'">{{ opSign(item) }}{{ absMoneyText(item.value) }}</strong>
-                    <span class="app-history-op">{{ item.operator_name || 'Sub2API' }}</span>
-                  </div>
-                  <div class="app-history-meta">
-                    <span>{{ item.before_balance ?? '-' }} → {{ item.after_balance ?? '-' }}</span>
-                    <span>{{ timeText(item) }}</span>
-                  </div>
-                </button>
-              </div>
-            </a-spin>
-            <button v-if="hasMoreHistory" type="button" class="app-load-more" :disabled="mobileHistoryLoadingMore" @click="loadMoreHistory">{{ mobileHistoryLoadingMore ? '加载中…' : '加载更多记录' }}</button>
-          </section>
         </div>
-      </template>
-    </a-drawer>
+
+        <div class="app-quota-metrics">
+          <div class="app-metric"><span>当前余额</span><strong class="app-money">{{ moneyText(selected.balance) }}</strong></div>
+          <div class="app-metric"><span>累计充值</span><strong>{{ moneyText(userSummary.total_recharge) }}</strong></div>
+          <div class="app-metric"><span>累计赠送</span><strong>{{ moneyText(userSummary.total_gift) }}</strong></div>
+          <div class="app-metric"><span>总额度</span><strong>{{ moneyText(totalQuota) }}</strong></div>
+        </div>
+
+        <section class="app-detail-section">
+          <div class="app-section-head"><h2>充值入账</h2></div>
+          <AdjustmentForm :key="formKey" :value="form" :current-balance="selected.balance" @update:value="updateForm" />
+          <div class="app-action-bar">
+            <a-button class="app-action-reset" @click="resetForm">重置</a-button>
+            <a-button class="app-action-confirm" type="primary" :loading="submitting" @click="confirmAdjust">确认充值</a-button>
+          </div>
+          <p class="app-note">充值仅在 Sub2API 真实入账并二次确认成功后记账。</p>
+        </section>
+
+        <section class="app-detail-section">
+          <div class="app-section-head">
+            <h2>充值记录</h2>
+            <span>{{ historyPage.total }} 条</span>
+          </div>
+          <a-spin :spinning="historyLoading && history.length === 0">
+            <a-empty v-if="!historyLoading && history.length === 0" description="暂无充值记录" />
+            <div v-else class="app-history-list">
+              <button v-for="item in history" :key="item.id" type="button" class="app-history-card app-history-button" @click="openHistory(item)">
+                <div class="app-history-top">
+                  <strong :class="item.operation === 'increment' ? 'app-positive' : 'app-danger'">{{ opSign(item) }}{{ absMoneyText(item.value) }}</strong>
+                  <span class="app-history-op">{{ item.operator_name || 'Sub2API' }}</span>
+                </div>
+                <div class="app-history-meta">
+                  <span>{{ item.before_balance ?? '-' }} → {{ item.after_balance ?? '-' }}</span>
+                  <span>{{ timeText(item) }}</span>
+                </div>
+              </button>
+            </div>
+          </a-spin>
+          <button v-if="hasMoreHistory" type="button" class="app-load-more" :disabled="mobileHistoryLoadingMore" @click="loadMoreHistory">{{ mobileHistoryLoadingMore ? '加载中…' : '加载更多记录' }}</button>
+        </section>
+      </div>
+      <a-empty v-else description="未找到该用户" />
+    </template>
+
+    <template v-else>
+      <div class="app-top-sticky">
+        <header class="app-header">
+          <div><span class="app-eyebrow">Sub2API</span><h1>用户充值</h1></div>
+          <strong class="app-count">{{ page.total }} 人</strong>
+        </header>
+        <div class="app-toolbar">
+          <a-input-search ref="searchRef" v-model:value="keyword" class="app-search" placeholder="邮箱或用户名/ID" allow-clear enter-button @search="search" />
+          <a-button @click="pasteAndSearch" size="small">粘贴搜索</a-button>
+        </div>
+      </div>
+      <div v-if="loadError" class="app-error-bar">
+        <a-alert type="error" show-icon :message="loadError" />
+        <a-button size="small" @click="loadUsers">重试</a-button>
+      </div>
+      <a-spin :spinning="loading && users.length === 0">
+        <a-empty v-if="!loading && !loadError && users.length === 0" description="暂无可充值用户数据" />
+        <div v-else class="app-card-list">
+          <article v-for="item in users" :key="item.id" class="app-card app-quota-user-card" tabindex="0" role="button" @click="openMobileUser(item)" @keydown.enter="openMobileUser(item)">
+            <div class="app-quota-card-head">
+              <div class="app-quota-user">
+                <strong class="app-quota-name">{{ item.username || item.email }}</strong>
+                <span v-if="item.username && item.email && item.username !== item.email" class="app-quota-email">{{ item.email }}</span>
+              </div>
+              <span class="app-status-badge" :class="{ active: item.status === 'active' }">{{ item.status === 'active' ? '正常' : (item.status || '-') }}</span>
+            </div>
+            <div class="app-quota-card-foot">
+              <div class="app-quota-balance">
+                <span>当前余额</span>
+                <strong class="app-money">{{ moneyText(item.balance) }}</strong>
+              </div>
+              <button type="button" class="app-quota-cta" @click.stop="openMobileUser(item)">充值<RightOutlined /></button>
+            </div>
+          </article>
+        </div>
+      </a-spin>
+      <button v-if="hasMoreUsers" type="button" class="app-load-more" :disabled="mobileLoadingMore" @click="loadMoreUsers">{{ mobileLoadingMore ? '加载中…' : '加载更多' }}</button>
+      <p v-else-if="users.length" class="app-end-state">已显示全部用户</p>
+    </template>
 
     <a-modal v-model:open="mobileConfirmOpen" title="确认充值" ok-text="确认提交" cancel-text="返回修改" :confirm-loading="submitting" :width="'calc(100vw - 24px)'" @ok="submitAdjust">
       <div v-if="selected" class="app-confirm-summary">
@@ -523,20 +592,6 @@ onMounted(initPage)
         <p><span>赠送额度</span><strong>{{ moneyText(form.gift_quota_amount) }}</strong></p>
         <p><span>余额变化</span><strong>{{ moneyText(selected.balance) }} → {{ mobileNextBalance }}</strong></p>
         <p><span>原因</span><strong>{{ form.adjust_reason }}</strong></p>
-      </div>
-    </a-modal>
-
-    <a-modal v-model:open="historyDetailOpen" title="充值记录详情" :footer="null" :width="'calc(100vw - 24px)'">
-      <div v-if="selectedHistory" class="app-confirm-summary">
-        <p><span>操作人员</span><strong>{{ selectedHistory.operator_name || 'Sub2API' }}</strong></p>
-        <p><span>充值账号</span><strong>{{ selectedHistory.adjusted_account || selected?.email || '-' }}</strong></p>
-        <p><span>充值金额</span><strong>{{ opSign(selectedHistory) }} {{ absMoneyText(selectedHistory.value) }}</strong></p>
-        <p><span>充值前后</span><strong>{{ selectedHistory.before_balance ?? '-' }} → {{ selectedHistory.after_balance ?? '-' }}</strong></p>
-        <p><span>时间</span><strong>{{ timeText(selectedHistory) }}</strong></p>
-        <p><span>业务单号</span><strong>{{ selectedHistory.ledger_no || '-' }}</strong></p>
-        <p><span>原因</span><strong>{{ selectedHistory.adjust_reason || selectedHistory.type || '-' }}</strong></p>
-        <SafeRichTextDisplay v-if="selectedHistory.admin_notes" :value="selectedHistory.admin_notes" compact />
-        <pre v-else-if="selectedHistory.notes">{{ selectedHistory.notes }}</pre>
       </div>
     </a-modal>
   </section>
@@ -611,7 +666,7 @@ onMounted(initPage)
             <div class="panelHead">
               <h2>充值入账</h2>
             </div>
-            <AdjustmentForm :key="formKey" v-model:value="form" :current-balance="selected.balance" />
+            <AdjustmentForm :key="formKey" :value="form" :current-balance="selected.balance" @update:value="updateForm" />
             <div class="quotaFormActions">
               <a-button @click="resetForm">重置</a-button>
               <a-button type="primary" :loading="submitting" @click="submitAdjust">确认充值</a-button>
@@ -651,10 +706,9 @@ onMounted(initPage)
     </div>
 
     <a-modal
-      :open="!!selectedHistory"
+      v-model:open="desktopHistoryOpen"
       title="充值记录详情"
       :footer="null"
-      @cancel="selectedHistory = null"
     >
       <div v-if="selectedHistory" class="historyDetail">
         <p><span>操作人员</span><strong>{{ selectedHistory.operator_name || 'Sub2API' }}</strong></p>
@@ -669,9 +723,9 @@ onMounted(initPage)
           <span>备注</span>
           <SafeRichTextDisplay :value="selectedHistory.admin_notes" compact />
         </div>
-        <div v-else-if="selectedHistory.notes" class="historyDetailNotes">
+        <div v-else-if="historyNotes" class="historyDetailNotes">
           <span>Sub2API 备注</span>
-          <pre>{{ selectedHistory.notes }}</pre>
+          <pre>{{ historyNotes }}</pre>
         </div>
       </div>
     </a-modal>
@@ -682,7 +736,7 @@ onMounted(initPage)
 /* Centralized app styles in src/app/styles/app.css */
 .app-toolbar { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .app-history-list { gap: 14px; }
-.app-card-list { gap: 16px; }
+.app-card-list { display: grid; gap: 16px; padding: 12px 0; }
 .app-action-bar {
   position: sticky;
   bottom: 0;
@@ -692,7 +746,6 @@ onMounted(initPage)
   gap: 16px;
   margin-top: 8px;
   padding: 12px 0 calc(6px + var(--app-safe-bottom, 0px));
-  background: linear-gradient(to top, var(--bg, #fff) 72%, transparent);
 }
 .app-action-bar .ant-btn {
   width: 100%;

@@ -3,7 +3,8 @@ import { CheckOutlined, EyeOutlined, FilterOutlined, RightOutlined, SearchOutlin
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import { App as AntApp } from 'ant-design-vue'
 import dayjs, { type Dayjs } from 'dayjs'
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   createProfitSettlement,
   getProfitDetails,
@@ -26,6 +27,8 @@ import { useAppMode } from '../app/composables/useAppMode'
 
 const { message, modal } = AntApp.useApp()
 const { isAppMode } = useAppMode()
+const route = useRoute()
+const router = useRouter()
 const emptySummary = (): ProfitSummary => ({ income_total: '0.00', expense_total: '0.00', profit_total: '0.00', income_count: 0, expense_count: 0 })
 const activeTab = ref('pending')
 const dates = ref<[Dayjs, Dayjs] | null>([dayjs().subtract(6, 'day'), dayjs()])
@@ -59,6 +62,7 @@ const mobileDayLimit = ref(20)
 const historyError = ref('')
 const summaryError = ref('')
 const filterOpen = ref(false)
+const pageLoaded = ref(false)
 const columnWidths = ref<Record<string, number>>(readColumnWidths())
 
 interface ResizableColumn {
@@ -75,6 +79,8 @@ const canSettle = computed(() => !loading.value && !settling.value && pendingCou
 const mobileDays = computed(() => days.value.slice(0, mobileDayLimit.value))
 const hasMoreDays = computed(() => mobileDayLimit.value < days.value.length)
 const hasMoreSettlements = computed(() => settlements.value.length < historyPage.total)
+const isDayDetail = computed(() => isAppMode.value && route.name === 'profit-day-detail')
+const isBatchDetail = computed(() => isAppMode.value && route.name === 'profit-settlement-detail')
 const activeFilters = computed(() => [
   dates.value ? `日期：${dates.value[0].format('MM-DD')} 至 ${dates.value[1].format('MM-DD')}` : '',
   activeTab.value === 'history' && historyStatus.value ? `状态：${historyStatus.value === 'confirmed' ? '已确认' : '已撤销'}` : '',
@@ -232,13 +238,14 @@ async function loadSummary() {
   }
 }
 
-async function openDay(row: ProfitDay) {
+async function loadDayDetails(date: string) {
   const version = ++detailVersion
-  detailDate.value = row.biz_date
-  detailOpen.value = true
+  detailDate.value = date
+  incomeDetails.value = []
+  expenseDetails.value = []
   detailLoading.value = true
   try {
-    const res = await getProfitDetails(row.biz_date)
+    const res = await getProfitDetails(date)
     if (version !== detailVersion) return
     incomeDetails.value = res.income
     expenseDetails.value = res.expenses
@@ -248,6 +255,15 @@ async function openDay(row: ProfitDay) {
   } finally {
     if (version === detailVersion) detailLoading.value = false
   }
+}
+
+async function openDay(row: ProfitDay) {
+  if (isAppMode.value) {
+    await router.push({ name: 'profit-day-detail', params: { date: row.biz_date } })
+    return
+  }
+  detailOpen.value = true
+  await loadDayDetails(row.biz_date)
 }
 
 function dayRow(row: ProfitDay) {
@@ -343,14 +359,13 @@ function requestSettlement() {
   })
 }
 
-async function openBatch(row: ProfitSettlement) {
+async function loadBatchDetails(id: number) {
   const version = ++batchVersion
-  selectedBatch.value = row
-  batchOpen.value = true
+  batchItems.value = []
   batchLoading.value = true
   try {
-    const res = await getProfitSettlementItems(row.id)
-    if (version !== batchVersion || selectedBatch.value?.id !== row.id) return
+    const res = await getProfitSettlementItems(id)
+    if (version !== batchVersion) return
     batchItems.value = res.items
   } catch (err) {
     if (version !== batchVersion) return
@@ -358,6 +373,16 @@ async function openBatch(row: ProfitSettlement) {
   } finally {
     if (version === batchVersion) batchLoading.value = false
   }
+}
+
+async function openBatch(row: ProfitSettlement) {
+  selectedBatch.value = row
+  if (isAppMode.value) {
+    await router.push({ name: 'profit-settlement-detail', params: { settlementId: row.id } })
+    return
+  }
+  batchOpen.value = true
+  await loadBatchDetails(row.id)
 }
 
 function reverseBatch(row: ProfitSettlement) {
@@ -380,12 +405,41 @@ function reverseBatch(row: ProfitSettlement) {
   })
 }
 
-onMounted(() => Promise.all([loadSummary(), loadSettlements()]))
+async function loadPage() {
+  await Promise.all([loadSummary(), loadSettlements()])
+  pageLoaded.value = true
+}
+
+watch(
+  () => [route.name, route.params.date, route.params.settlementId] as const,
+  () => {
+    if (isDayDetail.value) void loadDayDetails(String(route.params.date || ''))
+    else if (isBatchDetail.value) void loadBatchDetails(Number(route.params.settlementId))
+    else if (!pageLoaded.value) void loadPage()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
   <section class="page profitPage">
     <template v-if="isAppMode">
+      <template v-if="isDayDetail">
+        <div class="appDetailBody">
+          <MobileListState :loading="detailLoading" :empty="!detailLoading && !incomeDetails.length && !expenseDetails.length" empty-text="暂无明细" />
+          <section v-if="incomeDetails.length" class="appDetailSection"><h2>收入明细</h2><div class="appCardList"><article v-for="row in incomeDetails" :key="row.id" class="appRecordCard"><div class="appCardTop"><strong>{{ row.entry_no }}</strong><span class="appStatus success">收入</span></div><div class="appCardMetric"><strong>{{ row.amount }}</strong></div><div class="appCardMeta">{{ row.biz_date }} · {{ row.sub2api_user_email || `用户 #${row.sub2api_user_id || '-'}` }} · {{ row.owner_name }}</div><div v-if="row.remark" class="appCardMeta wrap">{{ row.remark }}</div></article></div></section>
+          <section v-if="expenseDetails.length" class="appDetailSection"><h2>支出明细</h2><div class="appCardList"><article v-for="row in expenseDetails" :key="row.id" class="appRecordCard"><div class="appCardTop"><strong>{{ row.expense_no }}</strong><span class="appStatus danger">支出</span></div><div class="appCardMetric"><strong class="expenseValue">{{ row.amount }}</strong></div><div class="appCardMeta">{{ row.biz_date }} · {{ row.category }} · {{ row.owner_name }}</div><div v-if="row.remark" class="appCardMeta wrap">{{ row.remark }}</div></article></div></section>
+        </div>
+      </template>
+
+      <template v-else-if="isBatchDetail">
+        <div class="appDetailBody">
+          <MobileListState :loading="batchLoading" :empty="!batchLoading && !batchItems.length" empty-text="暂无分账明细" />
+          <div v-if="batchItems.length" class="appCardList"><article v-for="row in batchItems" :key="row.id" class="appRecordCard"><div class="appCardTop"><strong>{{ row.reference_no }}</strong><span class="appStatus">{{ row.item_type === 'cash_entry' ? '收入' : '支出' }}</span></div><div class="appCardMetric"><strong :class="{ expenseValue: row.item_type === 'operation_expense' }">{{ row.amount }}</strong></div><div class="appCardBottom"><span class="appCardMeta">{{ row.biz_date }} · {{ row.owner_name || '-' }}</span><span class="appCardMeta">{{ row.description || '-' }}</span></div></article></div>
+        </div>
+      </template>
+
+      <template v-else>
       <div class="appProfitTopbar">
         <div class="appTabSwitch" role="tablist" aria-label="利润视图">
           <button type="button" :class="{ active: activeTab === 'pending' }" @click="switchMobileTab('pending')">利润明细</button>
@@ -435,21 +489,7 @@ onMounted(() => Promise.all([loadSummary(), loadSettlements()]))
           <label v-if="activeTab === 'history'">分账状态<a-select v-model:value="historyStatus" allow-clear placeholder="全部状态"><a-select-option value="confirmed">已确认</a-select-option><a-select-option value="reversed">已撤销</a-select-option></a-select></label>
         </div>
       </MobileFilterSheet>
-
-      <a-drawer v-model:open="detailOpen" placement="right" :width="'100%'" :title="`${detailDate} 收支明细`">
-        <div class="appDetailBody">
-          <MobileListState :loading="detailLoading" :empty="!detailLoading && !incomeDetails.length && !expenseDetails.length" empty-text="暂无明细" />
-          <section v-if="incomeDetails.length" class="appDetailSection"><h2>收入明细</h2><div class="appCardList"><article v-for="row in incomeDetails" :key="row.id" class="appRecordCard"><div class="appCardTop"><strong>{{ row.entry_no }}</strong><span class="appStatus success">收入</span></div><div class="appCardMetric"><strong>{{ row.amount }}</strong></div><div class="appCardMeta">{{ row.biz_date }} · {{ row.sub2api_user_email || `用户 #${row.sub2api_user_id || '-'}` }} · {{ row.owner_name }}</div><div v-if="row.remark" class="appCardMeta wrap">{{ row.remark }}</div></article></div></section>
-          <section v-if="expenseDetails.length" class="appDetailSection"><h2>支出明细</h2><div class="appCardList"><article v-for="row in expenseDetails" :key="row.id" class="appRecordCard"><div class="appCardTop"><strong>{{ row.expense_no }}</strong><span class="appStatus danger">支出</span></div><div class="appCardMetric"><strong class="expenseValue">{{ row.amount }}</strong></div><div class="appCardMeta">{{ row.biz_date }} · {{ row.category }} · {{ row.owner_name }}</div><div v-if="row.remark" class="appCardMeta wrap">{{ row.remark }}</div></article></div></section>
-        </div>
-      </a-drawer>
-
-      <a-drawer v-if="selectedBatch" v-model:open="batchOpen" placement="right" :width="'100%'" :title="`分账明细 · ${selectedBatch.batch_no}`">
-        <div class="appDetailBody">
-          <MobileListState :loading="batchLoading" :empty="!batchLoading && !batchItems.length" empty-text="暂无分账明细" />
-          <div v-if="batchItems.length" class="appCardList"><article v-for="row in batchItems" :key="row.id" class="appRecordCard"><div class="appCardTop"><strong>{{ row.reference_no }}</strong><span class="appStatus">{{ row.item_type === 'cash_entry' ? '收入' : '支出' }}</span></div><div class="appCardMetric"><strong :class="{ expenseValue: row.item_type === 'operation_expense' }">{{ row.amount }}</strong></div><div class="appCardBottom"><span class="appCardMeta">{{ row.biz_date }} · {{ row.owner_name || '-' }}</span><span class="appCardMeta">{{ row.description || '-' }}</span></div></article></div>
-        </div>
-      </a-drawer>
+      </template>
     </template>
 
     <template v-else>

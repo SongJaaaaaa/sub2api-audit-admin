@@ -1127,7 +1127,7 @@
 }
 .appLoginMinimal {
   background: var(--bg);
-  padding: calc(20px + var(--app-safe-top)) 20px 40px calc(40px + var(--app-safe-bottom));
+  padding: calc(20px + var(--app-safe-top)) 20px calc(40px + var(--app-safe-bottom));
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
@@ -1269,18 +1269,29 @@
 
 .app-quota-card-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   min-width: 0;
 }
-.app-quota-name {
+.app-quota-user {
   flex: 1;
   min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.app-quota-name,
+.app-quota-email {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.app-quota-name {
   font-size: 15px;
   font-weight: 600;
+}
+.app-quota-email {
+  color: var(--muted);
+  font-size: 12px;
 }
 .app-status-badge {
   flex-shrink: 0;

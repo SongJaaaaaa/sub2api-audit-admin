@@ -8,6 +8,7 @@ import { DataZoomComponent, GridComponent, TooltipComponent } from 'echarts/comp
 import { init, use, type ECharts } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAppMode } from '../app/composables/useAppMode'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useTableColumns } from '../composables/useTableColumns'
@@ -25,6 +26,8 @@ use([BarChart, DataZoomComponent, GridComponent, TooltipComponent, CanvasRendere
 
 const { message } = AntApp.useApp()
 const { isAppMode } = useAppMode()
+const route = useRoute()
+const router = useRouter()
 const themeStore = useThemeStore()
 const loading = ref(false)
 const rankingLoading = ref(false)
@@ -43,6 +46,7 @@ let statsVersion = 0
 let rankingVersion = 0
 
 const selectedModel = computed(() => stats.value?.selected_model || '')
+const isAppDetail = computed(() => isAppMode.value && route.name === 'sub2-model-detail')
 const modelRows = computed<ModelStat[]>(() => [...(stats.value?.models || [])].sort((a, b) => b.total_tokens - a.total_tokens))
 const userRows = computed<ModelUserRank[]>(() => [...(stats.value?.users || [])].sort((a, b) => b.total_tokens - a.total_tokens))
 const pageLoading = computed(() => activeTab.value === 'models' ? loading.value : rankingLoading.value)
@@ -227,9 +231,52 @@ function clearModel() {
   loadStats()
 }
 
-function selectModel(name: string) {
+async function selectModel(name: string) {
+  if (isAppMode.value) {
+    const [start, end] = range.value
+    await router.push({
+      name: 'sub2-model-detail',
+      query: {
+        model: name,
+        start_date: start.format('YYYY-MM-DD'),
+        end_date: end.format('YYYY-MM-DD'),
+        limit: limit.value,
+      },
+    })
+    return
+  }
   model.value = name
-  loadStats()
+  await loadStats()
+}
+
+function queryText(value: unknown) {
+  return Array.isArray(value) ? String(value[0] || '') : String(value || '')
+}
+
+function loadRouteData() {
+  if (!isAppDetail.value) {
+    if (isAppMode.value) {
+      model.value = ''
+      stats.value = null
+    }
+    return loadData()
+  }
+
+  activeTab.value = 'models'
+  stats.value = null
+  model.value = queryText(route.query.model)
+  const start = dayjs(queryText(route.query.start_date))
+  const end = dayjs(queryText(route.query.end_date))
+  if (start.isValid() && end.isValid()) range.value = [start, end]
+  const size = Number(queryText(route.query.limit))
+  if (size) limit.value = size
+  return loadStats()
+}
+
+function searchStats() {
+  const name = model.value.trim()
+  if (isAppMode.value && activeTab.value === 'models' && name && !isAppDetail.value) return selectModel(name)
+  return loadData()
 }
 
 function formatCount(val: number | string | null | undefined) {
@@ -247,20 +294,21 @@ function formatMoney(val: number | string | null | undefined) {
   return Number(val || 0).toFixed(2)
 }
 
-onMounted(() => { window.addEventListener('resize', resizeChart); loadData() })
+onMounted(() => { window.addEventListener('resize', resizeChart); loadRouteData() })
 onBeforeUnmount(() => { window.removeEventListener('resize', resizeChart); userChart?.dispose() })
 watch(() => themeStore.themeName, renderUserChart)
+watch(() => route.fullPath, () => { if (isAppMode.value) void loadRouteData() })
 </script>
 
 <template>
   <section class="page modelStatsPage">
-    <div class="pageHead pageHeadActionsOnly">
+    <div v-if="!isAppDetail" class="pageHead pageHeadActionsOnly">
       <div class="headActions modelFilters">
         <a-range-picker
           v-model:value="range"
           :allow-clear="false"
           :disabled="pageLoading"
-          @change="loadData"
+          @change="searchStats"
         />
         <a-auto-complete
           v-if="activeTab === 'models'"
@@ -278,17 +326,17 @@ watch(() => themeStore.themeName, renderUserChart)
           <a-select-option :value="50">Top 50</a-select-option>
           <a-select-option :value="100">Top 100</a-select-option>
         </a-select>
-        <a-button type="primary" :loading="pageLoading" @click="loadData">
+        <a-button type="primary" :loading="pageLoading" @click="searchStats">
           <template #icon><SearchOutlined /></template>
           查询
         </a-button>
-        <a-button :disabled="pageLoading" @click="loadData">
+        <a-button :disabled="pageLoading" @click="searchStats">
           <template #icon><ReloadOutlined /></template>
         </a-button>
       </div>
     </div>
 
-    <a-tabs :active-key="activeTab" class="rankingTabs" @change="changeTab">
+    <a-tabs v-if="!isAppDetail" :active-key="activeTab" class="rankingTabs" @change="changeTab">
       <a-tab-pane key="models" tab="模型消耗统计" />
       <a-tab-pane key="users" tab="消费排行榜" />
     </a-tabs>
@@ -302,7 +350,7 @@ watch(() => themeStore.themeName, renderUserChart)
       class="statsAlert"
     />
 
-    <div v-if="activeTab === 'models' && stats" class="summaryGrid">
+    <div v-if="!isAppDetail && activeTab === 'models' && stats" class="summaryGrid">
       <section><span>请求总数</span><strong>{{ formatCount(stats.summary.request_count) }}</strong></section>
       <section><span>Token 总数</span><strong>{{ formatToken(stats.summary.total_tokens) }}</strong></section>
       <section><span>缓存 Token</span><strong>{{ formatToken(stats.summary.cache_tokens) }}</strong></section>
@@ -368,7 +416,7 @@ watch(() => themeStore.themeName, renderUserChart)
           <div>
             <h2>{{ selectedModel }} · 用户 Token 排行</h2>
           </div>
-          <a-button @click="clearModel">返回模型榜</a-button>
+          <a-button v-if="!isAppMode" @click="clearModel">返回模型榜</a-button>
         </div>
 
         <a-empty v-if="userRows.length === 0" description="该请求模型在所选日期内暂无用户用量" />

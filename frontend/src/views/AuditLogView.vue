@@ -3,7 +3,8 @@ import { CheckCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, Fi
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { App as AntApp } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAppMode } from '../app/composables/useAppMode'
 import { getAuditLogs, type AuditLog, type AuditSummary } from '../api/audit'
 
@@ -12,6 +13,8 @@ import { useAdminOptions } from '../composables/useAdminOptions'
 import { useTableColumns } from '../composables/useTableColumns'
 const { message } = AntApp.useApp()
 const { isAppMode } = useAppMode()
+const route = useRoute()
+const router = useRouter()
 // ── 中文映射 ──────────────────────────────────────────────────────────
 const actionLabels: Record<string, string> = {
   'admin.create':                '新增管理员',
@@ -154,7 +157,7 @@ const loadError = ref('')
 let loadSeq = 0
 const drawerOpen = ref(false)
 const items = ref<AuditLog[]>([])
-const selected = ref<AuditLog | null>(null)
+const selected = ref<AuditLog | null>((window.history.state?.appDetail as AuditLog | undefined) || null)
 const filters = reactive({ action: '', admin_id: undefined as number | undefined, target_type: '', target_id: '', ip: '', keyword: '', risk: '' as '' | 'high', dates: null as [Dayjs, Dayjs] | null })
 const summary = reactive<AuditSummary>({ record_count: 0, operator_count: 0, action_count: 0, target_count: 0, high_risk_count: 0, actions: [] })
 const page = reactive({ current: 1, pageSize: 20, total: 0 })
@@ -169,6 +172,7 @@ const allColumns = [
   { title: '详情', dataIndex: 'detail', fixed: 'right', width: 80 },
 ] as const
 const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('audit-log-columns', allColumns, 1050)
+const appDetailPage = computed(() => route.name === 'audit-detail')
 
 async function loadItems(append = false) {
   const seq = ++loadSeq
@@ -191,6 +195,9 @@ async function loadItems(append = false) {
     })
     if (seq !== loadSeq) return
     items.value = append ? [...items.value, ...res.items] : res.items
+    if (appDetailPage.value && !selected.value) {
+      selected.value = res.items.find(item => item.id === Number(route.params.auditId)) || null
+    }
     page.total = res.total
     if (res.summary) Object.assign(summary, res.summary)
   } catch {
@@ -232,7 +239,15 @@ function filterCount() {
 
 function openDetail(row: AuditLog) {
   selected.value = row
-  drawerOpen.value = true
+  if (isAppMode.value) {
+    void router.push({
+      name: 'audit-detail',
+      params: { auditId: row.id },
+      state: { appDetail: JSON.parse(JSON.stringify(row)) },
+    })
+  } else {
+    drawerOpen.value = true
+  }
 }
 
 const selectedAfterRows = () => buildDetailRows(selected.value?.target_type ?? null, selected.value?.after_value as Record<string, unknown> | null)
@@ -247,7 +262,7 @@ onMounted(loadItems)
       <template #description><a-button size="small" @click="loadItems">重试</a-button></template>
     </a-alert>
 
-    <template v-if="isAppMode">
+    <template v-if="isAppMode && !appDetailPage">
     <details class="appFilterPanel" open>
       <summary>筛选<span v-if="filterCount()">（{{ filterCount() }} 项生效）</span></summary>
       <div class="appFilterGrid">
@@ -293,7 +308,7 @@ onMounted(loadItems)
     <div v-if="hasMore()" class="appLoadMore"><a-button :loading="loading" block @click="loadMore">加载更多</a-button></div>
     </template>
 
-    <template v-else>
+    <template v-else-if="!isAppMode">
     <div class="filterBar">
       <a-select v-model:value="filters.action" class="filterAction" placeholder="操作类型" allow-clear><a-select-option value="">全部操作</a-select-option><a-select-option v-for="(label, key) in actionLabels" :key="key" :value="key">{{ label }}</a-select-option></a-select>
       <a-select v-model:value="filters.admin_id" class="filterLg" placeholder="操作人" allow-clear><a-select-option v-for="row in adminOptions" :key="row.id" :value="row.id">{{ row.name }}（{{ row.email }}）</a-select-option></a-select>
@@ -347,8 +362,37 @@ onMounted(loadItems)
     </a-table>
     </template>
 
+    <template v-else-if="selected">
+      <div class="auditHeadCard appRouteDetail">
+        <div class="auditHeadRow">
+          <a-tag :color="actionTagProps[selected.action]?.color || 'default'" style="font-size:14px;padding:4px 12px;">
+            <template #icon><component :is="actionTagProps[selected.action]?.icon || SettingOutlined" /></template>
+            {{ actionLabel(selected.action) }}
+          </a-tag>
+          <span class="auditHeadTime">{{ selected.created_at }}</span>
+        </div>
+        <div class="auditHeadMeta">
+          <span>管理员：<strong>{{ selected.admin_name || '-' }}</strong>（ID {{ selected.admin_id || '-' }}）</span>
+          <span>对象：<strong>{{ targetLabel(selected.target_type) }}</strong> #{{ selected.target_id || '-' }}</span>
+          <span>IP：{{ selected.ip || '-' }}</span>
+        </div>
+      </div>
+      <div v-if="selectedAfterRows().length > 0" class="auditSection">
+        <div class="auditSectionTitle">变动记录</div>
+        <div class="auditFieldGrid"><div v-for="row in selectedAfterRows()" :key="row.key" class="auditFieldItem"><span class="auditFieldLabel">{{ row.label }}</span><span class="auditFieldValue">{{ row.value }}</span></div></div>
+      </div>
+      <div v-if="selectedBeforeRows().length > 0" class="auditSection">
+        <div class="auditSectionTitle">变动前</div>
+        <div class="auditFieldGrid"><div v-for="row in selectedBeforeRows()" :key="row.key" class="auditFieldItem"><span class="auditFieldLabel">{{ row.label }}</span><span class="auditFieldValue">{{ row.value }}</span></div></div>
+      </div>
+      <div v-if="selected.user_agent" class="auditSection"><div class="auditSectionTitle">浏览器信息</div><div class="auditUa">{{ selected.user_agent }}</div></div>
+    </template>
+    <div v-else-if="loading" class="appLoadingState"><a-spin /><span>正在加载审计详情</span></div>
+    <a-empty v-else description="未找到该审计记录，请返回列表重新打开" />
+
     <!-- 审计详情 Drawer -->
     <a-drawer
+      v-if="!isAppMode"
       v-model:open="drawerOpen"
       title="审计详情"
       :width="isAppMode ? '100%' : 580"

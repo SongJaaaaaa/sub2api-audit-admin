@@ -8,6 +8,7 @@ import { GridComponent, TooltipComponent } from 'echarts/components'
 import { init, use, type ECharts } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { getLedgerAdjustments, retryLedgerAdjustment, voidLedgerAdjustment, type LedgerAdjustment, type LedgerSummary } from '../api/ledger'
 import ColumnSettings from '../components/table/ColumnSettings.vue'
 import { useAdminOptions } from '../composables/useAdminOptions'
@@ -19,6 +20,8 @@ use([BarChart, GridComponent, TooltipComponent, CanvasRenderer])
 
 const { message } = AntApp.useApp()
 const { isAppMode } = useAppMode()
+const route = useRoute()
+const router = useRouter()
 const themeStore = useThemeStore()
 const adminOptions = useAdminOptions()
 const loading = ref(false)
@@ -32,12 +35,11 @@ const filters = reactive({ userId: '', email: '', operator: undefined as number 
 const summary = reactive<LedgerSummary>({ record_count: 0, user_count: 0, increment_total: '0.00', decrement_total: '0.00', net_total: '0.00', cash_total: '0.00', gift_total: '0.00', amount_total: '0.00', oldest_created_at: null, over_24h_count: 0, types: [] })
 const page = reactive({ current: 1, pageSize: 20, total: 0 })
 const mobileFiltersOpen = ref(false)
-const mobileDetailOpen = ref(false)
 const mobileRetryConfirmOpen = ref(false)
 const mobileVoidConfirmOpen = ref(false)
 const mobileLoadingMore = ref(false)
 const loadError = ref('')
-const selectedItem = ref<LedgerAdjustment | null>(null)
+const selectedItem = ref<LedgerAdjustment | null>((window.history.state?.appDetail as LedgerAdjustment | undefined) || null)
 const allColumns = [
   { title: '业务单号', dataIndex: 'ledger_no', width: 180 },
   { title: '状态', dataIndex: 'status', width: 100 },
@@ -53,6 +55,7 @@ const allColumns = [
   { title: '操作', dataIndex: 'action', fixed: 'right', width: 150 },
 ] as const
 const { columns, visibleCols, colOptions, tableWidth, resizeColumn, resetColumns } = useTableColumns('exception-center-columns', allColumns, 1540)
+const appDetailPage = computed(() => route.name === 'exception-detail')
 const hasMoreItems = computed(() => page.current * page.pageSize < page.total)
 const mobileFilterTags = computed(() => {
   const tags: Array<{ key: string; label: string }> = []
@@ -80,6 +83,9 @@ async function loadItems() {
     })
     if (version !== itemsVersion) return
     items.value = res.items
+    if (appDetailPage.value && !selectedItem.value) {
+      selectedItem.value = res.items.find(item => item.id === Number(route.params.adjustmentId)) || null
+    }
     page.total = res.total
     Object.assign(summary, res.summary)
     await nextTick()
@@ -137,8 +143,8 @@ async function retryItem(row: LedgerAdjustment) {
     const res = await retryLedgerAdjustment(row.id)
     message.success(res.message)
     mobileRetryConfirmOpen.value = false
-    mobileDetailOpen.value = false
     await loadItems()
+    if (appDetailPage.value) await router.replace({ name: 'exception' })
   } catch (err) {
     const data = (err as { response?: { data?: { message?: string } } }).response?.data
     message.error(data?.message || '重试失败')
@@ -153,8 +159,8 @@ async function voidItem(row: LedgerAdjustment) {
     const res = await voidLedgerAdjustment(row.id)
     message.success(res.message)
     mobileVoidConfirmOpen.value = false
-    mobileDetailOpen.value = false
     await loadItems()
+    if (appDetailPage.value) await router.replace({ name: 'exception' })
   } catch (err) {
     const data = (err as { response?: { data?: { message?: string } } }).response?.data
     message.error(data?.message || '作废失败')
@@ -163,9 +169,13 @@ async function voidItem(row: LedgerAdjustment) {
   }
 }
 
-function openMobileDetail(row: LedgerAdjustment) {
+async function openMobileDetail(row: LedgerAdjustment) {
   selectedItem.value = row
-  mobileDetailOpen.value = true
+  await router.push({
+    name: 'exception-detail',
+    params: { adjustmentId: row.id },
+    state: { appDetail: { ...row } },
+  })
 }
 
 function confirmMobileRetry() {
@@ -207,6 +217,7 @@ watch(() => themeStore.themeName, renderChart)
 
 <template>
   <section v-if="isAppMode" class="app-page app-exception-page">
+    <template v-if="!appDetailPage">
     <header class="app-header">
       <div><span class="app-eyebrow">风险处理</span><h1>异常中心</h1></div>
       <strong class="app-count">{{ summary.record_count }} 条</strong>
@@ -249,20 +260,19 @@ watch(() => themeStore.themeName, renderChart)
     </a-spin>
     <button v-if="hasMoreItems" type="button" class="app-load-more" :disabled="mobileLoadingMore" @click="loadMoreItems">{{ mobileLoadingMore ? '加载中…' : '加载更多' }}</button>
     <p v-else-if="items.length" class="app-end-state">已显示全部异常记录</p>
+    </template>
 
-    <a-drawer v-model:open="mobileDetailOpen" placement="right" :width="'100%'" :title="selectedItem ? `${selectedItem.ledger_no} · 异常详情` : '异常详情'">
-      <template v-if="selectedItem">
-        <div class="app-detail">
-          <div class="app-detail-hero"><span class="app-avatar app-risk-avatar">!</span><div><h2>{{ selectedItem.sub2api_user_email || `用户 #${selectedItem.sub2api_user_id}` }}</h2><p>{{ selectedItem.ledger_no }} · {{ selectedItem.created_at || '-' }}</p></div></div>
-          <dl class="app-detail-grid"><div><dt>状态</dt><dd :class="selectedItem.status === 'exception' ? 'app-danger' : 'app-warning'">{{ selectedItem.status === 'exception' ? '异常' : '作废' }}</dd></div><div><dt>操作方向</dt><dd>{{ selectedItem.operation === 'increment' ? '增加' : '扣减' }}</dd></div><div><dt>额度</dt><dd class="app-money">{{ selectedItem.amount }}</dd></div><div><dt>操作人</dt><dd>{{ selectedItem.operator_name || selectedItem.operator_email || '-' }}</dd></div><div><dt>调前余额</dt><dd>{{ selectedItem.before_balance || '-' }}</dd></div><div><dt>调后余额</dt><dd>{{ selectedItem.after_balance || '-' }}</dd></div></dl>
-          <div class="app-reason"><span>异常原因</span><p>{{ selectedItem.exception_reason || '未提供原因' }}</p></div>
-          <a-space direction="vertical" style="width: 100%">
-            <a-button type="primary" block danger :loading="retryingId === selectedItem.id" :disabled="voidingId !== null" @click="confirmMobileRetry"><template #icon><RedoOutlined /></template>重试该调额</a-button>
-            <a-button v-if="selectedItem.status === 'exception'" block :loading="voidingId === selectedItem.id" :disabled="retryingId !== null" @click="mobileVoidConfirmOpen = true"><template #icon><StopOutlined /></template>确认作废</a-button>
-          </a-space>
-        </div>
-      </template>
-    </a-drawer>
+    <div v-else-if="selectedItem" class="app-detail appRouteDetail">
+      <div class="app-detail-hero"><span class="app-avatar app-risk-avatar">!</span><div><h2>{{ selectedItem.sub2api_user_email || `用户 #${selectedItem.sub2api_user_id}` }}</h2><p>{{ selectedItem.ledger_no }} · {{ selectedItem.created_at || '-' }}</p></div></div>
+      <dl class="app-detail-grid"><div><dt>状态</dt><dd :class="selectedItem.status === 'exception' ? 'app-danger' : 'app-warning'">{{ selectedItem.status === 'exception' ? '异常' : '作废' }}</dd></div><div><dt>操作方向</dt><dd>{{ selectedItem.operation === 'increment' ? '增加' : '扣减' }}</dd></div><div><dt>额度</dt><dd class="app-money">{{ selectedItem.amount }}</dd></div><div><dt>操作人</dt><dd>{{ selectedItem.operator_name || selectedItem.operator_email || '-' }}</dd></div><div><dt>调前余额</dt><dd>{{ selectedItem.before_balance || '-' }}</dd></div><div><dt>调后余额</dt><dd>{{ selectedItem.after_balance || '-' }}</dd></div></dl>
+      <div class="app-reason"><span>异常原因</span><p>{{ selectedItem.exception_reason || '未提供原因' }}</p></div>
+      <a-space direction="vertical" style="width: 100%">
+        <a-button type="primary" block danger :loading="retryingId === selectedItem.id" :disabled="voidingId !== null" @click="confirmMobileRetry"><template #icon><RedoOutlined /></template>重试该调额</a-button>
+        <a-button v-if="selectedItem.status === 'exception'" block :loading="voidingId === selectedItem.id" :disabled="retryingId !== null" @click="mobileVoidConfirmOpen = true"><template #icon><StopOutlined /></template>确认作废</a-button>
+      </a-space>
+    </div>
+    <div v-else-if="loading" class="appListState">正在加载异常详情…</div>
+    <a-empty v-else description="未找到该异常记录，请返回列表重新打开" />
     <a-modal v-model:open="mobileRetryConfirmOpen" title="确认重试异常调额" ok-text="确认重试" cancel-text="取消" :confirm-loading="retryingId !== null" :width="'calc(100vw - 24px)'" @ok="selectedItem && retryItem(selectedItem)">
       <div v-if="selectedItem" class="app-confirm-summary"><p><span>用户</span><strong>{{ selectedItem.sub2api_user_email || `用户 #${selectedItem.sub2api_user_id}` }}</strong></p><p><span>业务单号</span><strong>{{ selectedItem.ledger_no }}</strong></p><p><span>操作</span><strong>{{ selectedItem.operation === 'increment' ? '增加' : '扣减' }}</strong></p><p><span>额度</span><strong>{{ selectedItem.amount }}</strong></p><p><span>异常原因</span><strong>{{ selectedItem.exception_reason || '-' }}</strong></p></div>
     </a-modal>

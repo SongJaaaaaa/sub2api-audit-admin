@@ -5,6 +5,7 @@ import { Network } from '@capacitor/network'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import type { Router } from 'vue-router'
 import { ref } from 'vue'
+import { appParentRoute, hasAppBackEntry } from './appNavigation'
 import { isAppMode, isNativeApp } from './platform'
 
 export const networkOnline = ref(true)
@@ -92,10 +93,10 @@ export async function initNativeRuntime(router: Router, dark = false) {
       }
       return
     }
-    if (canGoBack) {
+    if (canGoBack && hasAppBackEntry()) {
       void router.back()
     } else {
-      void router.replace('/app')
+      void router.replace(appParentRoute(router.currentRoute.value))
     }
   })
 
