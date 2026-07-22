@@ -35,7 +35,7 @@ php artisan migrate --force
 powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\build-release.ps1
 ```
 
-产物位于 `release-tmp/sub2api-audit-admin-production.zip`。禁止直接打包或复制整个本地工作目录，特别是 `backend/database/` 和 `backend/storage/`。
+产物位于 `release-tmp/sub2api-audit-admin-production.tar.gz`。禁止直接打包或复制整个本地工作目录，特别是 `backend/database/` 和 `backend/storage/`。
 
 服务器上的 `backend/database/database.sqlite`、`backend/storage/app.key` 和附件目录属于持久数据。发布时只能覆盖生产包内的代码和前端资源，不得用本地文件替换这些目录。
 

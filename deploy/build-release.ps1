@@ -1,5 +1,6 @@
 param(
     [string]$Git = 'D:\Git\cmd\git.exe',
+    [string]$Tar = 'C:\Windows\System32\tar.exe',
     [string]$Output = ''
 )
 
@@ -14,6 +15,9 @@ $stagePath = [System.IO.Path]::GetFullPath($stage)
 if (-not (Test-Path -LiteralPath $Git -PathType Leaf)) {
     throw "Git not found: $Git"
 }
+if (-not (Test-Path -LiteralPath $Tar -PathType Leaf)) {
+    throw "Tar not found: $Tar"
+}
 if (-not (Test-Path -LiteralPath (Join-Path $root 'frontend\dist\index.html') -PathType Leaf)) {
     throw 'frontend/dist is missing. Run npm run build first.'
 }
@@ -25,7 +29,7 @@ if (-not $stagePath.StartsWith($tmpPrefix, [System.StringComparison]::OrdinalIgn
 }
 
 if ($Output -eq '') {
-    $Output = Join-Path $tmpRoot 'sub2api-audit-admin-production.zip'
+    $Output = Join-Path $tmpRoot 'sub2api-audit-admin-production.tar.gz'
 } elseif (-not [System.IO.Path]::IsPathRooted($Output)) {
     $Output = Join-Path $root $Output
 }
@@ -60,7 +64,10 @@ try {
     if (Test-Path -LiteralPath $Output) {
         Remove-Item -LiteralPath $Output -Force
     }
-    Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $Output -CompressionLevel Optimal
+    & $Tar -czf $Output -C $stage .
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Production tar archive failed.'
+    }
     Get-Item -LiteralPath $Output | Select-Object FullName, Length, LastWriteTime
 } finally {
     Remove-Item -LiteralPath $source -Force -ErrorAction SilentlyContinue
