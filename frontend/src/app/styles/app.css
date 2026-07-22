@@ -1258,7 +1258,8 @@
 /* ===== 用户充值列表卡片 ===== */
 .app-quota-user-card {
   display: grid;
-  gap: 12px;
+  gap: 8px;
+  padding: 12px 14px;
   cursor: pointer;
 }
 .app-quota-user-card:active {
@@ -1272,29 +1273,18 @@
   gap: 10px;
   min-width: 0;
 }
-.app-quota-avatar {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: var(--surface2);
-  color: var(--muted);
-  font-size: 16px;
-  font-weight: 700;
-}
-.app-quota-avatar.active {
-  background: color-mix(in srgb, var(--primary) 14%, transparent);
-  color: var(--primary);
-}
-.app-quota-card-head .app-card-title {
+.app-quota-name {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
 }
 .app-status-badge {
   flex-shrink: 0;
-  padding: 2px 9px;
+  padding: 1px 8px;
   border-radius: 999px;
   background: var(--surface2);
   color: var(--muted);
@@ -1307,60 +1297,34 @@
   color: var(--success);
 }
 
-.app-quota-balance-row {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 11px 12px;
-  border-radius: var(--app-radius-sm);
-  background: var(--surface2);
-}
-.app-quota-balance span,
-.app-quota-sub span {
-  display: block;
-  color: var(--muted);
-  font-size: 12px;
-}
-.app-quota-balance strong {
-  display: block;
-  margin-top: 2px;
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-.app-quota-sub {
-  text-align: right;
-}
-.app-quota-sub strong {
-  display: block;
-  margin-top: 2px;
-  color: var(--heading);
-  font-size: 15px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
 .app-quota-card-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
 }
-.app-quota-lastused {
+.app-quota-balance {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.app-quota-balance span {
   color: var(--muted);
   font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.app-quota-balance strong {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 .app-quota-cta {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-height: 34px;
+  min-height: 32px;
   padding: 0 14px;
   border: 0;
   border-radius: 999px;

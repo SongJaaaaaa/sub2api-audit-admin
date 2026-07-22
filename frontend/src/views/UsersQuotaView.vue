@@ -435,25 +435,14 @@ onMounted(initPage)
       <div v-else class="app-card-list">
         <article v-for="item in users" :key="item.id" class="app-card app-quota-user-card" tabindex="0" role="button" @click="openMobileUser(item)" @keydown.enter="openMobileUser(item)">
           <div class="app-quota-card-head">
-            <span class="app-quota-avatar" :class="{ active: item.status === 'active' }">{{ (item.username || item.email || '?').slice(0, 1).toUpperCase() }}</span>
-            <div class="app-card-title">
-              <strong>{{ item.username || item.email }}</strong>
-              <span>{{ item.email }} · ID {{ item.id }}</span>
-            </div>
+            <strong class="app-quota-name">{{ item.username || item.email }}</strong>
             <span class="app-status-badge" :class="{ active: item.status === 'active' }">{{ item.status === 'active' ? '正常' : (item.status || '-') }}</span>
           </div>
-          <div class="app-quota-balance-row">
+          <div class="app-quota-card-foot">
             <div class="app-quota-balance">
               <span>当前余额</span>
               <strong class="app-money">{{ moneyText(item.balance) }}</strong>
             </div>
-            <div class="app-quota-sub">
-              <span>累计充值</span>
-              <strong>{{ moneyText(item.total_recharged) }}</strong>
-            </div>
-          </div>
-          <div class="app-quota-card-foot">
-            <span class="app-quota-lastused">{{ item.last_used_at || '从未使用' }}</span>
             <button type="button" class="app-quota-cta" @click.stop="openMobileUser(item)">充值<RightOutlined /></button>
           </div>
         </article>
@@ -692,7 +681,7 @@ onMounted(initPage)
 <style scoped>
 /* Centralized app styles in src/app/styles/app.css */
 .app-toolbar { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-.app-card-list, .app-history-list { gap: 9px; }
+.app-card-list, .app-history-list { gap: 14px; }
 .app-action-bar {
   position: sticky;
   bottom: 0;
