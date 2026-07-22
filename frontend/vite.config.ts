@@ -12,6 +12,8 @@ export default defineConfig(({ mode }) => {
       vue(),
       VitePWA({
         registerType: 'autoUpdate',
+        injectRegister: 'inline',
+        filename: 'sw-v2.js',
         includeAssets: ['favicon.png', 'apple-touch-icon.png'],
         manifest: {
           id: '/app',
@@ -32,6 +34,8 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
+          skipWaiting: true,
+          clientsClaim: true,
           cleanupOutdatedCaches: true,
           globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
           navigateFallback: '/index.html',
