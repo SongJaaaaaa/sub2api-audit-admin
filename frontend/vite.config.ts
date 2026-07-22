@@ -50,6 +50,8 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: apiTarget,
           changeOrigin: true,
+          // 允许把请求转发到 https 的线上后端（自签/正式证书均可），供 app 模式开发代理使用
+          secure: false,
         },
       },
     },
