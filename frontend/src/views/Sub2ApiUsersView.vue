@@ -2,7 +2,6 @@
 import { GiftOutlined, HistoryOutlined, ImportOutlined, MinusCircleOutlined, PlusCircleOutlined } from '@ant-design/icons-vue'
 import type { TableProps } from 'ant-design-vue'
 import { App as AntApp } from 'ant-design-vue'
-import type { Dayjs } from 'dayjs'
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createBatchGift } from '../api/ledger'
@@ -28,15 +27,14 @@ const importedUsers = ref<Sub2User[]>([])
 const users = ref<Sub2User[]>([])
 const loaded = ref(false)
 const loadError = ref('')
-const summary = reactive<UserSummary>({ user_count: 0, active_count: 0, disabled_count: 0, balance_total: '0.00', average_balance: '0.00', negative_balance_count: 0, zero_balance_count: 0 })
+const summary = reactive<UserSummary>({ user_count: 0 })
 const history = ref<Sub2BalanceHistoryItem[]>([])
 const selectedUser = ref<Sub2User | null>(null)
 const selectedIds = ref<number[]>([])
 const historyPage = reactive({ current: 1, pageSize: 10, total: 0 })
 const keyword = ref('')
-const userFilter = ref<'zero_balance' | 'negative_balance' | 'disabled' | ''>('')
+const userFilter = ref<'disabled' | ''>('')
 const balanceSort = ref<'' | 'asc' | 'desc'>('')
-const lastUsedRange = ref<[Dayjs, Dayjs] | null>(null)
 const batchMode = ref<'selected' | 'all' | 'imported'>('selected')
 const batchProgress = ref('')
 const batchForm = reactive({ amount: '', admin_notes: '', include_revenue: false })
@@ -84,10 +82,8 @@ const mobileFilterTags = computed(() => {
   const tags: Array<{ key: string; label: string }> = []
   if (keyword.value.trim()) tags.push({ key: 'keyword', label: `关键词：${keyword.value.trim()}` })
   if (userFilter.value) {
-    const labels = { zero_balance: '零余额', negative_balance: '负余额', disabled: '已禁用' }
-    tags.push({ key: 'userFilter', label: labels[userFilter.value] })
+    tags.push({ key: 'userFilter', label: '已禁用' })
   }
-  if (lastUsedRange.value) tags.push({ key: 'lastUsedRange', label: '近期使用时间' })
   if (balanceSort.value) tags.push({ key: 'balanceSort', label: balanceSort.value === 'asc' ? '余额升序' : '余额降序' })
   return tags
 })
@@ -102,8 +98,6 @@ function userParams(pageNo = page.current, pageSize = page.pageSize) {
     page_size: pageSize,
     keyword: keyword.value,
     user_filter: userFilter.value,
-    last_used_start: lastUsedRange.value?.[0].format('YYYY-MM-DD'),
-    last_used_end: lastUsedRange.value?.[1].format('YYYY-MM-DD'),
     sort_by: balanceSort.value ? 'balance' as const : undefined,
     sort_order: balanceSort.value || undefined,
   }
@@ -237,7 +231,6 @@ function toggleMobileSelection(row: Sub2User, event: Event) {
 function clearMobileFilter(key: string) {
   if (key === 'keyword') keyword.value = ''
   if (key === 'userFilter') userFilter.value = ''
-  if (key === 'lastUsedRange') lastUsedRange.value = null
   if (key === 'balanceSort') balanceSort.value = ''
   search()
 }
@@ -245,7 +238,6 @@ function clearMobileFilter(key: string) {
 function resetMobileFilters() {
   keyword.value = ''
   userFilter.value = ''
-  lastUsedRange.value = null
   balanceSort.value = ''
   mobileFiltersOpen.value = false
   search()
@@ -468,6 +460,7 @@ watch(
         placeholder="邮箱或用户名"
         allow-clear
         enter-button
+        :loading="loading"
         @search="search"
       />
       <a-button class="app-filter-trigger" @click="mobileFiltersOpen = !mobileFiltersOpen">
@@ -485,14 +478,8 @@ watch(
         <span>用户状态</span>
         <a-select v-model:value="userFilter" class="app-field-control">
           <a-select-option value="">全部用户</a-select-option>
-          <a-select-option value="zero_balance">零余额用户</a-select-option>
-          <a-select-option value="negative_balance">负余额用户</a-select-option>
           <a-select-option value="disabled">禁用用户</a-select-option>
         </a-select>
-      </label>
-      <label class="app-field">
-        <span>近期使用时间</span>
-        <a-range-picker v-model:value="lastUsedRange" class="app-field-control" :placeholder="['开始日期', '结束日期']" />
       </label>
       <label class="app-field">
         <span>余额排序</span>
@@ -504,7 +491,7 @@ watch(
       </label>
       <div class="app-filter-actions">
         <a-button @click="resetMobileFilters">重置</a-button>
-        <a-button type="primary" @click="mobileFiltersOpen = false; search()">查询</a-button>
+        <a-button type="primary" :loading="loading" :disabled="loading" @click="mobileFiltersOpen = false; search()">查询</a-button>
       </div>
     </div>
 
@@ -512,13 +499,6 @@ watch(
       <button v-for="tag in mobileFilterTags" :key="tag.key" type="button" class="app-filter-tag" @click="clearMobileFilter(tag.key)">
         {{ tag.label }} ×
       </button>
-    </div>
-
-    <div class="app-summary-grid">
-      <div><span>余额合计</span><strong>{{ moneyText(summary.balance_total) }}</strong></div>
-      <div><span>活跃用户</span><strong>{{ summary.active_count }}</strong></div>
-      <div><span>负余额</span><strong class="app-danger">{{ summary.negative_balance_count }}</strong></div>
-      <div><span>零余额</span><strong>{{ summary.zero_balance_count }}</strong></div>
     </div>
 
     <div v-if="loadError" class="app-error-bar">
@@ -668,26 +648,18 @@ watch(
       <div class="headActions userFilters">
         <div v-if="loaded" class="compactSummary">
           <span>用户 {{ summary.user_count }}</span>
-          <span>余额 <strong>{{ moneyText(summary.balance_total) }}</strong></span>
         </div>
         <a-select v-model:value="userFilter" class="userFilterSelect" @change="changeUserFilter">
           <a-select-option value="">全部用户</a-select-option>
-          <a-select-option value="zero_balance">零余额用户</a-select-option>
-          <a-select-option value="negative_balance">负余额用户</a-select-option>
           <a-select-option value="disabled">禁用用户</a-select-option>
         </a-select>
-        <a-range-picker
-          v-model:value="lastUsedRange"
-          class="lastUsedFilter"
-          :placeholder="['近期使用开始', '近期使用结束']"
-          @change="search"
-        />
         <a-input-search
           v-model:value="keyword"
           class="search"
           placeholder="邮箱或用户名"
           allow-clear
           enter-button
+          :loading="loading"
           @search="search"
         />
         <a-button @click="openImport">

@@ -1,0 +1,56 @@
+name: sub2api-audit-admin
+
+services:
+  backend:
+    image: sub2api-audit-php:local
+    build:
+      context: ./docker/php
+    container_name: sub2api-audit-backend
+    working_dir: /var/www/html
+    volumes:
+      - ../backend:/var/www/html
+    restart: unless-stopped
+    networks:
+      - klein
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  scheduler:
+    image: sub2api-audit-php:local
+    build:
+      context: ./docker/php
+    container_name: sub2api-audit-scheduler
+    working_dir: /var/www/html
+    volumes:
+      - ../backend:/var/www/html
+    command: ["su", "-s", "/bin/sh", "www-data", "-c", "php artisan schedule:work"]
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - klein
+
+  web:
+    image: nginx:alpine
+    container_name: sub2api-audit-web
+    volumes:
+      - ../frontend/dist:/usr/share/nginx/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+    networks:
+      - klein
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+networks:
+  klein:
+    external: true
+    name: klein-dev-net

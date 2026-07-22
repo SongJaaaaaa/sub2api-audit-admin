@@ -210,7 +210,8 @@ async function saveIncome() {
     const res = await createIncome(form)
     message.success(res.message)
     modalOpen.value = false
-    await openDetail(res.income)
+    detail.value = null
+    detailOpen.value = false
     await loadItems(true)
   } catch {
     message.error('保存收入失败')

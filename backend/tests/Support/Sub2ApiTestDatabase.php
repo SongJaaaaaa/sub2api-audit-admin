@@ -74,7 +74,7 @@ trait Sub2ApiTestDatabase
         config()->set('sub2api.admin_api.key', 'test-key');
         $client = Mockery::mock(Sub2ApiAdminClient::class)->makePartial();
         $client->shouldReceive('users')->andReturnUsing(
-            fn (int $page = 1, int $pageSize = 100): array => $this->sub2ApiUsers($page, $pageSize),
+            fn (int $page = 1, int $pageSize = 100, array $filters = []): array => $this->sub2ApiUsers($page, $pageSize, $filters),
         );
         $client->shouldReceive('redeemCodes')->andReturnUsing(
             fn (int $page = 1, int $pageSize = 100): array => $this->sub2ApiRedeemCodes($page, $pageSize),
@@ -109,7 +109,7 @@ trait Sub2ApiTestDatabase
         ], $values));
     }
 
-    private function sub2ApiUsers(int $page, int $pageSize): array
+    private function sub2ApiUsers(int $page, int $pageSize, array $filters = []): array
     {
         $rows = DB::connection('sub2api')->table('users')->whereNull('deleted_at')->orderByDesc('id')->get()
             ->map(function ($row): array {
@@ -118,9 +118,24 @@ trait Sub2ApiTestDatabase
                     ->where('user_id', $row->id)->max('created_at');
 
                 return $item;
-            })->all();
+            });
 
-        return $this->sub2ApiPage($rows, $page, $pageSize);
+        $search = mb_strtolower(trim((string) ($filters['search'] ?? '')));
+        if ($search !== '') {
+            $rows = $rows->filter(fn (array $row): bool => str_contains(
+                mb_strtolower(($row['email'] ?? '').' '.($row['username'] ?? '')),
+                $search,
+            ));
+        }
+        if (($filters['status'] ?? '') !== '') {
+            $rows = $rows->where('status', $filters['status']);
+        }
+        if (($filters['sort_by'] ?? '') === 'balance') {
+            $desc = ($filters['sort_order'] ?? 'desc') === 'desc';
+            $rows = $rows->sortBy('balance', SORT_NUMERIC, $desc);
+        }
+
+        return $this->sub2ApiPage($rows->values()->all(), $page, $pageSize);
     }
 
     private function sub2ApiRedeemCodes(int $page, int $pageSize): array

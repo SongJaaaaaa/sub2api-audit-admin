@@ -26,7 +26,20 @@ php artisan migrate --force
 
 确保 PHP 运行用户可写 `backend/database/`、`backend/storage/` 和 `backend/bootstrap/cache/`。
 
-## 3. 发布
+## 3. 生成生产发布包
+
+本地完成测试和提交后，只能使用发布脚本生成生产包。脚本从 Git `HEAD` 导出源码，再加入 `frontend/dist`，并拒绝任何 SQLite、`.env` 和 `app.key`：
+
+```powershell
+& 'D:\nvm\nodejs\npm.cmd' run build
+powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\build-release.ps1
+```
+
+产物位于 `release-tmp/sub2api-audit-admin-production.zip`。禁止直接打包或复制整个本地工作目录，特别是 `backend/database/` 和 `backend/storage/`。
+
+服务器上的 `backend/database/database.sqlite`、`backend/storage/app.key` 和附件目录属于持久数据。发布时只能覆盖生产包内的代码和前端资源，不得用本地文件替换这些目录。
+
+## 4. 发布
 
 ```bash
 cd /var/www/sub2api-audit-admin/frontend
@@ -41,7 +54,7 @@ php artisan route:cache
 php artisan view:cache
 ```
 
-App 的正式 API 地址已固定为 `https://audit.sjiaa.cc.cd/api/v1`，构建时无需提供 Vite API 环境变量。
+App 的正式 API 地址已固定为 `https://autsub2.hyojooapi.top/api/v1`，构建时无需提供 Vite API 环境变量。
 
 Scheduler 每分钟触发，用于同步 Sub2API 外部收入：
 
@@ -51,7 +64,7 @@ Scheduler 每分钟触发，用于同步 Sub2API 外部收入：
 
 当前应用没有常驻队列任务，不需要部署 Queue Worker。
 
-## 4. 上线验收
+## 5. 上线验收
 
 - `/api/v1/health` 返回成功。
 - Sub2API admin 角色可以登录，普通用户登录返回 403。
@@ -60,6 +73,6 @@ Scheduler 每分钟触发，用于同步 Sub2API 外部收入：
 - 调额、入账记录、历史账、利润和审计页面正常。
 - 日志不记录密码、Token、API Key、Authorization 或完整敏感响应。
 
-## 5. 备份与回滚
+## 6. 备份与回滚
 
 发布前备份 `backend/database/database.sqlite`、`backend/storage/app.key` 和 `backend/storage/app/private`。数据库接受新账本写入后，只允许前向修复，不执行破坏性 `migrate:rollback`。

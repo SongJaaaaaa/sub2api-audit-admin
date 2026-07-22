@@ -14,11 +14,12 @@ use Throwable;
 
 class Sub2ApiAdminClient
 {
-    public function users(int $page = 1, int $pageSize = 100): array
+    public function users(int $page = 1, int $pageSize = 100, array $filters = []): array
     {
         return $this->get('/api/v1/admin/users', [
             'page' => $page,
             'page_size' => $pageSize,
+            ...$filters,
         ]);
     }
 

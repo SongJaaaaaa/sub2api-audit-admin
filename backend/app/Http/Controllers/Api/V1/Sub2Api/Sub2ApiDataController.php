@@ -23,26 +23,12 @@ class Sub2ApiDataController extends Controller
     {
         $page = max((int) $req->query('page', 1), 1);
         $pageSize = min(max((int) $req->query('page_size', 20), 1), 100);
-        $start = trim((string) $req->query('last_used_start', ''));
-        $end = trim((string) $req->query('last_used_end', ''));
-
-        if (($start === '') !== ($end === '')) {
-            throw ValidationException::withMessages([
-                'last_used_start' => ['开始时间和结束时间必须同时提供'],
-                'last_used_end' => ['开始时间和结束时间必须同时提供'],
-            ]);
-        }
-
-        $dates = Validator::make([
-            'last_used_start' => $start ?: null,
-            'last_used_end' => $end ?: null,
+        $data = Validator::make([
             'sort_by' => $req->query('sort_by') ?: null,
             'sort_order' => $req->query('sort_order') ?: null,
             'user_id' => $req->query('user_id') ?: null,
             'emails' => $req->query('emails', []),
         ], [
-            'last_used_start' => ['nullable', 'date_format:Y-m-d'],
-            'last_used_end' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:last_used_start'],
             'sort_by' => ['nullable', Rule::in(['balance'])],
             'sort_order' => ['nullable', Rule::in(['asc', 'desc'])],
             'user_id' => ['nullable', 'integer', 'min:1'],
@@ -53,12 +39,10 @@ class Sub2ApiDataController extends Controller
         return response()->json($repo->users([
             'keyword' => $req->query('keyword', ''),
             'user_filter' => $req->query('user_filter', ''),
-            'last_used_start' => $dates['last_used_start'] ?? '',
-            'last_used_end' => $dates['last_used_end'] ?? '',
-            'sort_by' => $dates['sort_by'] ?? '',
-            'sort_order' => $dates['sort_order'] ?? '',
-            'user_id' => $dates['user_id'] ?? null,
-            'emails' => $dates['emails'] ?? [],
+            'sort_by' => $data['sort_by'] ?? '',
+            'sort_order' => $data['sort_order'] ?? '',
+            'user_id' => $data['user_id'] ?? null,
+            'emails' => $data['emails'] ?? [],
         ], $page, $pageSize));
     }
 

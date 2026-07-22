@@ -40,7 +40,7 @@ frontend/
 
 ### 3.1 App API
 
-App API 已固定为 `https://audit.sjiaa.cc.cd/api/v1`，构建时不需要设置 `VITE_API_BASE_URL`。`VITE_API_PROXY_TARGET` 只用于本地 Vite 代理。App 构建前确认构建产物中没有 API Key、数据库密码、签名密码或其他服务端秘密。
+App API 已固定为 `https://autsub2.hyojooapi.top/api/v1`，构建时不需要设置 `VITE_API_BASE_URL`。`VITE_API_PROXY_TARGET` 只用于本地 Vite 代理。App 构建前确认构建产物中没有 API Key、数据库密码、签名密码或其他服务端秘密。
 
 ### 3.2 后端 CORS
 

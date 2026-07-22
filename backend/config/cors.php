@@ -1,7 +1,7 @@
 <?php
 
 $origins = [
-    'https://audit.sjiaa.cc.cd',
+    'https://autsub2.hyojooapi.top',
     'http://localhost',
     'http://localhost:5173',
     'http://localhost:5175',

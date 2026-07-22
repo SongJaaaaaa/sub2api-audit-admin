@@ -65,7 +65,7 @@ return [
     |
     */
 
-    'url' => 'https://audit.sjiaa.cc.cd',
+    'url' => 'https://autsub2.hyojooapi.top',
 
     /*
     |--------------------------------------------------------------------------

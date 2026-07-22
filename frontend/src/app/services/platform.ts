@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 
 const envMode = String(import.meta.env.VITE_APP_MODE || '').toLowerCase()
-const appApiUrl = 'https://audit.sjiaa.cc.cd/api/v1'
+const appApiUrl = 'https://autsub2.hyojooapi.top/api/v1'
 const nav = navigator as Navigator & { standalone?: boolean }
 
 export const isNativeApp = Capacitor.isNativePlatform()

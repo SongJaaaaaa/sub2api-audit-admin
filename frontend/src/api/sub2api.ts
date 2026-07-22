@@ -15,12 +15,6 @@ export interface Sub2User {
 
 export interface UserSummary {
   user_count: number
-  active_count: number
-  disabled_count: number
-  balance_total: string
-  average_balance: string
-  negative_balance_count: number
-  zero_balance_count: number
 }
 
 export interface UserListRes {
@@ -125,9 +119,7 @@ export function getSub2Users(params: {
   page: number
   page_size: number
   keyword?: string
-  user_filter?: 'zero_balance' | 'negative_balance' | 'disabled' | ''
-  last_used_start?: string
-  last_used_end?: string
+  user_filter?: 'disabled' | ''
   sort_by?: 'balance'
   sort_order?: 'asc' | 'desc'
   user_id?: number

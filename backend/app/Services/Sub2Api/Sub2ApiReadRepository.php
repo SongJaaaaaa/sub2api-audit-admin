@@ -13,84 +13,36 @@ class Sub2ApiReadRepository
 
     public function users(array $filters, int $page, int $pageSize): array
     {
-        $rows = collect($this->allItems(fn (int $num): array => $this->client->users($num)));
-        $kw = mb_strtolower(trim((string) ($filters['keyword'] ?? '')));
         $userId = (int) ($filters['user_id'] ?? 0);
         $emails = $filters['emails'] ?? [];
-        $userFilter = trim((string) ($filters['user_filter'] ?? ''));
-        $lastUsedStart = trim((string) ($filters['last_used_start'] ?? ''));
-        $lastUsedEnd = trim((string) ($filters['last_used_end'] ?? ''));
-        $lastUsedRange = $lastUsedStart !== '' && $lastUsedEnd !== ''
-            ? ChinaDateRange::make($lastUsedStart, $lastUsedEnd)
-            : null;
+        if ($userId > 0) {
+            return $this->userPage(array_filter([$this->user($userId)]), $page, $pageSize);
+        }
+        if ($emails !== []) {
+            return $this->emailUsers($emails, $page, $pageSize);
+        }
 
-        $rows = $rows->filter(function (array $row) use ($kw, $userId, $emails, $userFilter, $lastUsedRange): bool {
-            if ($kw !== '') {
-                $text = mb_strtolower(($row['email'] ?? '').' '.($row['username'] ?? ''));
-                if (! str_contains($text, $kw)) {
-                    return false;
-                }
-            }
-            if ($userId > 0 && (int) ($row['id'] ?? 0) !== $userId) {
-                return false;
-            }
-            if ($emails !== [] && ! in_array($row['email'] ?? null, $emails, true)) {
-                return false;
-            }
-
-            $balance = (float) ($row['balance'] ?? 0);
-            $status = (string) ($row['status'] ?? '');
-            if ($userFilter === 'zero_balance' && $balance !== 0.0) {
-                return false;
-            }
-            if ($userFilter === 'negative_balance' && $balance >= 0) {
-                return false;
-            }
-            if ($userFilter === 'disabled' && $status === 'active') {
-                return false;
-            }
-            if ($lastUsedRange && ! $this->inRange(
-                $row['last_used_at'] ?? null,
-                $lastUsedRange->utcStart,
-                $lastUsedRange->utcEndExclusive,
-            )) {
-                return false;
-            }
-
-            return true;
-        })->values();
-
-        $total = $rows->count();
-        $balanceTotal = $rows->sum(fn (array $row): float => (float) ($row['balance'] ?? 0));
-        $summary = [
-            'user_count' => $total,
-            'active_count' => $rows->where('status', 'active')->count(),
-            'disabled_count' => $rows->where('status', '!=', 'active')->count(),
-            'balance_total' => $this->decimal($balanceTotal, 2),
-            'average_balance' => $this->decimal($total > 0 ? $balanceTotal / $total : 0, 2),
-            'negative_balance_count' => $rows->filter(fn (array $row): bool => (float) ($row['balance'] ?? 0) < 0)->count(),
-            'zero_balance_count' => $rows->filter(fn (array $row): bool => (float) ($row['balance'] ?? 0) === 0.0)->count(),
-        ];
-
-        $sortBy = (string) ($filters['sort_by'] ?? '');
-        $sortOrder = (string) ($filters['sort_order'] ?? '');
-        $rows = $sortBy === 'balance' && in_array($sortOrder, ['asc', 'desc'], true)
-            ? $rows->sort(function (array $a, array $b) use ($sortOrder): int {
-                $cmp = (float) ($a['balance'] ?? 0) <=> (float) ($b['balance'] ?? 0);
-                if ($cmp !== 0) {
-                    return $sortOrder === 'asc' ? $cmp : -$cmp;
-                }
-
-                return (int) ($b['id'] ?? 0) <=> (int) ($a['id'] ?? 0);
-            })->values()
-            : $rows->sortByDesc('id')->values();
+        $sortBy = ($filters['sort_by'] ?? '') === 'balance' ? 'balance' : 'created_at';
+        $sortOrder = in_array($filters['sort_order'] ?? '', ['asc', 'desc'], true)
+            ? $filters['sort_order']
+            : 'desc';
+        $res = $this->client->users($page, $pageSize, [
+            'search' => trim((string) ($filters['keyword'] ?? '')),
+            'status' => ($filters['user_filter'] ?? '') === 'disabled' ? 'disabled' : '',
+            'include_subscriptions' => false,
+            'sort_by' => $sortBy,
+            'sort_order' => $sortOrder,
+        ]);
+        $data = data_get($res, 'data', []);
+        $items = is_array($data['items'] ?? null) ? $data['items'] : [];
+        $total = (int) ($data['total'] ?? count($items));
 
         return [
-            'items' => $rows->forPage($page, $pageSize)->map(fn (array $row): array => $this->userRow($row))->values()->all(),
+            'items' => array_map(fn (array $row): array => $this->userRow($row), $items),
             'total' => $total,
-            'page' => $page,
-            'page_size' => $pageSize,
-            'summary' => $summary,
+            'page' => (int) ($data['page'] ?? $page),
+            'page_size' => (int) ($data['page_size'] ?? $pageSize),
+            'summary' => ['user_count' => $total],
         ];
     }
 
@@ -203,6 +155,42 @@ class Sub2ApiReadRepository
         }
 
         return $items;
+    }
+
+    private function emailUsers(array $emails, int $page, int $pageSize): array
+    {
+        $wanted = array_map('mb_strtolower', $emails);
+        $rows = collect();
+        foreach ($wanted as $email) {
+            $items = data_get($this->client->users(1, 100, [
+                'search' => $email,
+                'include_subscriptions' => false,
+            ]), 'data.items', []);
+            foreach (is_array($items) ? $items : [] as $row) {
+                if (mb_strtolower((string) ($row['email'] ?? '')) === $email) {
+                    $rows->put((int) ($row['id'] ?? 0), $row);
+                }
+            }
+        }
+
+        return $this->userPage($rows->values()->all(), $page, $pageSize);
+    }
+
+    private function userPage(array $rows, int $page, int $pageSize): array
+    {
+        $rows = array_values($rows);
+        $total = count($rows);
+
+        return [
+            'items' => array_map(
+                fn (array $row): array => $this->userRow($row),
+                array_slice($rows, ($page - 1) * $pageSize, $pageSize),
+            ),
+            'total' => $total,
+            'page' => $page,
+            'page_size' => $pageSize,
+            'summary' => ['user_count' => $total],
+        ];
     }
 
     private function redeemRow(array $row): array

@@ -72,11 +72,6 @@ class Sub2ApiClientTest extends TestCase
 
         $this->assertSame(1, $res['total']);
         $this->assertSame(1, $res['summary']['user_count']);
-        $this->assertSame(1, $res['summary']['active_count']);
-        $this->assertSame(0, $res['summary']['disabled_count']);
-        $this->assertSame('12.34', $res['summary']['balance_total']);
-        $this->assertSame(0, $res['summary']['negative_balance_count']);
-        $this->assertSame(0, $res['summary']['zero_balance_count']);
         $this->assertSame([
             'id',
             'email',
@@ -96,25 +91,43 @@ class Sub2ApiClientTest extends TestCase
         $this->assertSame('alpha@example.com', $detail['email']);
     }
 
-    public function test_user_search_filters_by_latest_usage_time(): void
+    public function test_admin_client_uses_official_user_pagination_and_filters(): void
     {
-        $this->insertSub2ApiUser(['id' => 1001]);
-        $this->insertSub2ApiUser(['id' => 1002, 'email' => 'beta@example.com', 'username' => 'beta']);
-        $this->insertSub2ApiUser(['id' => 1003, 'email' => 'unused@example.com', 'username' => 'unused']);
-        DB::connection('sub2api')->table('usage_logs')->insert([
-            ['user_id' => 1001, 'created_at' => '2026-07-13 15:59:59'],
-            ['user_id' => 1001, 'created_at' => '2026-07-14 02:00:00'],
-            ['user_id' => 1002, 'created_at' => '2026-07-13 15:00:00'],
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/users*' => Http::response([
+                'code' => 0,
+                'data' => [
+                    'items' => [['id' => 1001]],
+                    'total' => 6974,
+                    'page' => 2,
+                    'page_size' => 20,
+                    'pages' => 349,
+                ],
+            ]),
         ]);
 
-        $res = app(Sub2ApiReadRepository::class)->users([
-            'last_used_start' => '2026-07-14',
-            'last_used_end' => '2026-07-14',
-        ], 1, 20);
+        $res = (new Sub2ApiAdminClient())->users(2, 20, [
+            'search' => 'alpha@example.com',
+            'status' => 'disabled',
+            'include_subscriptions' => false,
+            'sort_by' => 'balance',
+            'sort_order' => 'asc',
+        ]);
 
-        $this->assertSame(1, $res['total']);
-        $this->assertSame(1001, $res['items'][0]['id']);
-        $this->assertSame('2026-07-14 10:00:00', $res['items'][0]['last_used_at']);
+        $this->assertSame(6974, $res['data']['total']);
+        Http::assertSent(function (Request $req): bool {
+            parse_str((string) parse_url($req->url(), PHP_URL_QUERY), $query);
+
+            return $query === [
+                'page' => '2',
+                'page_size' => '20',
+                'search' => 'alpha@example.com',
+                'status' => 'disabled',
+                'include_subscriptions' => '0',
+                'sort_by' => 'balance',
+                'sort_order' => 'asc',
+            ];
+        });
     }
 
     public function test_users_can_filter_by_exact_id_and_emails(): void
@@ -122,6 +135,20 @@ class Sub2ApiClientTest extends TestCase
         $this->insertSub2ApiUser(['id' => 1001, 'email' => 'alpha@example.com']);
         $this->insertSub2ApiUser(['id' => 1002, 'email' => 'beta@example.com']);
         $this->insertSub2ApiUser(['id' => 1003, 'email' => 'gamma@example.com']);
+        Http::fake([
+            'https://sub2api.test/api/v1/admin/users/1002' => Http::response([
+                'code' => 0,
+                'data' => [
+                    'id' => 1002,
+                    'email' => 'beta@example.com',
+                    'username' => 'alpha',
+                    'role' => 'user',
+                    'balance' => '0',
+                    'total_recharged' => '0',
+                    'status' => 'active',
+                ],
+            ]),
+        ]);
         $this->withoutMiddleware();
 
         $this->getJson('/api/v1/sub2api/users?user_id=1002')
@@ -132,8 +159,8 @@ class Sub2ApiClientTest extends TestCase
         $this->getJson('/api/v1/sub2api/users?emails[]=alpha%40example.com&emails[]=gamma%40example.com')
             ->assertOk()
             ->assertJsonCount(2, 'items')
-            ->assertJsonPath('items.0.email', 'gamma@example.com')
-            ->assertJsonPath('items.1.email', 'alpha@example.com');
+            ->assertJsonPath('items.0.email', 'alpha@example.com')
+            ->assertJsonPath('items.1.email', 'gamma@example.com');
     }
 
     public function test_users_can_sort_balance_on_the_server(): void
@@ -147,7 +174,7 @@ class Sub2ApiClientTest extends TestCase
             ->assertOk()
             ->assertJsonPath('items.0.id', 1002)
             ->assertJsonPath('items.1.id', 1003)
-            ->assertJsonPath('summary.balance_total', '25');
+            ->assertJsonPath('summary.user_count', 3);
         $this->getJson('/api/v1/sub2api/users?sort_by=balance&sort_order=desc&page=2&page_size=2')
             ->assertOk()
             ->assertJsonPath('items.0.id', 1002);

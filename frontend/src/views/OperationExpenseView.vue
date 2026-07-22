@@ -150,7 +150,8 @@ async function saveExpense() {
     const res = await createOperationExpense(form)
     message.success(res.message)
     modalOpen.value = false
-    await openDetail(res.expense)
+    selected.value = null
+    drawerOpen.value = false
     await loadItems(true)
   } catch { message.error('保存支出失败') } finally { submitting.value = false }
 }
