@@ -2,6 +2,7 @@
 import {
   MinusCircleOutlined,
   PlusCircleOutlined,
+  RightOutlined,
   WalletOutlined,
 } from '@ant-design/icons-vue'
 import { App as AntApp } from 'ant-design-vue'
@@ -429,20 +430,32 @@ onMounted(initPage)
       <a-alert type="error" show-icon :message="loadError" />
       <a-button size="small" @click="loadUsers">重试</a-button>
     </div>
-    <div class="app-summary-grid app-quota-summary">
-      <div><span>用户数</span><strong>{{ page.total }}</strong></div>
-      <div><span>已选用户</span><strong>{{ selected ? 1 : 0 }}</strong></div>
-    </div>
     <a-spin :spinning="loading && users.length === 0">
       <a-empty v-if="!loading && !loadError && users.length === 0" description="暂无可充值用户数据" />
       <div v-else class="app-card-list">
         <article v-for="item in users" :key="item.id" class="app-card app-quota-user-card" tabindex="0" role="button" @click="openMobileUser(item)" @keydown.enter="openMobileUser(item)">
-          <div class="app-card-top">
-            <div class="app-card-title"><strong>{{ item.username || item.email }}</strong><span>{{ item.email }} · ID {{ item.id }}</span></div>
-            <span class="app-status">{{ item.status || '-' }}</span>
+          <div class="app-quota-card-head">
+            <span class="app-quota-avatar" :class="{ active: item.status === 'active' }">{{ (item.username || item.email || '?').slice(0, 1).toUpperCase() }}</span>
+            <div class="app-card-title">
+              <strong>{{ item.username || item.email }}</strong>
+              <span>{{ item.email }} · ID {{ item.id }}</span>
+            </div>
+            <span class="app-status-badge" :class="{ active: item.status === 'active' }">{{ item.status === 'active' ? '正常' : (item.status || '-') }}</span>
           </div>
-          <div class="app-card-metrics"><div><span>当前余额</span><strong class="app-money">{{ moneyText(item.balance) }}</strong></div><div><span>累计充值</span><strong>{{ moneyText(item.total_recharged) }}</strong></div></div>
-          <div class="app-card-foot"><span>{{ item.last_used_at || '从未使用' }}</span><button type="button" class="app-link-button" @click.stop="openMobileUser(item)">充值</button></div>
+          <div class="app-quota-balance-row">
+            <div class="app-quota-balance">
+              <span>当前余额</span>
+              <strong class="app-money">{{ moneyText(item.balance) }}</strong>
+            </div>
+            <div class="app-quota-sub">
+              <span>累计充值</span>
+              <strong>{{ moneyText(item.total_recharged) }}</strong>
+            </div>
+          </div>
+          <div class="app-quota-card-foot">
+            <span class="app-quota-lastused">{{ item.last_used_at || '从未使用' }}</span>
+            <button type="button" class="app-quota-cta" @click.stop="openMobileUser(item)">充值<RightOutlined /></button>
+          </div>
         </article>
       </div>
     </a-spin>
@@ -477,7 +490,7 @@ onMounted(initPage)
           </div>
 
           <section class="app-detail-section">
-            <div class="app-section-head"><h2>充���入账</h2></div>
+            <div class="app-section-head"><h2>充值入账</h2></div>
             <AdjustmentForm :key="formKey" v-model:value="form" :current-balance="selected.balance" />
             <div class="app-action-bar">
               <a-button class="app-action-reset" @click="resetForm">重置</a-button>

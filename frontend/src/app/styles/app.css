@@ -1255,6 +1255,128 @@
   overflow: visible;
 }
 
+/* ===== 用户充值列表卡片 ===== */
+.app-quota-user-card {
+  display: grid;
+  gap: 12px;
+  cursor: pointer;
+}
+.app-quota-user-card:active {
+  border-color: var(--primary);
+  transform: scale(0.995);
+}
+
+.app-quota-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.app-quota-avatar {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--surface2);
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 700;
+}
+.app-quota-avatar.active {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+}
+.app-quota-card-head .app-card-title {
+  flex: 1;
+}
+.app-status-badge {
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--surface2);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.app-status-badge.active {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.app-quota-balance-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: var(--app-radius-sm);
+  background: var(--surface2);
+}
+.app-quota-balance span,
+.app-quota-sub span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+.app-quota-balance strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.app-quota-sub {
+  text-align: right;
+}
+.app-quota-sub strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--heading);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-quota-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.app-quota-lastused {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-quota-cta {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.app-quota-cta .anticon {
+  font-size: 11px;
+}
+.app-quota-cta:active {
+  filter: brightness(1.08);
+}
+
 .app-quota-metrics {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
