@@ -681,7 +681,8 @@ onMounted(initPage)
 <style scoped>
 /* Centralized app styles in src/app/styles/app.css */
 .app-toolbar { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-.app-card-list, .app-history-list { gap: 14px; }
+.app-history-list { gap: 14px; }
+.app-card-list { gap: 16px; }
 .app-action-bar {
   position: sticky;
   bottom: 0;
