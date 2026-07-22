@@ -22,7 +22,7 @@ function errorMessage(err: unknown) {
   const status = isAxiosError(err) ? err.response?.status : undefined
   if (status === 401) return 'Sub2API 账号或密码错误'
   if (isAxiosError(err) && typeof err.response?.data?.message === 'string') return err.response.data.message
-  return '登录请求失败，请确认后端服务已启动'
+  return '登录请求未到达服务器，请刷新页面后重试'
 }
 
 async function submit() {
