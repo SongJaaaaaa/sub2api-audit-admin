@@ -13,17 +13,15 @@ test('admin can login and open core business pages', async ({ page }) => {
     const path = new URL(route.request().url()).pathname
     let body: unknown = { items: [], total: 0, page: 1, page_size: 20 }
 
-    if (path.endsWith('/ledger-adjustments')) {
+    if (path.endsWith('/finance/cash')) {
       body = {
         ...body as object,
         summary: {
           record_count: 0,
           user_count: 0,
-          increment_total: '0.00',
-          decrement_total: '0.00',
-          net_total: '0.00',
-          cash_total: '0.00',
-          gift_total: '0.00',
+          amount_total: '0.00',
+          linked_count: 0,
+          unlinked_count: 0,
         },
       }
     } else if (path.endsWith('/ledger-adjustments/user-stats')) {
@@ -82,7 +80,7 @@ test('admin can login and open core business pages', async ({ page }) => {
   const pages = [
     { path: '/ledger', title: '收入' },
     { path: '/balance-events', title: '历史账' },
-    { path: '/gift-quota', title: '赠送额度' },
+    { path: '/users-quota', title: '用户充值' },
     { path: '/operation-expense', title: '支出' },
     { path: '/profit', title: '利润统计' },
     { path: '/audit-log', title: '操作审计' },

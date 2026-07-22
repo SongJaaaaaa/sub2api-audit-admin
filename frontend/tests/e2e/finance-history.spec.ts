@@ -12,7 +12,7 @@ const admin = {
 test('finance pages use Chinese dates, server sorting, signed amounts and local history', async ({ context, page }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   const sortedUrls: string[] = []
-  const statUrls: string[] = []
+  const cashUrls: string[] = []
 
   await page.route('**/api/v1/**', async (route) => {
     const req = route.request()
@@ -35,14 +35,14 @@ test('finance pages use Chinese dates, server sorting, signed amounts and local 
         page_size: 20,
         summary: { user_count: 1, active_count: 1, disabled_count: 0, balance_total: '12.50', average_balance: '12.50', negative_balance_count: 0, zero_balance_count: 0 },
       }
-    } else if (path.endsWith('/ledger-adjustments/user-stats')) {
-      statUrls.push(url.toString())
+    } else if (path.endsWith('/finance/cash')) {
+      cashUrls.push(url.toString())
       body = {
-        items: [{ period_start: '2026-07-13', period_end: '2026-07-19', sub2api_user_id: 1001, sub2api_user_email: 'alpha@example.com', record_count: 2, cash_total: '80.00', gift_total: '20.00', increment_total: '100.00', decrement_total: '80.00', net_total: '20.00' }],
+        items: [{ id: 1, entry_no: 'CASH001', ledger_adjustment_id: 1, sub2api_user_id: 1001, sub2api_user_email: 'alpha@example.com', direction: 'in', cash_amount: '80.00', received_at: '2026-07-18', source: 'ledger_adjustment', remark: '充值', content_html: null, created_by: 1, operator_name: '管理员', operator_email: 'admin@example.com', created_at: '2026-07-18 10:00:00' }],
         total: 1,
         page: 1,
         page_size: 20,
-        granularity: url.searchParams.get('granularity') || 'day',
+        summary: { record_count: 1, user_count: 1, amount_total: '80.00', linked_count: 1, unlinked_count: 0 },
       }
     } else if (path.endsWith('/ledger-adjustments')) {
       body = {
@@ -95,11 +95,12 @@ test('finance pages use Chinese dates, server sorting, signed amounts and local 
   await page.goto('/ledger')
   await expect(page.locator('.soyBreadcrumb')).toHaveText('收入')
   await expect(page.locator('.summaryGrid section').nth(0)).toContainText('+80.00')
-  await expect(page.locator('.summaryGrid section').nth(1)).toContainText('+20.00')
-  await expect(page.locator('.summaryGrid section').nth(2)).toContainText('+20.00')
-  await expect(page.locator('.summaryGrid section').nth(3)).toContainText('-80.00')
-  await page.getByText('周', { exact: true }).click()
-  await expect.poll(() => statUrls.some(url => url.includes('granularity=week'))).toBeTruthy()
+  await expect(page.locator('.summaryGrid section').nth(1)).toContainText('1')
+  await expect(page.locator('.summaryGrid section').nth(2)).toContainText('1')
+  await expect(page.getByRole('row', { name: /CASH001/ })).toContainText('+80.00')
+  const cashRequestCount = cashUrls.length
+  await page.getByText('本周', { exact: true }).click()
+  await expect.poll(() => cashUrls.length).toBeGreaterThan(cashRequestCount)
   await page.locator('.dateFilter').click()
   await expect(page.getByRole('button', { name: /年/ }).first()).toBeVisible()
   await expect(page.getByRole('button', { name: /月/ }).first()).toBeVisible()
